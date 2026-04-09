@@ -1,8 +1,6 @@
-# MangaRec
+# Manga Recommender
 
 Manga recommendation engine.
-
----
 
 ## Requirements
 
@@ -79,8 +77,6 @@ uv run python main.py ingest
 uv run python main.py ingest --pages 5
 ```
 
----
-
 ## Dependency groups
 
 Dependencies are split into groups so Docker only installs what the
@@ -153,8 +149,6 @@ build image → run alembic upgrade head → start API
 ```
 If migrations fail, the deploy is aborted and the previous version stays live.
 
----
-
 ## Project structure
 
 ```
@@ -200,8 +194,6 @@ manga-recommender/
 ├── railway.toml                   # Railway deploy config
 └── uv.lock                        # Commit this — pins exact versions
 ```
-
----
 
 ## Environment variable reference
 
