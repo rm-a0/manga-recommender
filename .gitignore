@@ -5,9 +5,46 @@ build/
 dist/
 wheels/
 *.egg-info
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+dist/
 
 # Virtual environments
 .venv
 
-# Environment variables
+# Secret files
 .env
+.env.local
+.env.*.local
+
+# ML artifacts
+*.pt
+*.faiss
+*.npz
+*.npy
+*.bin
+*.pkl
+*.model
+*.ckpt
+*.log
+*.pth
+*.csv
+
+# IDE/editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Data
+data/
+datasets/
+
+# Notebooks
+notebooks/
