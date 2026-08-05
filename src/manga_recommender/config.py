@@ -30,6 +30,20 @@ class APISettings(BaseSettings):
     )
 
 
+class AniListSettings(BaseSettings):
+    base_url: str = "https://graphql.anilist.co"
+    request_delay: float = 0.5
+    max_pages: int | None = None
+    per_page: int = 50
+
+    model_config = SettingsConfigDict(
+        env_prefix="ANILIST_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 @functools.lru_cache
 def get_app_settings() -> AppSettings:
     return AppSettings()
@@ -43,3 +57,8 @@ def get_database_settings() -> DatabaseSettings:
 @functools.lru_cache
 def get_api_settings() -> APISettings:
     return APISettings()
+
+
+@functools.lru_cache
+def get_anilist_settings() -> AniListSettings:
+    return AniListSettings()

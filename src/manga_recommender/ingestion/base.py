@@ -9,6 +9,7 @@ from manga_recommender.db.models.manga import MangaStatus
 @dataclass
 class NormalizedMangaRecord:
     external_id: str
+    mal_id: int | None
     title: str
     author: str
     status: MangaStatus | None
@@ -17,7 +18,6 @@ class NormalizedMangaRecord:
     raw_score: float | None
     raw_scale_max: float | None
     votes_count: int | None
-    mal_id: int | None
 
 
 class BaseExtractor(ABC):
