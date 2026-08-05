@@ -1,5 +1,6 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 import functools
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AppSettings(BaseSettings):
@@ -29,16 +30,16 @@ class APISettings(BaseSettings):
     )
 
 
-@functools.lru_cache()
+@functools.lru_cache
 def get_app_settings() -> AppSettings:
     return AppSettings()
 
 
-@functools.lru_cache()
+@functools.lru_cache
 def get_database_settings() -> DatabaseSettings:
     return DatabaseSettings()
 
 
-@functools.lru_cache()
+@functools.lru_cache
 def get_api_settings() -> APISettings:
     return APISettings()
