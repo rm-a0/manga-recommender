@@ -33,6 +33,26 @@ before touching anything, whether you're an AI agent or a human contributor.
   or non-idiomatic pattern seems necessary, flag it to the user instead of silently
   taking it.
 
+### Docstrings — agent-written, using Simplified Technical English
+
+Unlike the rest of backend `src/` code, docstrings themselves are fine for an agent to
+write or generate directly, even inside otherwise hand-coded files — this is a narrow
+exception to the "hand-coded only" rule above, scoped to docstrings only (not the
+surrounding code, not comments elsewhere).
+
+Follow Simplified Technical English (ASD-STE100) principles, adapted for code — not
+literal compliance with the full approved-word dictionary, which is impractical for
+technical Python code:
+
+- One idea per sentence. Short sentences.
+- Active voice, imperative mood for the summary line ("Return the parsed record," not
+  "Returns the parsed record" or "This function returns...").
+- No idioms, no filler words, no restating what's already obvious from the function
+  name, parameter names, or type hints.
+- Length: a one-sentence summary (roughly under 100 characters) is the default. Add a
+  second short sentence only for a genuinely non-obvious behavior, edge case, or
+  constraint — never pad length for its own sake.
+
 ### Pair on it — propose incrementally, don't hand over finished files unprompted
 
 - Infra/scaffolding: CI/CD YAML, Makefile, Dockerfile, deployment config, README,
