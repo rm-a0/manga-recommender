@@ -17,6 +17,7 @@ class MangaStatus(StrEnum):
 class Manga(Base):
     __tablename__ = "manga"
 
+    mal_id: Mapped[int | None] = mapped_column(unique=True)
     title: Mapped[str] = mapped_column()
     author: Mapped[str] = mapped_column()
     published_date: Mapped[datetime | None] = mapped_column()

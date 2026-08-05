@@ -5,7 +5,13 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from manga_recommender.config import get_database_settings
 from manga_recommender.db.base import Base
-from manga_recommender.db.models import genres, manga, users  # noqa: F401
+from manga_recommender.db.models import (  # noqa: F401
+    genres,
+    manga,
+    manga_external_ratings,
+    sources,
+    users,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
