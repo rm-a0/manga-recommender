@@ -3,10 +3,10 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Column, ForeignKey, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from db.base import Base
+from manga_recommender.db.base import Base
 
 if TYPE_CHECKING:
-    from db.models.manga import Manga
+    from manga_recommender.db.models.manga import Manga
 
 manga_genres = Table(
     "manga_genres",
