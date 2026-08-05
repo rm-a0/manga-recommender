@@ -10,8 +10,10 @@ from manga_recommender.db.models.genres import Genre, manga_genres
 
 class MangaStatus(StrEnum):
     ONGOING = "ongoing"
-    COMPLETED = "completed"
+    FINISHED = "finished"
     CANCELLED = "cancelled"
+    NOT_RELEASED_YET = "not_released_yet"
+    HIATUS = "hiatus"
 
 
 class Manga(Base):
