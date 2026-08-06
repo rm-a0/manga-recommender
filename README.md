@@ -28,6 +28,9 @@ cp .env.example .env
 
 ## Running the app locally
 
+> **Not built yet.** `main.py` is currently a stub — no CLI arg parsing, no FastAPI
+> app. This is the target interface once the API layer exists.
+
 ```bash
 # Start the API
 uv run python main.py app
@@ -42,13 +45,13 @@ curl http://localhost:8000/health
 ## Database migrations
 
 Migrations use [Alembic](https://alembic.sqlalchemy.org/). Always run them against
-the **direct connection** (`DATABASE_URL`), not the pooled URL.
+the **direct connection** (`DB_URL`), not the pooled URL.
 
 ```bash
 # Apply all pending migrations (first run creates all tables)
 uv run alembic upgrade head
 
-# Create a new migration after editing src/db/models.py
+# Create a new migration after editing src/manga_recommender/db/models/
 uv run alembic revision --autogenerate -m "describe what changed"
 
 # Check current state
@@ -66,6 +69,10 @@ uv run alembic downgrade -1
 Pulls manga from the AniList GraphQL API and writes to the database.
 This is a **one-shot offline job** - not triggered by the API.
 
+> **Extractor only, not wired up yet.** `AnilistExtractor` fetches and normalizes
+> AniList data, but nothing persists it to the database yet, and `main.py` doesn't
+> parse CLI args. The commands below are the target interface, not runnable today.
+
 ```bash
 # Install pipeline extras
 uv sync --group pipeline
@@ -73,8 +80,8 @@ uv sync --group pipeline
 # Seed the database
 uv run python main.py ingest
 
-# Ingest fewer pages for a quick local test
-uv run python main.py ingest --pages 5
+# Limit pages for a quick local test (env var, not a CLI flag)
+ANILIST_MAX_PAGES=5 uv run python main.py ingest
 ```
 
 ## Dependency groups
@@ -136,10 +143,9 @@ docker run --env-file .env -p 8000:8000 mangarec
 1. Push your repo to GitHub
 2. Create a new Railway project → "Deploy from GitHub repo"
 3. In Railway dashboard: **Variables → Add all variables from `.env.example`**
-   - Set `DATABASE_URL` to the **pooled** Supabase URL (handles connection limits)
-   - Set `DATABASE_URL_POOLED` to the same pooled URL
-   - Set `APP_ENV=production` and `DEBUG=false`
-   - Generate a strong `SECRET_KEY`
+   - Set `DB_URL` to the **pooled** Supabase URL (handles connection limits)
+   - Set `DB_URL_POOLED` to the same pooled URL
+   - Set `APP_ENV=production` and `APP_DEBUG=false`
 4. Railway reads `railway.toml` automatically — no further config needed
 5. Every `git push` to `main` triggers a new deploy
 
@@ -151,61 +157,65 @@ If migrations fail, the deploy is aborted and the previous version stays live.
 
 ## Project structure
 
+Current state:
+
 ```
 manga-recommender/
 │
-├── main.py                        # CLI entry point: app | ingest
+├── main.py                        # CLI entry point (stub — not wired up yet)
 │
-├── src/
+├── src/manga_recommender/
 │   ├── config.py                  # Settings loaded from .env via pydantic-settings
 │   │
 │   ├── db/
-│   │   ├── connection.py          # SQLAlchemy engine and session factory
-│   │   ├── models.py              # ORM table definitions
-│   │   └── migrations/            # Alembic migration files (auto-generated)
+│   │   ├── base.py                # Declarative Base + shared column helpers
+│   │   └── models/
+│   │       ├── manga.py           # Manga, MangaStatus
+│   │       ├── genres.py          # Genre, manga_genres join table
+│   │       ├── sources.py         # Source
+│   │       ├── manga_external_ratings.py
+│   │       └── users.py           # User, UserRole
 │   │
-│   ├── ingestion/
-│   │   ├── anilist.py             # AniList GraphQL client
-│   │   ├── pipeline.py            # Orchestrates the full ingest run
-│   │   └── normalizer.py          # Cleans and normalizes raw API data
-│   │
-│   ├── services/                  # Business logic — no HTTP, no SQL strings
-│   │   ├── manga.py               # search_manga, get_manga, list_manga
-│   │   ├── user.py                # create_user, get_list, update_entry
-│   │   └── recommendation.py      # recommend_for_user, recommend_similar (Phase 1: placeholders)
-│   │
-│   └── api/
-│       ├── main.py                # FastAPI app with lifespan and middleware
-│       ├── routers/
-│       │   ├── manga.py           # GET /manga/search, GET /manga/{id}
-│       │   ├── users.py           # POST /users, GET /users/{id}/list
-│       │   └── recommendations.py # GET /recommend/user/{id}, GET /recommend/similar/{id}
-│       └── schemas.py             # Pydantic request and response models
+│   └── ingestion/
+│       ├── base.py                # BaseExtractor ABC, NormalizedMangaRecord
+│       └── anilist.py             # AniList GraphQL extractor
 │
-├── tests/
-│   ├── test_services/
-│   └── test_api/
+├── alembic/                        # Migrations (auto-generated via `make migration`)
 │
 ├── .env.example
 ├── .gitignore
-├── .dockerignore
 ├── Dockerfile
+├── Makefile
 ├── pyproject.toml                 # All deps and tool config live here
 ├── railway.toml                   # Railway deploy config
 └── uv.lock                        # Commit this — pins exact versions
+```
+
+Not built yet: DB session/engine wiring, an ingestion loader that persists
+`NormalizedMangaRecord`s, the `main.py` CLI, and the FastAPI `api`/`services` layer.
+Planned shape for those, once they land:
+
+```
+├── src/manga_recommender/
+│   ├── api/          # FastAPI app, routers, schemas
+│   └── services/      # Business logic — no HTTP, no SQL strings
+└── tests/
 ```
 
 ## Environment variable reference
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | ✅ | Supabase direct connection — use for local dev and migrations |
-| `DATABASE_URL_POOLED` | ✅ | Supabase transaction pooler — use in production |
-| `APP_ENV` | ✅ | `development` or `production` |
-| `DEBUG` | ✅ | `true` enables auto-reload and verbose errors |
-| `SECRET_KEY` | ✅ | Random string for JWT signing — generate with `openssl rand -hex 32` |
-| `API_HOST` | ✅ | Bind host — `0.0.0.0` for Docker/Railway |
-| `API_PORT` | ✅ | Bind port — `8000` |
-| `CORS_ORIGINS` | ✅ | Comma-separated allowed origins |
-| `ANILIST_REQUEST_DELAY` | — | Seconds between AniList pages (default `0.7`) |
-| `ANILIST_MAX_PAGES` | — | Pages to ingest (default `200`) |
+| `DB_URL` | recommended | Direct Supabase connection — use for local dev and migrations |
+| `DB_URL_POOLED` | recommended | Supabase transaction pooler — use in production |
+| `APP_ENV` | — | `development` or `production` (default `development`) |
+| `APP_DEBUG` | — | `true` enables verbose errors (default `true`) |
+| `API_HOST` | — | Bind host — `0.0.0.0` for Docker/Railway (default `0.0.0.0`) |
+| `API_PORT` | — | Bind port (default `8000`) |
+| `ANILIST_REQUEST_DELAY` | — | Seconds between AniList pages (default `0.5`) |
+| `ANILIST_MAX_PAGES` | — | Pages to ingest (default: unlimited) |
+
+Every variable has a fallback in `config.py`, so none are strictly required to boot —
+`DB_URL`/`DB_URL_POOLED` are marked "recommended" because the fallback points at a
+placeholder local Postgres, not a real database. `SECRET_KEY`/`CORS_ORIGINS` aren't
+listed because auth and CORS aren't implemented yet.

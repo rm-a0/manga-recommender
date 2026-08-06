@@ -53,6 +53,23 @@ technical Python code:
   second short sentence only for a genuinely non-obvious behavior, edge case, or
   constraint — never pad length for its own sake.
 
+### Tests — agent-codable, following this project's pytest conventions
+
+Unlike the rest of backend `src/` code, tests are fine for an agent to write or edit
+directly — another narrow exception to the "hand-coded only" rule above, scoped to
+`tests/` only (never the implementation under test).
+
+- Use this project's existing pytest setup: `testpaths = ["tests"]`,
+  `pytest-asyncio` with `asyncio_mode = "auto"`, both already configured in
+  `pyproject.toml`.
+- Test through the same interfaces the app uses (services, extractors, models) — no
+  mocking around `src/` code just to make a test pass.
+- If a test surfaces a bug or design issue in `src/`, report it instead of adjusting
+  the implementation to fit — implementation changes still go through the user, per
+  the hand-coded-only rule above.
+- Fixtures, factories, and other test utilities under `tests/` are fair game for the
+  agent to write and maintain, same as the tests themselves.
+
 ### Pair on it — propose incrementally, don't hand over finished files unprompted
 
 - Infra/scaffolding: CI/CD YAML, Makefile, Dockerfile, deployment config, README,
