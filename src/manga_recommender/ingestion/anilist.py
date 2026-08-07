@@ -103,6 +103,7 @@ class AnilistExtractor(BaseExtractor):
             title=media["title"]["romaji"],
             author=self._extract_author(media),
             status=self._extract_status(media),
+            published_date=None,  # TODO: Extract published date if available
             description=self._extract_description(media),
             genres=media["genres"],
             raw_score=media["averageScore"],

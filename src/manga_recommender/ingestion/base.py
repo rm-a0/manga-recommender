@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from datetime import datetime
 
 from pydantic.dataclasses import dataclass
 
@@ -15,6 +16,7 @@ class NormalizedMangaRecord:
     status: MangaStatus | None
     description: str | None
     genres: list[str] | None
+    published_date: datetime | None
     raw_score: float | None
     raw_scale_max: float | None
     votes_count: int | None
