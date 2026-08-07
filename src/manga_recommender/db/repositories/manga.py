@@ -29,6 +29,34 @@ def create_manga(
     return db_manga
 
 
+def get_or_create_manga(
+    db: Session,
+    *,
+    mal_id: int | None = None,
+    source_id: uuid.UUID | None = None,
+    external_id: str | None = None,
+    title: str,
+    author: str,
+    published_date: datetime | None = None,
+    status: MangaStatus | None = None,
+) -> Manga:
+    manga = None
+    if mal_id is not None:
+        manga = get_manga_by_mal_id(db, mal_id)
+    elif source_id is not None and external_id is not None:
+        manga = get_manga_by_source_external_id(db, source_id, external_id)
+    if manga:
+        return manga
+    return create_manga(
+        db,
+        mal_id=mal_id,
+        title=title,
+        author=author,
+        published_date=published_date,
+        status=status,
+    )
+
+
 def update_manga(
     db: Session,
     manga: Manga,
@@ -51,6 +79,42 @@ def update_manga(
             setattr(manga, attr, value)
     db.flush()
     return manga
+
+
+def update_or_create_manga(
+    db: Session,
+    *,
+    mal_id: int | None = None,
+    source_id: uuid.UUID | None = None,
+    external_id: str | None = None,
+    title: str,
+    author: str,
+    published_date: datetime | None = None,
+    status: MangaStatus | None = None,
+) -> Manga:
+    manga = None
+    if mal_id is not None:
+        manga = get_manga_by_mal_id(db, mal_id)
+    elif source_id is not None and external_id is not None:
+        manga = get_manga_by_source_external_id(db, source_id, external_id)
+    if manga:
+        return update_manga(
+            db,
+            manga,
+            mal_id=mal_id,
+            title=title,
+            author=author,
+            published_date=published_date,
+            status=status,
+        )
+    return create_manga(
+        db,
+        mal_id=mal_id,
+        title=title,
+        author=author,
+        published_date=published_date,
+        status=status,
+    )
 
 
 def delete_manga(db: Session, manga: Manga) -> None:

@@ -82,7 +82,7 @@ class AnilistExtractor(BaseExtractor):
         return ", ".join(authors) if authors else "Unknown"
 
     def _extract_status(self, media: dict) -> MangaStatus | None:
-        return self.STATUS_MAP.get(media.get("status"))
+        return self.STATUS_MAP.get(media.get("status", ""))
 
     def _extract_votes_count(self, media: dict) -> int | None:
         score_distribution = media.get("stats", {}).get("scoreDistribution", [])

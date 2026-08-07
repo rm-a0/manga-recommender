@@ -23,7 +23,7 @@ def db_session() -> Generator[Session, None, None]:
     nested = connection.begin_nested()
 
     @event.listens_for(session, "after_transaction_end")
-    def _restart_savepoint(session: Session, transaction: object) -> None:
+    def _restart_savepoint(_session: Session, _transaction: object) -> None:
         nonlocal nested
         if not nested.is_active:
             nested = connection.begin_nested()
