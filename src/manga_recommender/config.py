@@ -54,6 +54,19 @@ class AniListSettings(BaseSettings):
     )
 
 
+class IngestionSettings(BaseSettings):
+    """Ingestion Pipeline Settings"""
+
+    batch_size: int = 50
+
+    model_config = SettingsConfigDict(
+        env_prefix="INGESTION_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 @functools.lru_cache
 def get_app_settings() -> AppSettings:
     """Return the cached AppSettings instance."""
@@ -76,3 +89,9 @@ def get_api_settings() -> APISettings:
 def get_anilist_settings() -> AniListSettings:
     """Return the cached AniListSettings instance."""
     return AniListSettings()
+
+
+@functools.lru_cache
+def get_ingestion_settings() -> IngestionSettings:
+    """Return the cached IngestionSettings instance."""
+    return IngestionSettings()

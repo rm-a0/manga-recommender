@@ -1,5 +1,7 @@
 """Persist extracted manga records to the database."""
 
+import uuid
+
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga import Manga
@@ -11,7 +13,6 @@ from manga_recommender.db.repositories.manga import (
 from manga_recommender.db.repositories.manga_external_rating import (
     update_or_create_external_rating,
 )
-from manga_recommender.db.repositories.sources import get_source_id_by_name
 from manga_recommender.db.session import session_scope
 from manga_recommender.ingestion.base import NormalizedMangaRecord
 
@@ -32,12 +33,9 @@ def sync_genres_for_manga(
     add_genres_to_manga(db, db_manga, genres)
 
 
-def load_batch(records: list[NormalizedMangaRecord], source_name: str) -> None:
+def load_batch(records: list[NormalizedMangaRecord], source_id: uuid.UUID) -> None:
     """Persist a batch of normalized manga records to the database in one transaction."""
     with session_scope() as session:
-        source_id = get_source_id_by_name(session, source_name)
-        if source_id is None:
-            raise ValueError(f"Unknown source: {source_name}")
         for record in records:
             manga = update_or_create_manga(
                 session,
