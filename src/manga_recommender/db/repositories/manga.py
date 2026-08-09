@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from manga_recommender.db.models.genres import Genre
 from manga_recommender.db.models.manga import Manga, MangaStatus
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
 
@@ -139,3 +140,17 @@ def get_manga_by_source_external_id(
             MangaExternalRating.external_id == external_id,
         )
     )
+
+
+def assign_genres_to_manga(db: Session, manga: Manga, genres: list[Genre]) -> Manga:
+    manga.genres = genres
+    db.flush()
+    return manga
+
+
+def add_genres_to_manga(db: Session, manga: Manga, genres: list[Genre]) -> Manga:
+    for genre in genres:
+        if genre not in manga.genres:
+            manga.genres.append(genre)
+    db.flush()
+    return manga
