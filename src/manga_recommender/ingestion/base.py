@@ -1,3 +1,5 @@
+"""Base extractor interface and the normalized manga record shape."""
+
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from datetime import datetime
@@ -9,6 +11,8 @@ from manga_recommender.db.models.manga import MangaStatus
 
 @dataclass
 class NormalizedMangaRecord:
+    """Manga data in a source-independent shape, ready for loading."""
+
     external_id: str
     mal_id: int | None
     title: str
@@ -23,8 +27,11 @@ class NormalizedMangaRecord:
 
 
 class BaseExtractor(ABC):
+    """Interface for extractors that pull manga data from an external source."""
+
     source_name: str
 
     @abstractmethod
     def extract(self) -> Iterator[NormalizedMangaRecord]:
+        """Yield normalized manga records from the source."""
         pass

@@ -1,9 +1,13 @@
+"""Load application settings from environment variables."""
+
 import functools
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AppSettings(BaseSettings):
+    """General application settings."""
+
     env: str = "development"
     debug: bool = True
 
@@ -13,6 +17,8 @@ class AppSettings(BaseSettings):
 
 
 class DatabaseSettings(BaseSettings):
+    """Database connection settings."""
+
     url: str = "postgresql://postgres:password@localhost:5432/mydb"
     url_pooled: str = "postgresql://postgres:password@localhost:6543/mydb"
 
@@ -22,6 +28,8 @@ class DatabaseSettings(BaseSettings):
 
 
 class APISettings(BaseSettings):
+    """API server bind settings."""
+
     host: str = "0.0.0.0"
     port: int = 8000
 
@@ -31,6 +39,8 @@ class APISettings(BaseSettings):
 
 
 class AniListSettings(BaseSettings):
+    """AniList extractor settings."""
+
     base_url: str = "https://graphql.anilist.co"
     request_delay: float = 0.5
     max_pages: int | None = None
@@ -46,19 +56,23 @@ class AniListSettings(BaseSettings):
 
 @functools.lru_cache
 def get_app_settings() -> AppSettings:
+    """Return the cached AppSettings instance."""
     return AppSettings()
 
 
 @functools.lru_cache
 def get_database_settings() -> DatabaseSettings:
+    """Return the cached DatabaseSettings instance."""
     return DatabaseSettings()
 
 
 @functools.lru_cache
 def get_api_settings() -> APISettings:
+    """Return the cached APISettings instance."""
     return APISettings()
 
 
 @functools.lru_cache
 def get_anilist_settings() -> AniListSettings:
+    """Return the cached AniListSettings instance."""
     return AniListSettings()

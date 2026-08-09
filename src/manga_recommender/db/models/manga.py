@@ -1,3 +1,5 @@
+"""Manga ORM model and status enum."""
+
 from datetime import datetime
 from enum import StrEnum
 
@@ -9,6 +11,8 @@ from manga_recommender.db.models.genres import Genre, manga_genres
 
 
 class MangaStatus(StrEnum):
+    """Publication status of a manga."""
+
     ONGOING = "ongoing"
     FINISHED = "finished"
     CANCELLED = "cancelled"
@@ -17,6 +21,8 @@ class MangaStatus(StrEnum):
 
 
 class Manga(Base):
+    """ORM model for a manga entry and its metadata."""
+
     __tablename__ = "manga"
 
     mal_id: Mapped[int | None] = mapped_column(unique=True)

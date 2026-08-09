@@ -1,3 +1,5 @@
+"""Data-access functions for the Manga model."""
+
 import uuid
 from datetime import datetime
 
@@ -18,6 +20,7 @@ def create_manga(
     published_date: datetime | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
+    """Create and persist a new manga."""
     db_manga = Manga(
         mal_id=mal_id,
         title=title,
@@ -41,6 +44,10 @@ def get_or_create_manga(
     published_date: datetime | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
+    """Return the matching manga, creating it if none exists.
+
+    Looks up by mal_id first, falling back to source_id and external_id.
+    """
     manga = None
     if mal_id is not None:
         manga = get_manga_by_mal_id(db, mal_id)
@@ -68,6 +75,10 @@ def update_manga(
     published_date: datetime | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
+    """Update the given manga's fields and persist the changes.
+
+    Only fields with a non-None value are updated.
+    """
     updates = {
         "mal_id": mal_id,
         "title": title,
@@ -93,6 +104,10 @@ def update_or_create_manga(
     published_date: datetime | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
+    """Update the matching manga if one exists, otherwise create it.
+
+    Uses the same mal_id/source_id lookup order as get_or_create_manga.
+    """
     manga = None
     if mal_id is not None:
         manga = get_manga_by_mal_id(db, mal_id)
@@ -119,11 +134,13 @@ def update_or_create_manga(
 
 
 def delete_manga(db: Session, manga: Manga) -> None:
+    """Delete the given manga."""
     db.delete(manga)
     db.flush()
 
 
 def get_manga_by_mal_id(db: Session, mal_id: int) -> Manga | None:
+    """Return the manga with the given MyAnimeList ID, or None if not found."""
     return db.scalar(select(Manga).where(Manga.mal_id == mal_id))
 
 
@@ -132,6 +149,7 @@ def get_manga_by_source_external_id(
     source_id: uuid.UUID,
     external_id: str,
 ) -> Manga | None:
+    """Return the manga matching a source's external ID, or None if not found."""
     return db.scalar(
         select(Manga)
         .join(MangaExternalRating)
@@ -143,12 +161,14 @@ def get_manga_by_source_external_id(
 
 
 def assign_genres_to_manga(db: Session, manga: Manga, genres: list[Genre]) -> Manga:
+    """Replace a manga's genres with the given list."""
     manga.genres = genres
     db.flush()
     return manga
 
 
 def add_genres_to_manga(db: Session, manga: Manga, genres: list[Genre]) -> Manga:
+    """Add genres to a manga, skipping any it already has."""
     for genre in genres:
         if genre not in manga.genres:
             manga.genres.append(genre)

@@ -1,3 +1,5 @@
+"""Genre ORM model and its many-to-many link to manga."""
+
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, ForeignKey, Table
@@ -17,6 +19,8 @@ manga_genres = Table(
 
 
 class Genre(Base):
+    """ORM model for a manga genre."""
+
     __tablename__ = "genres"
 
     name: Mapped[str] = mapped_column(unique=True)

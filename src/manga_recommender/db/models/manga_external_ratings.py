@@ -1,3 +1,5 @@
+"""ORM model linking a manga to its rating from an external source."""
+
 import uuid
 from datetime import datetime
 
@@ -8,6 +10,11 @@ from manga_recommender.db.base import Base
 
 
 class MangaExternalRating(Base):
+    """ORM model for a manga's raw rating data from one external source.
+
+    Unique per (manga, source) and per (source, external_id).
+    """
+
     __tablename__ = "manga_external_ratings"
 
     manga_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("manga.id"))

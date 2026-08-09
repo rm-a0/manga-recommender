@@ -1,3 +1,5 @@
+"""Extractor that pulls manga data from the AniList GraphQL API."""
+
 import re
 import time
 from collections.abc import Iterator
@@ -10,6 +12,8 @@ from manga_recommender.ingestion.base import BaseExtractor, NormalizedMangaRecor
 
 
 class AnilistExtractor(BaseExtractor):
+    """Extracts and normalizes manga data from AniList."""
+
     source_name = "anilist"
     query = """
     query ($page: Int, $perPage: Int) {
@@ -46,12 +50,17 @@ class AnilistExtractor(BaseExtractor):
         self.anilist_settings = get_anilist_settings()
 
     def _should_continue(self, page: int) -> bool:
+        """Return whether the given page is within the configured page limit."""
         return (
             self.anilist_settings.max_pages is None
             or page <= self.anilist_settings.max_pages
         )
 
     def _fetch_page(self, client: httpx.Client, page: int) -> dict:
+        """Fetch one page of manga from the AniList API.
+
+        Retries automatically after the server's Retry-After delay on a 429 response.
+        """
         response = client.post(
             self.anilist_settings.base_url,
             json={
@@ -73,6 +82,7 @@ class AnilistExtractor(BaseExtractor):
         return body
 
     def _extract_author(self, media: dict) -> str:
+        """Return a comma-separated list of story and art staff names."""
         staff_edges = media.get("staff", {}).get("edges", [])
         authors = [
             edge["node"]["name"]["full"]
@@ -82,21 +92,25 @@ class AnilistExtractor(BaseExtractor):
         return ", ".join(authors) if authors else "Unknown"
 
     def _extract_status(self, media: dict) -> MangaStatus | None:
+        """Map an AniList status string to a MangaStatus, or None if unmapped."""
         return self.STATUS_MAP.get(media.get("status", ""))
 
     def _extract_votes_count(self, media: dict) -> int | None:
+        """Return the total vote count from AniList's score distribution."""
         score_distribution = media.get("stats", {}).get("scoreDistribution", [])
         if not score_distribution:
             return None
         return sum(item["amount"] for item in score_distribution)
 
     def _extract_description(self, media: dict) -> str | None:
+        """Return the manga description with HTML tags stripped."""
         description = media.get("description")
         if description is None:
             return None
         return re.sub(r"<[^>]+>", "", description)
 
     def _to_record(self, media: dict) -> NormalizedMangaRecord:
+        """Convert a raw AniList media object into a NormalizedMangaRecord."""
         return NormalizedMangaRecord(
             external_id=str(media["id"]),
             mal_id=media["idMal"],
@@ -112,6 +126,7 @@ class AnilistExtractor(BaseExtractor):
         )
 
     def extract(self) -> Iterator[NormalizedMangaRecord]:
+        """Yield normalized manga records for every page of AniList manga data."""
         with httpx.Client(timeout=30.0) as client:
             page = 1
             while self._should_continue(page):

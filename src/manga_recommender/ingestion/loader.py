@@ -1,3 +1,5 @@
+"""Persist extracted manga records to the database."""
+
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga import Manga
@@ -16,6 +18,10 @@ def sync_genres_for_manga(
     db_manga: Manga,
     genre_names: list[str],
 ) -> None:
+    """Attach the given genre names to a manga, creating any that don't exist.
+
+    Genre names are normalized to lowercase before lookup.
+    """
     genres = [
         get_or_create_genre(db, name=genre_name.strip().casefold())
         for genre_name in genre_names
@@ -24,6 +30,7 @@ def sync_genres_for_manga(
 
 
 def load_batch(records: list[NormalizedMangaRecord], source_name: str) -> None:
+    """Persist a batch of normalized manga records to the database in one transaction."""
     with session_scope() as session:
         for record in records:
             manga = update_or_create_manga(
