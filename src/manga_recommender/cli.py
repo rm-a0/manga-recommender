@@ -1,3 +1,5 @@
+"""Typer CLI: run ingestion or start the API server."""
+
 from typing import Annotated
 
 import typer

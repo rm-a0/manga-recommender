@@ -1,3 +1,5 @@
+"""Seed sources, batch extractor output, and load it into the database."""
+
 import itertools
 import sys
 import uuid

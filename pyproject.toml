@@ -74,11 +74,16 @@ target-version = "py312"
 line-length = 88
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501"] # line length handled by formatter
+select = ["E", "F", "I", "UP", "B", "SIM", "D"]
+ignore = ["E501", "D203", "D213"] # line length handled by formatter; D203/D213 conflict with D211/D212
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/env.py" = ["D100"] # boilerplate, not public API
+"alembic/versions/*.py" = ["D400", "D415"] # auto-generated
+"tests/**" = ["D"] # tests documented by their names
 
 [tool.mypy]
 python_version = "3.12"

@@ -55,7 +55,7 @@ class AniListSettings(BaseSettings):
 
 
 class IngestionSettings(BaseSettings):
-    """Ingestion Pipeline Settings"""
+    """Ingestion pipeline settings."""
 
     batch_size: int = 50
 

@@ -1,3 +1,5 @@
+"""Map a source name to its extractor class and default seed weight."""
+
 from typing import NamedTuple
 
 from manga_recommender.ingestion.anilist import AnilistExtractor

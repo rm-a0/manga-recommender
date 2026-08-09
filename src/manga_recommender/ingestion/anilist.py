@@ -48,6 +48,7 @@ class AnilistExtractor(BaseExtractor):
     }
 
     def __init__(self):
+        """Load AniList settings for this extractor instance."""
         self.anilist_settings = get_anilist_settings()
 
     def _should_continue(self, page: int) -> bool:
