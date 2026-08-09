@@ -3,6 +3,7 @@
 import re
 import time
 from collections.abc import Iterator
+from datetime import UTC, datetime
 
 import httpx
 
@@ -123,6 +124,7 @@ class AnilistExtractor(BaseExtractor):
             raw_score=media["averageScore"],
             raw_scale_max=100.0,
             votes_count=self._extract_votes_count(media),
+            fetched_at=datetime.now(UTC),
         )
 
     def extract(self) -> Iterator[NormalizedMangaRecord]:
