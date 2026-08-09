@@ -170,7 +170,9 @@ def test_fetch_page_raises_on_graphql_errors():
 
 
 def test_fetch_page_retries_after_429(monkeypatch):
-    monkeypatch.setattr("manga_recommender.ingestion.anilist.time.sleep", lambda _: None)
+    monkeypatch.setattr(
+        "manga_recommender.ingestion.anilist.time.sleep", lambda _: None
+    )
     extractor = _extractor()
     responses = iter(
         [
