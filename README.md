@@ -28,12 +28,12 @@ cp .env.example .env
 
 ## Running the app locally
 
-> **Not built yet.** `main.py` is currently a stub — no CLI arg parsing, no FastAPI
-> app. This is the target interface once the API layer exists.
+> **Not built yet.** `src/manga_recommender/__main__.py` is currently a stub — no CLI
+> arg parsing, no FastAPI app. This is the target interface once the API layer exists.
 
 ```bash
 # Start the API
-uv run python main.py app
+uv run python -m manga_recommender app
 
 # API swagger docs
 open http://localhost:8000/docs
@@ -69,19 +69,20 @@ uv run alembic downgrade -1
 Pulls manga from the AniList GraphQL API and writes to the database.
 This is a **one-shot offline job** - not triggered by the API.
 
-> **Extractor only, not wired up yet.** `AnilistExtractor` fetches and normalizes
-> AniList data, but nothing persists it to the database yet, and `main.py` doesn't
-> parse CLI args. The commands below are the target interface, not runnable today.
+> **Pipeline logic done, CLI not wired up yet.** `AnilistExtractor` → `runner.py`
+> (seeds the source, batches records, persists via `loader.py`) works end to end, but
+> `src/manga_recommender/__main__.py` doesn't parse CLI args yet, so the commands
+> below are the target interface, not runnable today.
 
 ```bash
 # Install pipeline extras
 uv sync --group pipeline
 
 # Seed the database
-uv run python main.py ingest
+uv run python -m manga_recommender ingest
 
 # Limit pages for a quick local test (env var, not a CLI flag)
-ANILIST_MAX_PAGES=5 uv run python main.py ingest
+ANILIST_MAX_PAGES=5 uv run python -m manga_recommender ingest
 ```
 
 ## Dependency groups
@@ -162,9 +163,8 @@ Current state:
 ```
 manga-recommender/
 │
-├── main.py                        # CLI entry point (stub — not wired up yet)
-│
 ├── src/manga_recommender/
+│   ├── __main__.py                 # CLI entry point (stub — arg parsing not wired up yet)
 │   ├── config.py                  # Settings loaded from .env via pydantic-settings
 │   │
 │   ├── db/
@@ -178,7 +178,10 @@ manga-recommender/
 │   │
 │   └── ingestion/
 │       ├── base.py                # BaseExtractor ABC, NormalizedMangaRecord
-│       └── anilist.py             # AniList GraphQL extractor
+│       ├── anilist.py             # AniList GraphQL extractor
+│       ├── registry.py            # source name -> extractor/default-weight mapping
+│       ├── loader.py              # persists NormalizedMangaRecords to the database
+│       └── runner.py              # seeds sources, batches extraction, calls loader
 │
 ├── alembic/                        # Migrations (auto-generated via `make migration`)
 │
@@ -191,9 +194,8 @@ manga-recommender/
 └── uv.lock                        # Commit this — pins exact versions
 ```
 
-Not built yet: DB session/engine wiring, an ingestion loader that persists
-`NormalizedMangaRecord`s, the `main.py` CLI, and the FastAPI `api`/`services` layer.
-Planned shape for those, once they land:
+Not built yet: the `__main__.py` CLI (arg parsing) and the FastAPI `api`/`services`
+layer. Planned shape for those, once they land:
 
 ```
 ├── src/manga_recommender/
@@ -214,6 +216,7 @@ Planned shape for those, once they land:
 | `API_PORT` | — | Bind port (default `8000`) |
 | `ANILIST_REQUEST_DELAY` | — | Seconds between AniList pages (default `0.5`) |
 | `ANILIST_MAX_PAGES` | — | Pages to ingest (default: unlimited) |
+| `INGESTION_BATCH_SIZE` | — | Records per `load_batch` transaction (default `50`) |
 
 Every variable has a fallback in `config.py`, so none are strictly required to boot —
 `DB_URL`/`DB_URL_POOLED` are marked "recommended" because the fallback points at a

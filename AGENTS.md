@@ -20,6 +20,14 @@ before touching anything, whether you're an AI agent or a human contributor.
   behavior (run linters/tests/queries). Do not write the implementation, even if asked
   to "just fix it quickly" — point out the fix and let the user fix and understand it.
 
+### Proactively suggesting tools/libraries
+
+- Agents may proactively flag a library or tool that would remove boilerplate or
+  improve ergonomics in hand-coded areas (e.g. a CLI framework instead of raw
+  argparse, structured/pretty logging). This is a suggestion only — explain the
+  tradeoff and sketch the change, but the implementation still goes through the
+  hand-coded-only rule above.
+
 ### Agent-codable, but must follow best practices for the stack in use
 
 - Frontend / client-side UI code only (the view layer — components, markup, styling,

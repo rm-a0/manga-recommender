@@ -5,7 +5,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "uv run alembic upgrade head && uv run python main.py app"
+startCommand = "uv run alembic upgrade head && uv run python -m manga_recommender app"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
