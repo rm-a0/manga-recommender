@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help setup dev test lint format typecheck migrate migration ingest docker-build docker-run clean
+.PHONY: help setup test lint format typecheck migrate migration run-ingest run-app docker-build docker-run clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -8,9 +8,6 @@ help: ## Show this help
 setup: ## Install deps and create .env from template if missing
 	uv sync
 	@[ -f .env ] || cp .env.example .env
-
-dev: ## Run the API locally
-	uv run python main.py app
 
 test: ## Run the test suite
 	uv run pytest
@@ -30,8 +27,11 @@ migrate: ## Apply pending Alembic migrations
 migration: ## Create a new migration, e.g. make migration name="describe change"
 	uv run alembic revision --autogenerate -m "$(name)"
 
-ingest: ## Run the AniList ingestion pipeline
-	uv run python main.py ingest
+run-app: ## Run the API locally
+	uv run python -m manga_recommender app
+
+run-ingest: ## Run the AniList ingestion pipeline (make run-ingest source=anilist, or all=1 for every source)
+	uv run python -m manga_recommender ingest $(if $(all),--all,--source $(source))
 
 docker-build: ## Build the production Docker image
 	docker build -t mangarec .

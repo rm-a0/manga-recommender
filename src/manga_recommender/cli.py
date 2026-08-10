@@ -4,10 +4,25 @@ from typing import Annotated
 
 import typer
 
+from manga_recommender.config import (
+    get_app_settings,
+    get_ingestion_settings,
+    get_logging_settings,
+)
 from manga_recommender.ingestion.registry import get_all_registered_sources
 from manga_recommender.ingestion.runner import run_ingestion
+from manga_recommender.logging_config import configure_logging
 
 app = typer.Typer(help="CLI for the manga recommender.")
+
+
+@app.callback()
+def main() -> None:
+    """Configure logging and set up the CLI."""
+    configure_logging(
+        level=get_logging_settings().level,
+        debug=get_app_settings().debug,
+    )
 
 
 @app.command(name="ingest")
@@ -27,13 +42,13 @@ def ingest(
     sources = get_all_registered_sources() if all_sources else source
     if sources is None:
         raise RuntimeError("No sources to ingest.")
-    run_ingestion(sources)
+    run_ingestion(sources, batch_size=get_ingestion_settings().batch_size)
 
 
 @app.command(name="app")
 def start_app() -> None:
     """Start the FastAPI application."""
-    print("TODO")
+    raise NotImplementedError("Starting the FastAPI app is not implemented yet.")
 
 
 if __name__ == "__main__":

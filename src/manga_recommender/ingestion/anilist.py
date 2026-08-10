@@ -6,10 +6,13 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 
 import httpx
+import structlog
 
 from manga_recommender.config import get_anilist_settings
 from manga_recommender.db.models.manga import MangaStatus
 from manga_recommender.ingestion.base import BaseExtractor, NormalizedMangaRecord
+
+logger = structlog.get_logger(__name__)
 
 
 class AnilistExtractor(BaseExtractor):
@@ -19,7 +22,7 @@ class AnilistExtractor(BaseExtractor):
     query = """
     query ($page: Int, $perPage: Int) {
         Page(page: $page, perPage: $perPage) {
-            pageInfo { hasNextPage }
+            pageInfo { hasNextPage lastPage }
             media(type: MANGA, sort: ID) {
                 id
                 idMal
@@ -63,6 +66,7 @@ class AnilistExtractor(BaseExtractor):
 
         Retries automatically after the server's Retry-After delay on a 429 response.
         """
+        logger.debug("fetching_page", page=page)
         response = client.post(
             self.anilist_settings.base_url,
             json={
@@ -72,6 +76,7 @@ class AnilistExtractor(BaseExtractor):
         )
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 60))
+            logger.warning("rate_limited", page=page, retry_after=retry_after)
             time.sleep(retry_after)
             return self._fetch_page(client, page)
 
@@ -134,6 +139,12 @@ class AnilistExtractor(BaseExtractor):
             page = 1
             while self._should_continue(page):
                 body = self._fetch_page(client, page)
+                page_info = body["data"]["Page"]["pageInfo"]
+                logger.info(
+                    "page_fetched",
+                    page=page,
+                    last_page=page_info.get("lastPage"),
+                )
                 for media in body["data"]["Page"]["media"]:
                     yield self._to_record(media)
                 if not body["data"]["Page"]["pageInfo"]["hasNextPage"]:

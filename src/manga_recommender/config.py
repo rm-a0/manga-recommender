@@ -16,6 +16,19 @@ class AppSettings(BaseSettings):
     )
 
 
+class LoggingSettings(BaseSettings):
+    """Logging settings."""
+
+    level: str = "INFO"
+
+    model_config = SettingsConfigDict(
+        env_prefix="LOGGING_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 class DatabaseSettings(BaseSettings):
     """Database connection settings."""
 
@@ -71,6 +84,12 @@ class IngestionSettings(BaseSettings):
 def get_app_settings() -> AppSettings:
     """Return the cached AppSettings instance."""
     return AppSettings()
+
+
+@functools.lru_cache
+def get_logging_settings() -> LoggingSettings:
+    """Return the cached LoggingSettings instance."""
+    return LoggingSettings()
 
 
 @functools.lru_cache
