@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -127,22 +129,8 @@ def test_to_record_converts_media_to_normalized_record():
     assert record.raw_scale_max == 100.0
     assert record.votes_count == 10
     assert record.published_date is None
+    assert record.description == "A story about things."
     assert record.fetched_at is not None
-
-
-def test_should_continue_is_unbounded_when_max_pages_is_none():
-    extractor = _extractor(max_pages=None)
-
-    assert extractor._should_continue(1)
-    assert extractor._should_continue(1000)
-
-
-def test_should_continue_stops_after_max_pages():
-    extractor = _extractor(max_pages=2)
-
-    assert extractor._should_continue(1)
-    assert extractor._should_continue(2)
-    assert not extractor._should_continue(3)
 
 
 def test_fetch_page_returns_parsed_response_body():
@@ -154,6 +142,23 @@ def test_fetch_page_returns_parsed_response_body():
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         assert extractor._fetch_page(client, 1) == body
+
+
+def test_fetch_page_sends_id_greater_and_per_page_variables():
+    extractor = _extractor(per_page=25)
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["variables"] = json.loads(request.content)["variables"]
+        return httpx.Response(
+            200,
+            json={"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": []}}},
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        extractor._fetch_page(client, 42)
+
+    assert captured["variables"] == {"perPage": 25, "idGreater": 42}
 
 
 def test_fetch_page_raises_on_graphql_errors():
@@ -233,15 +238,48 @@ def test_extract_yields_records_across_pages(monkeypatch):
     assert titles == ["Manga A", "Manga B"]
 
 
-def test_extract_stops_at_configured_max_pages(monkeypatch):
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
+def test_extract_advances_cursor_using_max_id_seen(monkeypatch):
+    pages = iter(
+        [
+            {
                 "data": {
-                    "Page": {"pageInfo": {"hasNextPage": True}, "media": [_media()]}
+                    "Page": {
+                        "pageInfo": {"hasNextPage": True},
+                        "media": [_media(media_id=5), _media(media_id=8)],
+                    }
                 }
             },
+            {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": []}}},
+        ]
+    )
+    id_greater_seen: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        id_greater_seen.append(json.loads(request.content)["variables"]["idGreater"])
+        return httpx.Response(200, json=next(pages))
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        "manga_recommender.ingestion.anilist.httpx.Client",
+        lambda **kwargs: real_client(transport=transport, **kwargs),
+    )
+
+    extractor = _extractor()
+    list(extractor.extract())
+
+    assert id_greater_seen == [0, 8]
+
+
+def test_extract_stops_when_media_is_empty(monkeypatch):
+    request_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(
+            200,
+            json={"data": {"Page": {"pageInfo": {"hasNextPage": True}, "media": []}}},
         )
 
     transport = httpx.MockTransport(handler)
@@ -251,7 +289,8 @@ def test_extract_stops_at_configured_max_pages(monkeypatch):
         lambda **kwargs: real_client(transport=transport, **kwargs),
     )
 
-    extractor = _extractor(max_pages=2)
+    extractor = _extractor()
     records = list(extractor.extract())
 
-    assert len(records) == 2
+    assert records == []
+    assert request_count == 1

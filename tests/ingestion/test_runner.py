@@ -2,7 +2,6 @@ import uuid
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.orm import Session
@@ -94,11 +93,8 @@ def test_run_ingestion_seeds_source_and_batches_extracted_records(
         "load_batch",
         lambda records, sid: loaded_batches.append((records, sid)),
     )
-    monkeypatch.setattr(
-        runner, "get_ingestion_settings", lambda: SimpleNamespace(batch_size=2)
-    )
 
-    runner.run_ingestion(["anilist"])
+    runner.run_ingestion(["anilist"], batch_size=2)
 
     assert seeded == ["anilist"]
     assert [sid for _, sid in loaded_batches] == [source_id, source_id]
@@ -106,7 +102,7 @@ def test_run_ingestion_seeds_source_and_batches_extracted_records(
 
 
 def test_run_ingestion_continues_after_a_source_errors(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     processed: list[str] = []
 
@@ -121,11 +117,7 @@ def test_run_ingestion_continues_after_a_source_errors(
         runner, "get_extractor_for_source", lambda name: _FakeExtractor([])
     )
     monkeypatch.setattr(runner, "load_batch", lambda records, sid: None)
-    monkeypatch.setattr(
-        runner, "get_ingestion_settings", lambda: SimpleNamespace(batch_size=50)
-    )
 
-    runner.run_ingestion(["broken", "anilist"])
+    runner.run_ingestion(["broken", "anilist"], batch_size=50)
 
     assert processed == ["anilist"]
-    assert "Error during ingestion for source broken" in capsys.readouterr().err

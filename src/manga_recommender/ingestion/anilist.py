@@ -55,7 +55,7 @@ class AnilistExtractor(BaseExtractor):
         self.anilist_settings = get_anilist_settings()
 
     def _fetch_page(self, client: httpx.Client, last_id: int) -> dict:
-        """Fetch one page of manga from the AniList API.
+        """Fetch manga with an ID greater than last_id from the AniList API.
 
         Retries automatically after the server's Retry-After delay on a 429 response.
         """
@@ -129,7 +129,11 @@ class AnilistExtractor(BaseExtractor):
         )
 
     def extract(self) -> Iterator[NormalizedMangaRecord]:
-        """Yield normalized manga records for every page of AniList manga data."""
+        """Yield normalized manga records for AniList's entire manga catalogue.
+
+        Advances by media ID instead of page number, since AniList's page-based
+        pagination caps out at 5,000 results.
+        """
         with httpx.Client(timeout=30.0) as client:
             last_id = 0
             while True:

@@ -20,6 +20,7 @@ def test_create_manga_persists_given_fields(db_session: Session) -> None:
         mal_id=1,
         title="One Piece",
         author="Eiichiro Oda",
+        description="A boy sets out to become the Pirate King.",
         status=MangaStatus.ONGOING,
     )
 
@@ -27,6 +28,7 @@ def test_create_manga_persists_given_fields(db_session: Session) -> None:
     assert manga.mal_id == 1
     assert manga.title == "One Piece"
     assert manga.author == "Eiichiro Oda"
+    assert manga.description == "A boy sets out to become the Pirate King."
     assert manga.status == MangaStatus.ONGOING
 
 
@@ -35,6 +37,7 @@ def test_create_manga_defaults_optional_fields_to_none(db_session: Session) -> N
 
     assert manga.mal_id is None
     assert manga.published_date is None
+    assert manga.description is None
     assert manga.status is None
 
 
@@ -66,6 +69,20 @@ def test_update_manga_overwrites_only_given_fields(db_session: Session) -> None:
     assert updated.status == MangaStatus.FINISHED
     assert updated.title == "Chainsaw Man"
     assert updated.author == "Tatsuki Fujimoto"
+
+
+def test_update_manga_updates_description(db_session: Session) -> None:
+    manga = create_manga(
+        db_session,
+        title="Chainsaw Man",
+        author="Tatsuki Fujimoto",
+        description="Original description.",
+    )
+
+    updated = update_manga(db_session, manga, description="Updated description.")
+
+    assert updated.description == "Updated description."
+    assert updated.title == "Chainsaw Man"
 
 
 def test_update_manga_with_no_args_changes_nothing(db_session: Session) -> None:
