@@ -1,6 +1,7 @@
 """Persist extracted manga records to the database."""
 
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy.orm import Session
 
@@ -33,7 +34,7 @@ def sync_genres_for_manga(
     add_genres_to_manga(db, db_manga, genres)
 
 
-def load_batch(records: list[NormalizedMangaRecord], source_id: uuid.UUID) -> None:
+def load_batch(records: Sequence[NormalizedMangaRecord], source_id: uuid.UUID) -> None:
     """Persist a batch of normalized manga records to the database in one transaction."""
     with session_scope() as session:
         for record in records:
@@ -45,6 +46,7 @@ def load_batch(records: list[NormalizedMangaRecord], source_id: uuid.UUID) -> No
                 title=record.title,
                 author=record.author,
                 published_date=record.published_date,
+                description=record.description,
                 status=record.status,
             )
             if record.genres:

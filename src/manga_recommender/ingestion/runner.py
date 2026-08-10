@@ -1,8 +1,8 @@
 """Seed sources, batch extractor output, and load it into the database."""
 
 import itertools
-import uuid
 import time
+import uuid
 
 import structlog
 
@@ -35,14 +35,14 @@ def run_ingestion(sources: list[str], batch_size: int) -> None:
             source_id = seed_source(source)
             extractor = get_extractor_for_source(source)
             for batch in itertools.batched(extractor.extract(), batch_size):
-                batch = list(batch)
+                batch = batch
                 start_time = time.monotonic()
                 load_batch(batch, source_id)
                 logger.info(
                     "batch_loaded",
                     source=source,
                     count=len(batch),
-                    elapsed_s=round(time.monotonic() - start_time, 1)
+                    elapsed_s=round(time.monotonic() - start_time, 1),
                 )
         except Exception:
             logger.exception("ingestion_failed", source=source)

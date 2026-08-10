@@ -20,10 +20,10 @@ class AnilistExtractor(BaseExtractor):
 
     source_name = "anilist"
     query = """
-    query ($page: Int, $perPage: Int) {
-        Page(page: $page, perPage: $perPage) {
+    query ($perPage: Int, $idGreater: Int) {
+        Page(page: 1, perPage: $perPage) {
             pageInfo { hasNextPage lastPage }
-            media(type: MANGA, sort: ID) {
+            media(type: MANGA, sort: ID, id_greater: $idGreater) {
                 id
                 idMal
                 title { romaji }
@@ -54,31 +54,26 @@ class AnilistExtractor(BaseExtractor):
         """Load AniList settings for this extractor instance."""
         self.anilist_settings = get_anilist_settings()
 
-    def _should_continue(self, page: int) -> bool:
-        """Return whether the given page is within the configured page limit."""
-        return (
-            self.anilist_settings.max_pages is None
-            or page <= self.anilist_settings.max_pages
-        )
-
-    def _fetch_page(self, client: httpx.Client, page: int) -> dict:
+    def _fetch_page(self, client: httpx.Client, last_id: int) -> dict:
         """Fetch one page of manga from the AniList API.
 
         Retries automatically after the server's Retry-After delay on a 429 response.
         """
-        logger.debug("fetching_page", page=page)
         response = client.post(
             self.anilist_settings.base_url,
             json={
                 "query": self.query,
-                "variables": {"page": page, "perPage": self.anilist_settings.per_page},
+                "variables": {
+                    "perPage": self.anilist_settings.per_page,
+                    "idGreater": last_id,
+                },
             },
         )
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 60))
-            logger.warning("rate_limited", page=page, retry_after=retry_after)
+            logger.warning("rate_limited", last_id=last_id, retry_after=retry_after)
             time.sleep(retry_after)
-            return self._fetch_page(client, page)
+            return self._fetch_page(client, last_id)
 
         response.raise_for_status()
 
@@ -136,18 +131,16 @@ class AnilistExtractor(BaseExtractor):
     def extract(self) -> Iterator[NormalizedMangaRecord]:
         """Yield normalized manga records for every page of AniList manga data."""
         with httpx.Client(timeout=30.0) as client:
-            page = 1
-            while self._should_continue(page):
-                body = self._fetch_page(client, page)
-                page_info = body["data"]["Page"]["pageInfo"]
-                logger.info(
-                    "page_fetched",
-                    page=page,
-                    last_page=page_info.get("lastPage"),
-                )
-                for media in body["data"]["Page"]["media"]:
+            last_id = 0
+            while True:
+                body = self._fetch_page(client, last_id)
+                media_list = body["data"]["Page"]["media"]
+                if not media_list:
+                    break
+                last_id = max(media["id"] for media in media_list)
+                logger.info("chunk_fetched", last_id=last_id, count=len(media_list))
+                for media in media_list:
                     yield self._to_record(media)
                 if not body["data"]["Page"]["pageInfo"]["hasNextPage"]:
                     break
-                page += 1
                 time.sleep(self.anilist_settings.request_delay)

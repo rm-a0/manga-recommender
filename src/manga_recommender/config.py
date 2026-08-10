@@ -56,7 +56,6 @@ class AniListSettings(BaseSettings):
 
     base_url: str = "https://graphql.anilist.co"
     request_delay: float = 0.5
-    max_pages: int | None = None
     per_page: int = 50
 
     model_config = SettingsConfigDict(

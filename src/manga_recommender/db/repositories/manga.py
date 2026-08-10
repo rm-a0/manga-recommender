@@ -18,6 +18,7 @@ def create_manga(
     title: str,
     author: str,
     published_date: datetime | None = None,
+    description: str | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
     """Create and persist a new manga."""
@@ -26,6 +27,7 @@ def create_manga(
         title=title,
         author=author,
         published_date=published_date,
+        description=description,
         status=status,
     )
     db.add(db_manga)
@@ -42,6 +44,7 @@ def get_or_create_manga(
     title: str,
     author: str,
     published_date: datetime | None = None,
+    description: str | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
     """Return the matching manga, creating it if none exists.
@@ -61,6 +64,7 @@ def get_or_create_manga(
         title=title,
         author=author,
         published_date=published_date,
+        description=description,
         status=status,
     )
 
@@ -73,6 +77,7 @@ def update_manga(
     title: str | None = None,
     author: str | None = None,
     published_date: datetime | None = None,
+    description: str | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
     """Update the given manga's fields and persist the changes.
@@ -84,6 +89,7 @@ def update_manga(
         "title": title,
         "author": author,
         "published_date": published_date,
+        "description": description,
         "status": status,
     }
     for attr, value in updates.items():
@@ -102,6 +108,7 @@ def update_or_create_manga(
     title: str,
     author: str,
     published_date: datetime | None = None,
+    description: str | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
     """Update the matching manga if one exists, otherwise create it.
@@ -121,6 +128,7 @@ def update_or_create_manga(
             title=title,
             author=author,
             published_date=published_date,
+            description=description,
             status=status,
         )
     return create_manga(
@@ -129,6 +137,7 @@ def update_or_create_manga(
         title=title,
         author=author,
         published_date=published_date,
+        description=description,
         status=status,
     )
 
