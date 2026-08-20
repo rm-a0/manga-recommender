@@ -46,3 +46,4 @@ def run_ingestion(sources: list[str], batch_size: int) -> None:
                 )
         except Exception:
             logger.exception("ingestion_failed", source=source)
+        logger.info("ingestion_completed", source=source)
