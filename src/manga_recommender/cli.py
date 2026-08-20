@@ -18,7 +18,7 @@ app = typer.Typer(help="CLI for the manga recommender.")
 
 @app.callback()
 def main() -> None:
-    """Configure logging and set up the CLI."""
+    """Configure logging before any Typer command runs."""
     configure_logging(
         level=get_logging_settings().level,
         debug=get_app_settings().debug,
@@ -47,7 +47,7 @@ def ingest(
 
 @app.command(name="app")
 def start_app() -> None:
-    """Start the FastAPI application."""
+    """Start the FastAPI application. Not implemented yet."""
     raise NotImplementedError("Starting the FastAPI app is not implemented yet.")
 
 

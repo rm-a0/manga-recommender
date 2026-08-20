@@ -58,7 +58,7 @@ class AniListSettings(BaseSettings):
     requests_per_minute: int = 30
     chunk_size: int = 50
     min_id: int = 30001  # No manga below this ID
-    max_id: int | None = 30201  # None = fetch all
+    max_id: int | None = None  # None = fetch all
 
     model_config = SettingsConfigDict(
         env_prefix="ANILIST_",

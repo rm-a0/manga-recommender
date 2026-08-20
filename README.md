@@ -28,18 +28,12 @@ cp .env.example .env
 
 ## Running the app locally
 
-> **Not built yet.** `src/manga_recommender/__main__.py` is currently a stub — no CLI
-> arg parsing, no FastAPI app. This is the target interface once the API layer exists.
+The CLI is wired up. The FastAPI app itself isn't built yet — `app` currently just
+raises `NotImplementedError`.
 
 ```bash
-# Start the API
-uv run python -m manga_recommender app
-
-# API swagger docs
-open http://localhost:8000/docs
-
-# Health check
-curl http://localhost:8000/health
+uv run python -m manga_recommender ingest --source anilist   # run ingestion
+uv run python -m manga_recommender app                        # not implemented yet
 ```
 
 ## Database migrations
@@ -48,42 +42,32 @@ Migrations use [Alembic](https://alembic.sqlalchemy.org/). Always run them again
 the **direct connection** (`DB_URL`), not the pooled URL.
 
 ```bash
-# Apply all pending migrations (first run creates all tables)
-uv run alembic upgrade head
-
-# Create a new migration after editing src/manga_recommender/db/models/
-uv run alembic revision --autogenerate -m "describe what changed"
-
-# Check current state
-uv run alembic current
-
-# Roll back one migration
-uv run alembic downgrade -1
+uv run alembic upgrade head                                        # apply all pending
+uv run alembic revision --autogenerate -m "describe what changed"  # after model changes
+uv run alembic current                                             # check current state
+uv run alembic downgrade -1                                        # roll back one
 ```
 
 > Migrations run automatically on Railway before the app starts (see `railway.toml`).
-> For local development - run them manually.
+> For local development, run them manually.
 
 ## Ingestion pipeline
 
-Pulls manga from the AniList GraphQL API and writes to the database.
-This is a **one-shot offline job** - not triggered by the API.
-
-> **Pipeline logic done, CLI not wired up yet.** `AnilistExtractor` → `runner.py`
-> (seeds the source, batches records, persists via `loader.py`) works end to end, but
-> `src/manga_recommender/__main__.py` doesn't parse CLI args yet, so the commands
-> below are the target interface, not runnable today.
+Pulls manga from the AniList GraphQL API and writes to the database. A **one-shot
+offline job**, not triggered by the API. Walks AniList's raw ID space in concurrent,
+rate-limited `id_in` chunk requests rather than paginating, since AniList's
+page-based pagination caps out at 5,000 results.
 
 ```bash
-# Install pipeline extras
-uv sync --group pipeline
+uv sync --group pipeline                                     # install pipeline extras
+uv run python -m manga_recommender ingest --source anilist   # full catalogue
 
-# Seed the database
-uv run python -m manga_recommender ingest
-
-# Limit pages for a quick local test (env var, not a CLI flag)
-ANILIST_MAX_PAGES=5 uv run python -m manga_recommender ingest
+# Small test run, capped to a handful of chunks instead of the whole catalogue
+ANILIST_MAX_ID=30201 uv run python -m manga_recommender ingest --source anilist
 ```
+
+A full run currently fetches in roughly ~2 hours (bounded by AniList's rate limit) but
+loads far slower than that — see `TODO.md`.
 
 ## Dependency groups
 
@@ -95,7 +79,7 @@ group that requires them.
 |---|---|---|
 | *(base)* | Always, including Docker | FastAPI, SQLAlchemy, runtime deps |
 | `dev` | Local development | pytest, ruff, mypy, type stubs |
-| `pipeline` | Running ingestion locally | rich, tenacity, throttle helpers |
+| `pipeline` | Running ingestion locally | httpx, aiolimiter, structlog |
 | `ml` | Phase 2 model training | torch, faiss, sentence-transformers |
 
 ```bash
@@ -109,17 +93,10 @@ uv sync --all-groups     # everything
 ### Adding a dependency
 
 ```bash
-# Runtime dep (goes in [project.dependencies] - will be in Docker)
-uv add httpx
-
-# Dev-only dep
-uv add --group dev pytest-cov
-
-# Pipeline dep
-uv add --group pipeline rich
-
-# ML dep
-uv add --group ml torch
+uv add httpx                    # runtime dep (goes in [project.dependencies])
+uv add --group dev pytest-cov   # dev-only dep
+uv add --group pipeline rich    # pipeline dep
+uv add --group ml torch         # ML dep
 ```
 
 `uv add` updates both `pyproject.toml` and `uv.lock` automatically. Commit both files.
@@ -130,14 +107,12 @@ The Docker image contains only **base dependencies** - no dev tools, no ML libs,
 no data files. The database lives on Supabase; the container is stateless.
 
 ```bash
-# Build
 docker build -t mangarec .
-
-# Run locally (mirrors production)
 docker run --env-file .env -p 8000:8000 mangarec
 ```
 
-> There is intentionally **no `docker-compose.yml`**. The database is managed (Supabase), so there is nothing to compose. One Dockerfile, one container.
+> There is intentionally **no `docker-compose.yml`**. The database is managed
+> (Supabase), so there is nothing to compose. One Dockerfile, one container.
 
 ## Deployment (Railway)
 
@@ -148,61 +123,48 @@ docker run --env-file .env -p 8000:8000 mangarec
    - Set `DB_URL_POOLED` to the same pooled URL
    - Set `APP_ENV=production` and `APP_DEBUG=false`
 4. Railway reads `railway.toml` automatically — no further config needed
-5. Every `git push` to `main` triggers a new deploy
-
-The deploy sequence (defined in `railway.toml`):
-```
-build image → run alembic upgrade head → start API
-```
-If migrations fail, the deploy is aborted and the previous version stays live.
+5. Every `git push` to `main` triggers a new deploy:
+   `build image → run alembic upgrade head → start API`. If migrations fail, the
+   deploy is aborted and the previous version stays live.
 
 ## Project structure
-
-Current state:
 
 ```
 manga-recommender/
 │
 ├── src/manga_recommender/
-│   ├── __main__.py                 # CLI entry point (stub — arg parsing not wired up yet)
-│   ├── config.py                  # Settings loaded from .env via pydantic-settings
+│   ├── __main__.py             # CLI entry point
+│   ├── cli.py                  # Typer app: `ingest`, `app` (not implemented)
+│   ├── config.py                # Settings loaded from .env via pydantic-settings
+│   ├── logging_config.py        # structlog + stdlib logging setup
 │   │
 │   ├── db/
-│   │   ├── base.py                # Declarative Base + shared column helpers
-│   │   └── models/
-│   │       ├── manga.py           # Manga, MangaStatus
-│   │       ├── genres.py          # Genre, manga_genres join table
-│   │       ├── sources.py         # Source
-│   │       ├── manga_external_ratings.py
-│   │       └── users.py           # User, UserRole
+│   │   ├── base.py              # Declarative Base + shared column helpers
+│   │   ├── engine.py, session.py  # SQLAlchemy engine/session factory
+│   │   ├── models/              # One ORM model per file (manga, genres, sources,
+│   │   │                          manga_external_ratings, users)
+│   │   └── repositories/        # Data-access functions, one module per model
 │   │
 │   └── ingestion/
-│       ├── base.py                # BaseExtractor ABC, NormalizedMangaRecord
-│       ├── anilist.py             # AniList GraphQL extractor
-│       ├── registry.py            # source name -> extractor/default-weight mapping
-│       ├── loader.py              # persists NormalizedMangaRecords to the database
-│       └── runner.py              # seeds sources, batches extraction, calls loader
+│       ├── base.py              # BaseExtractor ABC, NormalizedMangaRecord
+│       ├── anilist.py           # AniList extractor — concurrent id_in chunk fetch
+│       ├── registry.py          # source name -> extractor/default-weight mapping
+│       ├── loader.py            # persists NormalizedMangaRecords to the database
+│       └── runner.py            # seeds sources, batches extraction, calls loader
 │
-├── alembic/                        # Migrations (auto-generated via `make migration`)
+├── alembic/                     # Migrations (`uv run alembic revision --autogenerate`)
+├── tests/                       # pytest, mirrors src/ layout
 │
 ├── .env.example
-├── .gitignore
 ├── Dockerfile
 ├── Makefile
-├── pyproject.toml                 # All deps and tool config live here
-├── railway.toml                   # Railway deploy config
-└── uv.lock                        # Commit this — pins exact versions
+├── pyproject.toml               # All deps and tool config live here
+├── railway.toml                 # Railway deploy config
+└── uv.lock                      # Commit this — pins exact versions
 ```
 
-Not built yet: the `__main__.py` CLI (arg parsing) and the FastAPI `api`/`services`
-layer. Planned shape for those, once they land:
-
-```
-├── src/manga_recommender/
-│   ├── api/          # FastAPI app, routers, schemas
-│   └── services/      # Business logic — no HTTP, no SQL strings
-└── tests/
-```
+Not built yet: the FastAPI `api`/`services` layer (routers, business logic — no HTTP,
+no SQL strings) and the recommendation engine itself.
 
 ## Environment variable reference
 
@@ -214,8 +176,11 @@ layer. Planned shape for those, once they land:
 | `APP_DEBUG` | — | `true` enables verbose errors (default `true`) |
 | `API_HOST` | — | Bind host — `0.0.0.0` for Docker/Railway (default `0.0.0.0`) |
 | `API_PORT` | — | Bind port (default `8000`) |
-| `ANILIST_REQUEST_DELAY` | — | Seconds between AniList pages (default `0.5`) |
-| `ANILIST_MAX_PAGES` | — | Pages to ingest (default: unlimited) |
+| `LOGGING_LEVEL` | — | Log level, e.g. `INFO`/`DEBUG` (default `INFO`) |
+| `ANILIST_REQUESTS_PER_MINUTE` | — | AniList rate limit budget (default `30`) |
+| `ANILIST_CHUNK_SIZE` | — | IDs per `id_in` request (default `50`, AniList's max) |
+| `ANILIST_MIN_ID` | — | Lowest manga ID to fetch (default `30001` — below this is all anime) |
+| `ANILIST_MAX_ID` | — | Highest manga ID to fetch (default: resolved live from AniList) |
 | `INGESTION_BATCH_SIZE` | — | Records per `load_batch` transaction (default `50`) |
 
 Every variable has a fallback in `config.py`, so none are strictly required to boot —

@@ -10,7 +10,9 @@ def test_ingest_with_single_source_calls_run_ingestion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str]] = []
-    monkeypatch.setattr(cli, "run_ingestion", lambda sources: calls.append(sources))
+    monkeypatch.setattr(
+        cli, "run_ingestion", lambda sources, batch_size: calls.append(sources)
+    )
 
     result = runner.invoke(cli.app, ["ingest", "--source", "anilist"])
 
@@ -22,7 +24,9 @@ def test_ingest_with_repeated_source_collects_all_of_them(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str]] = []
-    monkeypatch.setattr(cli, "run_ingestion", lambda sources: calls.append(sources))
+    monkeypatch.setattr(
+        cli, "run_ingestion", lambda sources, batch_size: calls.append(sources)
+    )
 
     result = runner.invoke(
         cli.app, ["ingest", "--source", "anilist", "--source", "mangadex"]
@@ -36,7 +40,9 @@ def test_ingest_with_all_resolves_registered_sources(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str]] = []
-    monkeypatch.setattr(cli, "run_ingestion", lambda sources: calls.append(sources))
+    monkeypatch.setattr(
+        cli, "run_ingestion", lambda sources, batch_size: calls.append(sources)
+    )
     monkeypatch.setattr(
         cli, "get_all_registered_sources", lambda: ["anilist", "mangadex"]
     )

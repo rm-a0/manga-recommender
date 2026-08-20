@@ -1,7 +1,9 @@
 import json
+from datetime import UTC, datetime
 
 import httpx
 import pytest
+from aiolimiter import AsyncLimiter
 
 from manga_recommender.config import AniListSettings
 from manga_recommender.db.models.manga import MangaStatus
@@ -10,7 +12,8 @@ from manga_recommender.ingestion.anilist import AnilistExtractor
 
 def _extractor(**settings_overrides) -> AnilistExtractor:
     extractor = AnilistExtractor()
-    extractor.anilist_settings = AniListSettings(request_delay=0, **settings_overrides)
+    settings_overrides.setdefault("requests_per_minute", 1_000_000)
+    extractor.anilist_settings = AniListSettings(**settings_overrides)
     return extractor
 
 
@@ -20,6 +23,7 @@ def _media(
     mal_id: int | None = 10,
     title: str = "Test Manga",
     description: str | None = "<p>A story about <b>things</b>.</p>",
+    start_date: dict | None = None,
     genres: list[str] | None = None,
     status: str = "RELEASING",
     average_score: float | None = 80.0,
@@ -31,6 +35,7 @@ def _media(
         "idMal": mal_id,
         "title": {"romaji": title},
         "description": description,
+        "startDate": start_date,
         "genres": genres if genres is not None else ["Action"],
         "status": status,
         "averageScore": average_score,
@@ -107,6 +112,34 @@ def test_extract_description_returns_none_when_missing():
     assert extractor._extract_description(media) is None
 
 
+def test_extract_published_date_uses_full_start_date():
+    extractor = _extractor()
+    media = _media(start_date={"year": 1997, "month": 8, "day": 1})
+
+    assert extractor._extract_published_date(media) == datetime(1997, 8, 1, tzinfo=UTC)
+
+
+def test_extract_published_date_defaults_missing_month_and_day_to_one():
+    extractor = _extractor()
+    media = _media(start_date={"year": 1985, "month": None, "day": None})
+
+    assert extractor._extract_published_date(media) == datetime(1985, 1, 1, tzinfo=UTC)
+
+
+def test_extract_published_date_returns_none_when_year_missing():
+    extractor = _extractor()
+    media = _media(start_date={"year": None, "month": None, "day": None})
+
+    assert extractor._extract_published_date(media) is None
+
+
+def test_extract_published_date_returns_none_when_start_date_missing():
+    extractor = _extractor()
+    media = _media(start_date=None)
+
+    assert extractor._extract_published_date(media) is None
+
+
 def test_to_record_converts_media_to_normalized_record():
     extractor = _extractor()
     media = _media(
@@ -133,164 +166,221 @@ def test_to_record_converts_media_to_normalized_record():
     assert record.fetched_at is not None
 
 
-def test_fetch_page_returns_parsed_response_body():
+def test_id_chunks_splits_range_into_fixed_size_chunks():
     extractor = _extractor()
-    body = {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": []}}}
 
+    chunks = list(extractor._id_chunks(1, 10, 3))
+
+    assert chunks == [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10]]
+
+
+def test_id_chunks_returns_single_chunk_when_range_fits():
+    extractor = _extractor()
+
+    chunks = list(extractor._id_chunks(5, 7, 10))
+
+    assert chunks == [[5, 6, 7]]
+
+
+def test_parse_response_returns_body_on_success():
+    extractor = _extractor()
+    response = httpx.Response(
+        200, json={"data": {"ok": True}}, request=httpx.Request("POST", "https://test")
+    )
+
+    assert extractor._parse_response(response) == {"data": {"ok": True}}
+
+
+def test_parse_response_raises_on_http_error():
+    extractor = _extractor()
+    response = httpx.Response(500, request=httpx.Request("POST", "https://test"))
+
+    with pytest.raises(httpx.HTTPStatusError):
+        extractor._parse_response(response)
+
+
+def test_parse_response_raises_on_graphql_errors():
+    extractor = _extractor()
+    response = httpx.Response(
+        200,
+        json={"errors": [{"message": "boom"}]},
+        request=httpx.Request("POST", "https://test"),
+    )
+
+    with pytest.raises(RuntimeError):
+        extractor._parse_response(response)
+
+
+def test_get_max_id_returns_highest_media_id(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=body)
+        return httpx.Response(200, json={"data": {"Page": {"media": [{"id": 215756}]}}})
 
-    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        assert extractor._fetch_page(client, 1) == body
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        "manga_recommender.ingestion.anilist.httpx.Client",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+    )
+
+    extractor = _extractor()
+
+    assert extractor._get_max_id() == 215756
 
 
-def test_fetch_page_sends_id_greater_and_per_page_variables():
-    extractor = _extractor(per_page=25)
+async def test_fetch_chunk_sends_ids_and_per_page():
+    extractor = _extractor()
     captured: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["variables"] = json.loads(request.content)["variables"]
-        return httpx.Response(
-            200,
-            json={"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": []}}},
-        )
+        return httpx.Response(200, json={"data": {"Page": {"media": []}}})
 
-    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        extractor._fetch_page(client, 42)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await extractor._fetch_chunk(client, AsyncLimiter(1000, 1), [30001, 30002])
 
-    assert captured["variables"] == {"perPage": 25, "idGreater": 42}
+    assert captured["variables"] == {"ids": [30001, 30002], "perPage": 2}
 
 
-def test_fetch_page_raises_on_graphql_errors():
+async def test_fetch_chunk_returns_media_list():
+    extractor = _extractor()
+    media = [{"id": 1}, {"id": 2}]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": {"Page": {"media": media}}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await extractor._fetch_chunk(client, AsyncLimiter(1000, 1), [1, 2])
+
+    assert result == media
+
+
+async def test_fetch_chunk_raises_on_graphql_errors():
     extractor = _extractor()
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"errors": [{"message": "boom"}]})
 
-    with (
-        httpx.Client(transport=httpx.MockTransport(handler)) as client,
-        pytest.raises(RuntimeError),
-    ):
-        extractor._fetch_page(client, 1)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(RuntimeError):
+            await extractor._fetch_chunk(client, AsyncLimiter(1000, 1), [1])
 
 
-def test_fetch_page_retries_after_429(monkeypatch):
-    monkeypatch.setattr(
-        "manga_recommender.ingestion.anilist.time.sleep", lambda _: None
-    )
-    extractor = _extractor()
+async def test_fetch_chunk_retries_after_429(monkeypatch):
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr("manga_recommender.ingestion.anilist.asyncio.sleep", fake_sleep)
     responses = iter(
         [
-            httpx.Response(429, headers={"Retry-After": "1"}),
-            httpx.Response(
-                200,
-                json={
-                    "data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": []}}
-                },
-            ),
+            httpx.Response(429, headers={"Retry-After": "5"}),
+            httpx.Response(200, json={"data": {"Page": {"media": []}}}),
         ]
     )
 
     def handler(request: httpx.Request) -> httpx.Response:
         return next(responses)
 
-    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        body = extractor._fetch_page(client, 1)
-
-    assert body["data"]["Page"]["media"] == []
-
-
-def test_extract_yields_records_across_pages(monkeypatch):
-    pages = iter(
-        [
-            {
-                "data": {
-                    "Page": {
-                        "pageInfo": {"hasNextPage": True},
-                        "media": [_media(media_id=1, title="Manga A")],
-                    }
-                }
-            },
-            {
-                "data": {
-                    "Page": {
-                        "pageInfo": {"hasNextPage": False},
-                        "media": [_media(media_id=2, title="Manga B")],
-                    }
-                }
-            },
-        ]
-    )
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=next(pages))
-
-    transport = httpx.MockTransport(handler)
-    real_client = httpx.Client
-    monkeypatch.setattr(
-        "manga_recommender.ingestion.anilist.httpx.Client",
-        lambda **kwargs: real_client(transport=transport, **kwargs),
-    )
-
     extractor = _extractor()
-    titles = [record.title for record in extractor.extract()]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await extractor._fetch_chunk(client, AsyncLimiter(1000, 1), [1])
 
-    assert titles == ["Manga A", "Manga B"]
+    assert result == []
+    assert sleep_calls == [5]
 
 
-def test_extract_advances_cursor_using_max_id_seen(monkeypatch):
-    pages = iter(
-        [
-            {
-                "data": {
-                    "Page": {
-                        "pageInfo": {"hasNextPage": True},
-                        "media": [_media(media_id=5), _media(media_id=8)],
-                    }
-                }
-            },
-            {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": []}}},
-        ]
-    )
-    id_greater_seen: list[int] = []
-
+async def test_fetch_all_returns_flattened_media_across_chunks(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
-        id_greater_seen.append(json.loads(request.content)["variables"]["idGreater"])
-        return httpx.Response(200, json=next(pages))
-
-    transport = httpx.MockTransport(handler)
-    real_client = httpx.Client
-    monkeypatch.setattr(
-        "manga_recommender.ingestion.anilist.httpx.Client",
-        lambda **kwargs: real_client(transport=transport, **kwargs),
-    )
-
-    extractor = _extractor()
-    list(extractor.extract())
-
-    assert id_greater_seen == [0, 8]
-
-
-def test_extract_stops_when_media_is_empty(monkeypatch):
-    request_count = 0
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal request_count
-        request_count += 1
+        ids = json.loads(request.content)["variables"]["ids"]
         return httpx.Response(
-            200,
-            json={"data": {"Page": {"pageInfo": {"hasNextPage": True}, "media": []}}},
+            200, json={"data": {"Page": {"media": [{"id": i} for i in ids]}}}
         )
 
-    transport = httpx.MockTransport(handler)
-    real_client = httpx.Client
+    real_async_client = httpx.AsyncClient
     monkeypatch.setattr(
-        "manga_recommender.ingestion.anilist.httpx.Client",
-        lambda **kwargs: real_client(transport=transport, **kwargs),
+        "manga_recommender.ingestion.anilist.httpx.AsyncClient",
+        lambda **kwargs: real_async_client(
+            transport=httpx.MockTransport(handler), **kwargs
+        ),
     )
 
     extractor = _extractor()
+    media = await extractor._fetch_all(min_id=1, max_id=4, rpm=1_000_000, chunk_size=2)
+
+    assert sorted(m["id"] for m in media) == [1, 2, 3, 4]
+
+
+def test_extract_yields_records_for_each_media(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        ids = json.loads(request.content)["variables"]["ids"]
+        media = [_media(media_id=i) for i in ids]
+        return httpx.Response(200, json={"data": {"Page": {"media": media}}})
+
+    real_async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "manga_recommender.ingestion.anilist.httpx.AsyncClient",
+        lambda **kwargs: real_async_client(
+            transport=httpx.MockTransport(handler), **kwargs
+        ),
+    )
+
+    extractor = _extractor(min_id=1, max_id=3, chunk_size=2)
     records = list(extractor.extract())
 
-    assert records == []
-    assert request_count == 1
+    assert sorted(record.external_id for record in records) == ["1", "2", "3"]
+
+
+def test_extract_resolves_max_id_when_not_configured(monkeypatch):
+    def sync_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": {"Page": {"media": [{"id": 30002}]}}})
+
+    def async_handler(request: httpx.Request) -> httpx.Response:
+        ids = json.loads(request.content)["variables"]["ids"]
+        media = [_media(media_id=i) for i in ids]
+        return httpx.Response(200, json={"data": {"Page": {"media": media}}})
+
+    real_client = httpx.Client
+    real_async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "manga_recommender.ingestion.anilist.httpx.Client",
+        lambda **kwargs: real_client(
+            transport=httpx.MockTransport(sync_handler), **kwargs
+        ),
+    )
+    monkeypatch.setattr(
+        "manga_recommender.ingestion.anilist.httpx.AsyncClient",
+        lambda **kwargs: real_async_client(
+            transport=httpx.MockTransport(async_handler), **kwargs
+        ),
+    )
+
+    extractor = _extractor(min_id=30001, max_id=None, chunk_size=50)
+    records = list(extractor.extract())
+
+    assert sorted(record.external_id for record in records) == ["30001", "30002"]
+
+
+def test_extract_skips_max_id_lookup_when_configured(monkeypatch):
+    def async_handler(request: httpx.Request) -> httpx.Response:
+        ids = json.loads(request.content)["variables"]["ids"]
+        media = [_media(media_id=i) for i in ids]
+        return httpx.Response(200, json={"data": {"Page": {"media": media}}})
+
+    real_async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "manga_recommender.ingestion.anilist.httpx.AsyncClient",
+        lambda **kwargs: real_async_client(
+            transport=httpx.MockTransport(async_handler), **kwargs
+        ),
+    )
+
+    extractor = _extractor(min_id=1, max_id=2, chunk_size=50)
+
+    def _fail_if_called() -> int:
+        raise AssertionError("_get_max_id should not be called when max_id is set")
+
+    monkeypatch.setattr(extractor, "_get_max_id", _fail_if_called)
+
+    records = list(extractor.extract())
+
+    assert sorted(record.external_id for record in records) == ["1", "2"]

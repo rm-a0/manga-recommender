@@ -118,7 +118,10 @@ class AnilistExtractor(BaseExtractor):
         return re.sub(r"<[^>]+>", "", description)
 
     def _extract_published_date(self, media: dict) -> datetime | None:
-        """Return the manga's published date as a datetime object."""
+        """Return the manga's published date as a datetime object.
+
+        Defaults a missing month or day to 1.
+        """
         start_date = media.get("startDate") or {}
         year = start_date.get("year")
         month = start_date.get("month") or 1

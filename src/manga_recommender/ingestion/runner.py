@@ -28,7 +28,10 @@ def seed_source(source_name: str) -> uuid.UUID:
 
 
 def run_ingestion(sources: list[str], batch_size: int) -> None:
-    """Run the ingestion pipeline for the given list of source names."""
+    """Run the ingestion pipeline for the given list of source names.
+
+    Logs and continues with the next source if one fails.
+    """
     for source in sources:
         try:
             logger.info("ingestion_started", source=source)
