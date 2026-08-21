@@ -191,7 +191,12 @@ def add_genres_to_manga(db: Session, manga: Manga, genres: list[Genre]) -> Manga
 def _bulk_upsert_without_mal_id(
     db: Session, records: Sequence[NormalizedMangaRecord], source_id: uuid.UUID
 ) -> dict[str, uuid.UUID]:
-    """Bulk upsert manga records that do not have a mal_id, returning a mapping of external_id to manga_id."""
+    """Upsert manga records that lack a mal_id, one at a time.
+
+    Falls back to the source_id/external_id match. A NULL mal_id never
+    conflicts with another NULL, so these rows can't go through the
+    mal_id-keyed bulk path.
+    """
     id_map = {}
     for record in records:
         manga_id = update_or_create_manga(
@@ -211,10 +216,9 @@ def _bulk_upsert_without_mal_id(
 def _bulk_upsert_with_mal_id(
     db: Session, records: Sequence[NormalizedMangaRecord]
 ) -> dict[str, uuid.UUID]:
-    """Bulk upsert manga records that have a mal_id, returning a mapping of external_id to manga_id."""
+    """Bulk-upsert manga records that have a mal_id in one round trip."""
     if not records:
         return {}
-    # Extract the relevant fields from the records for bulk upsert
     values = [
         {
             "mal_id": record.mal_id,
@@ -242,7 +246,7 @@ def _bulk_upsert_with_mal_id(
         },
     ).returning(Manga.mal_id, Manga.id)
 
-    # Execute the statement and build a mapping of external_id to manga_id
+    # RETURNING only exposes Manga columns, so recover external_id via mal_id.
     id_map = {}
     mal_id_to_external_id = {r.mal_id: r.external_id for r in records}
     for mal_id, manga_id in db.execute(stmt):
@@ -256,7 +260,11 @@ def _bulk_upsert_with_mal_id(
 def bulk_update_or_create_manga(
     db: Session, records: Sequence[NormalizedMangaRecord], source_id: uuid.UUID
 ) -> dict[str, uuid.UUID]:
-    """Bulk upsert manga records, returning a mapping of external_id to manga_id."""
+    """Upsert a batch of manga records, returning external_id to manga_id.
+
+    Records with a mal_id go through one bulk ON CONFLICT statement. Records
+    without one fall back to a slower, per-record upsert.
+    """
     records_with_mal_id = [r for r in records if r.mal_id is not None]
     records_without_mal_id = [r for r in records if r.mal_id is None]
 

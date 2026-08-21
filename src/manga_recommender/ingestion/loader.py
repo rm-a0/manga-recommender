@@ -35,11 +35,17 @@ def _sync_genres_for_manga(
 
 
 def load_batch(records: Sequence[NormalizedMangaRecord], source_id: uuid.UUID) -> None:
-    """Persist a batch of normalized manga records to the database in one transaction."""
+    """Persist a batch of normalized manga records to the database in one transaction.
+
+    Manga rows are bulk-upserted. Genre sync and rating upserts still run one
+    record at a time — see TODO.md for the remaining bulk-load work.
+    """
     with session_scope() as session:
         id_map = bulk_update_or_create_manga(session, records, source_id)
         for record in records:
             manga_id = id_map[record.external_id]
+            # bulk_update_or_create_manga returns ids, not ORM objects, so
+            # re-fetch the row to mutate its genres relationship.
             db_manga = session.get(Manga, manga_id)
             if record.genres and db_manga:
                 _sync_genres_for_manga(session, db_manga, record.genres)
