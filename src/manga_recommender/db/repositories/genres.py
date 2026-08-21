@@ -1,6 +1,10 @@
 """Data-access functions for the Genre model."""
 
+import uuid
+from collections.abc import Sequence
+
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.genres import Genre
@@ -35,3 +39,17 @@ def get_or_create_genre(
     if genre:
         return genre
     return create_genre(db, name=name)
+
+
+def bulk_get_or_create_genres(
+    db: Session,
+    names: Sequence[str],
+) -> dict[str, uuid.UUID]:
+    """Return a mapping of genre names to their UUIDs, creating any that don't exist."""
+    values = [{"name": n} for n in names]
+    insert_stmt = pg_insert(Genre).values(values)
+    stmt = insert_stmt.on_conflict_do_update(
+        index_elements=["name"],
+        set_={"name": insert_stmt.excluded.name},
+    ).returning(Genre.name, Genre.id)
+    return {name: genre_id for name, genre_id in db.execute(stmt)}

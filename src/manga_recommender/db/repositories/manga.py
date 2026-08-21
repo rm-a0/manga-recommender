@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from manga_recommender.db.models.genres import Genre
+from manga_recommender.db.models.genres import Genre, manga_genres
 from manga_recommender.db.models.manga import Manga, MangaStatus
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
 from manga_recommender.ingestion.base import NormalizedMangaRecord
@@ -189,7 +189,9 @@ def add_genres_to_manga(db: Session, manga: Manga, genres: list[Genre]) -> Manga
 
 
 def _bulk_upsert_without_mal_id(
-    db: Session, records: Sequence[NormalizedMangaRecord], source_id: uuid.UUID
+    db: Session,
+    records: Sequence[NormalizedMangaRecord],
+    source_id: uuid.UUID,
 ) -> dict[str, uuid.UUID]:
     """Upsert manga records that lack a mal_id, one at a time.
 
@@ -214,7 +216,8 @@ def _bulk_upsert_without_mal_id(
 
 
 def _bulk_upsert_with_mal_id(
-    db: Session, records: Sequence[NormalizedMangaRecord]
+    db: Session,
+    records: Sequence[NormalizedMangaRecord],
 ) -> dict[str, uuid.UUID]:
     """Bulk-upsert manga records that have a mal_id in one round trip."""
     if not records:
@@ -258,7 +261,9 @@ def _bulk_upsert_with_mal_id(
 
 
 def bulk_update_or_create_manga(
-    db: Session, records: Sequence[NormalizedMangaRecord], source_id: uuid.UUID
+    db: Session,
+    records: Sequence[NormalizedMangaRecord],
+    source_id: uuid.UUID,
 ) -> dict[str, uuid.UUID]:
     """Upsert a batch of manga records, returning external_id to manga_id.
 
@@ -272,3 +277,19 @@ def bulk_update_or_create_manga(
         **_bulk_upsert_with_mal_id(db, records_with_mal_id),
         **_bulk_upsert_without_mal_id(db, records_without_mal_id, source_id),
     }
+
+
+def bulk_add_genres_to_manga(
+    db: Session,
+    pairs: Sequence[tuple[uuid.UUID, uuid.UUID]],
+) -> None:
+    """Attach (manga_id, genre_id) pairs, skipping ones that already exist."""
+    if not pairs:
+        return
+    values = [{"manga_id": m, "genre_id": g} for m, g in pairs]
+    stmt = (
+        pg_insert(manga_genres)
+        .values(values)
+        .on_conflict_do_nothing(index_elements=["manga_id", "genre_id"])
+    )
+    db.execute(stmt)

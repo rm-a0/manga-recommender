@@ -32,6 +32,7 @@ def run_ingestion(sources: list[str], batch_size: int) -> None:
 
     Logs and continues with the next source if one fails.
     """
+    genre_cache: dict[str, uuid.UUID] = {}
     for source in sources:
         try:
             logger.info("ingestion_started", source=source)
@@ -40,7 +41,7 @@ def run_ingestion(sources: list[str], batch_size: int) -> None:
             for batch in itertools.batched(extractor.extract(), batch_size):
                 batch = batch
                 start_time = time.monotonic()
-                load_batch(batch, source_id)
+                load_batch(batch, source_id, genre_cache)
                 logger.info(
                     "batch_loaded",
                     source=source,
