@@ -66,8 +66,10 @@ uv run python -m manga_recommender ingest --source anilist   # full catalogue
 ANILIST_MAX_ID=30201 uv run python -m manga_recommender ingest --source anilist
 ```
 
-A full run currently fetches in roughly ~2 hours (bounded by AniList's rate limit) but
-loads far slower than that — see `TODO.md`.
+A full run currently fetches in roughly ~2 hours (bounded by AniList's rate limit).
+Loading used to be far slower than that; bulk manga/genre writes brought it down to
+roughly ~4.5-5 hours, still the slower half of the pipeline — see `TODO.md` for the
+remaining ratings bulk-upsert work.
 
 ## Dependency groups
 

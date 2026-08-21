@@ -25,9 +25,9 @@ def _sync_genres_for_manga(
     normalized_genre_names: Iterable[str],
     manga_to_genre_map: dict[uuid.UUID, Sequence[str]],
 ) -> None:
-    """Attach the given genre names to a manga, creating any that don't exist.
+    """Resolve genre names to ids and bulk-attach them to their manga.
 
-    Genre names are normalized to lowercase before lookup.
+    A cache miss triggers one bulk lookup-or-create query for all misses.
     """
     uncached = [n for n in normalized_genre_names if n not in genre_cache]
     if uncached:
@@ -50,7 +50,10 @@ def _get_manga_genre_map_from_records(
     records: Sequence[NormalizedMangaRecord],
     external_id_to_manga_id: dict[str, uuid.UUID],
 ) -> dict[uuid.UUID, Sequence[str]]:
-    """Return a mapping of manga IDs to the normalized genre names found in the given records."""
+    """Map each manga id to its lowercased genre names.
+
+    Skips records with no genres instead of mapping them to an empty list.
+    """
     return {
         external_id_to_manga_id[r.external_id]: [g.lower() for g in r.genres]
         for r in records
@@ -65,8 +68,8 @@ def load_batch(
 ) -> None:
     """Persist a batch of normalized manga records to the database in one transaction.
 
-    Manga rows are bulk-upserted. Genre sync and rating upserts still run one
-    record at a time — see TODO.md for the remaining bulk-load work.
+    Manga and genre writes are bulk-upserted. Rating upserts still run one
+    record at a time — see TODO.md.
     """
     with session_scope() as session:
         external_id_to_manga_id = bulk_update_or_create_manga(
