@@ -3,6 +3,7 @@
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
+from typing import TypedDict
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -11,7 +12,22 @@ from sqlalchemy.orm import Session
 from manga_recommender.db.models.genres import Genre, manga_genres
 from manga_recommender.db.models.manga import Manga, MangaStatus
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
-from manga_recommender.ingestion.base import NormalizedMangaRecord
+
+
+class MangaUpsertValues(TypedDict):
+    """Column values for one bulk-upserted manga row, plus its correlation key."""
+
+    # Note: external_id is not a Manga column. It's the correlation key used to
+    # route no-mal_id records to the fallback path and to recover external_id
+    # from mal_id after the bulk RETURNING.
+    external_id: str
+
+    mal_id: int | None
+    title: str
+    author: str
+    published_date: datetime | None
+    description: str | None
+    status: MangaStatus | None
 
 
 def create_manga(
@@ -188,9 +204,12 @@ def add_genres_to_manga(db: Session, manga: Manga, genres: list[Genre]) -> Manga
     return manga
 
 
+# --- Bulk operations ---
+
+
 def _bulk_upsert_without_mal_id(
     db: Session,
-    records: Sequence[NormalizedMangaRecord],
+    records: Sequence[MangaUpsertValues],
     source_id: uuid.UUID,
 ) -> dict[str, uuid.UUID]:
     """Upsert manga records that lack a mal_id, one at a time.
@@ -204,32 +223,32 @@ def _bulk_upsert_without_mal_id(
         manga_id = update_or_create_manga(
             db,
             source_id=source_id,
-            external_id=record.external_id,
-            title=record.title,
-            author=record.author,
-            published_date=record.published_date,
-            description=record.description,
-            status=record.status,
+            external_id=record["external_id"],
+            title=record["title"],
+            author=record["author"],
+            published_date=record["published_date"],
+            description=record["description"],
+            status=record["status"],
         )
-        id_map[record.external_id] = manga_id.id
+        id_map[record["external_id"]] = manga_id.id
     return id_map
 
 
 def _bulk_upsert_with_mal_id(
     db: Session,
-    records: Sequence[NormalizedMangaRecord],
+    records: Sequence[MangaUpsertValues],
 ) -> dict[str, uuid.UUID]:
     """Bulk-upsert manga records that have a mal_id in one round trip."""
     if not records:
         return {}
     values = [
         {
-            "mal_id": record.mal_id,
-            "title": record.title,
-            "author": record.author,
-            "published_date": record.published_date,
-            "description": record.description,
-            "status": record.status,
+            "mal_id": record["mal_id"],
+            "title": record["title"],
+            "author": record["author"],
+            "published_date": record["published_date"],
+            "description": record["description"],
+            "status": record["status"],
         }
         for record in records
     ]
@@ -251,7 +270,7 @@ def _bulk_upsert_with_mal_id(
 
     # RETURNING only exposes Manga columns, so recover external_id via mal_id.
     id_map = {}
-    mal_id_to_external_id = {r.mal_id: r.external_id for r in records}
+    mal_id_to_external_id = {r["mal_id"]: r["external_id"] for r in records}
     for mal_id, manga_id in db.execute(stmt):
         external_id = mal_id_to_external_id.get(mal_id)
         if external_id:
@@ -262,16 +281,16 @@ def _bulk_upsert_with_mal_id(
 
 def bulk_update_or_create_manga(
     db: Session,
-    records: Sequence[NormalizedMangaRecord],
     source_id: uuid.UUID,
+    records: Sequence[MangaUpsertValues],
 ) -> dict[str, uuid.UUID]:
     """Upsert a batch of manga records, returning external_id to manga_id.
 
     Records with a mal_id go through one bulk ON CONFLICT statement. Records
     without one fall back to a slower, per-record upsert.
     """
-    records_with_mal_id = [r for r in records if r.mal_id is not None]
-    records_without_mal_id = [r for r in records if r.mal_id is None]
+    records_with_mal_id = [r for r in records if r["mal_id"] is not None]
+    records_without_mal_id = [r for r in records if r["mal_id"] is None]
 
     return {
         **_bulk_upsert_with_mal_id(db, records_with_mal_id),

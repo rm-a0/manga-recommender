@@ -9,11 +9,13 @@ from manga_recommender.db.repositories.genres import (
     bulk_get_or_create_genres,
 )
 from manga_recommender.db.repositories.manga import (
+    MangaUpsertValues,
     bulk_add_genres_to_manga,
     bulk_update_or_create_manga,
 )
 from manga_recommender.db.repositories.manga_external_rating import (
-    update_or_create_external_rating,
+    RatingUpsertValues,
+    bulk_update_or_create_external_ratings,
 )
 from manga_recommender.db.session import session_scope
 from manga_recommender.ingestion.base import NormalizedMangaRecord
@@ -33,7 +35,6 @@ def _sync_genres_for_manga(
     if uncached:
         genre_cache.update(bulk_get_or_create_genres(db, uncached))
     name_id_map = {n: genre_cache[n] for n in normalized_genre_names}
-    # Map manga IDs to genre IDs for bulk insertion
     manga_to_genre_ids_map = {
         manga_id: [name_id_map[g] for g in genres]
         for manga_id, genres in manga_to_genre_map.items()
@@ -74,8 +75,19 @@ def load_batch(
     with session_scope() as session:
         external_id_to_manga_id = bulk_update_or_create_manga(
             session,
-            records,
             source_id,
+            records=[
+                MangaUpsertValues(
+                    mal_id=r.mal_id,
+                    title=r.title,
+                    author=r.author,
+                    published_date=r.published_date,
+                    description=r.description,
+                    status=r.status,
+                    external_id=r.external_id,
+                )
+                for r in records
+            ],
         )
         manga_to_genre_map = _get_manga_genre_map_from_records(
             records,
@@ -90,17 +102,18 @@ def load_batch(
             normalized_genre_names,
             manga_to_genre_map,
         )
-        for record in records:
-            manga_id = external_id_to_manga_id[record.external_id]
-            # bulk_update_or_create_manga returns ids, not ORM objects, so
-            # re-fetch the row to mutate its genres relationship.
-            update_or_create_external_rating(
-                session,
-                manga_id=manga_id,
-                source_id=source_id,
-                external_id=record.external_id,
-                raw_scale_max=record.raw_scale_max,
-                votes_count=record.votes_count,
-                fetched_at=record.fetched_at,
-                raw_score=record.raw_score,
-            )
+        bulk_update_or_create_external_ratings(
+            session,
+            values=[
+                RatingUpsertValues(
+                    manga_id=external_id_to_manga_id[r.external_id],
+                    source_id=source_id,
+                    external_id=r.external_id,
+                    raw_scale_max=r.raw_scale_max,
+                    votes_count=r.votes_count,
+                    fetched_at=r.fetched_at,
+                    raw_score=r.raw_score,
+                )
+                for r in records
+            ],
+        )

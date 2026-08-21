@@ -41,6 +41,9 @@ def get_or_create_genre(
     return create_genre(db, name=name)
 
 
+# --- Bulk operations ---
+
+
 def bulk_get_or_create_genres(
     db: Session,
     names: Sequence[str],
