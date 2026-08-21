@@ -9,7 +9,7 @@ from manga_recommender.db.models.manga import Manga
 from manga_recommender.db.repositories.genres import get_or_create_genre
 from manga_recommender.db.repositories.manga import (
     add_genres_to_manga,
-    update_or_create_manga,
+    bulk_update_or_create_manga,
 )
 from manga_recommender.db.repositories.manga_external_rating import (
     update_or_create_external_rating,
@@ -18,7 +18,7 @@ from manga_recommender.db.session import session_scope
 from manga_recommender.ingestion.base import NormalizedMangaRecord
 
 
-def sync_genres_for_manga(
+def _sync_genres_for_manga(
     db: Session,
     db_manga: Manga,
     genre_names: list[str],
@@ -37,23 +37,15 @@ def sync_genres_for_manga(
 def load_batch(records: Sequence[NormalizedMangaRecord], source_id: uuid.UUID) -> None:
     """Persist a batch of normalized manga records to the database in one transaction."""
     with session_scope() as session:
+        id_map = bulk_update_or_create_manga(session, records, source_id)
         for record in records:
-            manga = update_or_create_manga(
-                session,
-                mal_id=record.mal_id,
-                source_id=source_id,
-                external_id=record.external_id,
-                title=record.title,
-                author=record.author,
-                published_date=record.published_date,
-                description=record.description,
-                status=record.status,
-            )
-            if record.genres:
-                sync_genres_for_manga(session, manga, record.genres)
+            manga_id = id_map[record.external_id]
+            db_manga = session.get(Manga, manga_id)
+            if record.genres and db_manga:
+                _sync_genres_for_manga(session, db_manga, record.genres)
             update_or_create_external_rating(
                 session,
-                manga_id=manga.id,
+                manga_id=manga_id,
                 source_id=source_id,
                 external_id=record.external_id,
                 raw_scale_max=record.raw_scale_max,

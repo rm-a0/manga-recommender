@@ -1,14 +1,17 @@
 """Data-access functions for the Manga model."""
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.genres import Genre
 from manga_recommender.db.models.manga import Manga, MangaStatus
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
+from manga_recommender.ingestion.base import NormalizedMangaRecord
 
 
 def create_manga(
@@ -183,3 +186,81 @@ def add_genres_to_manga(db: Session, manga: Manga, genres: list[Genre]) -> Manga
             manga.genres.append(genre)
     db.flush()
     return manga
+
+
+def _bulk_upsert_without_mal_id(
+    db: Session, records: Sequence[NormalizedMangaRecord], source_id: uuid.UUID
+) -> dict[str, uuid.UUID]:
+    """Bulk upsert manga records that do not have a mal_id, returning a mapping of external_id to manga_id."""
+    id_map = {}
+    for record in records:
+        manga_id = update_or_create_manga(
+            db,
+            source_id=source_id,
+            external_id=record.external_id,
+            title=record.title,
+            author=record.author,
+            published_date=record.published_date,
+            description=record.description,
+            status=record.status,
+        )
+        id_map[record.external_id] = manga_id.id
+    return id_map
+
+
+def _bulk_upsert_with_mal_id(
+    db: Session, records: Sequence[NormalizedMangaRecord]
+) -> dict[str, uuid.UUID]:
+    """Bulk upsert manga records that have a mal_id, returning a mapping of external_id to manga_id."""
+    if not records:
+        return {}
+    # Extract the relevant fields from the records for bulk upsert
+    values = [
+        {
+            "mal_id": record.mal_id,
+            "title": record.title,
+            "author": record.author,
+            "published_date": record.published_date,
+            "description": record.description,
+            "status": record.status,
+        }
+        for record in records
+    ]
+    insert_stmt = pg_insert(Manga).values(values)
+    stmt = insert_stmt.on_conflict_do_update(
+        index_elements=[Manga.mal_id],
+        set_={
+            "title": func.coalesce(insert_stmt.excluded.title, Manga.title),
+            "author": func.coalesce(insert_stmt.excluded.author, Manga.author),
+            "published_date": func.coalesce(
+                insert_stmt.excluded.published_date, Manga.published_date
+            ),
+            "description": func.coalesce(
+                insert_stmt.excluded.description, Manga.description
+            ),
+            "status": func.coalesce(insert_stmt.excluded.status, Manga.status),
+        },
+    ).returning(Manga.mal_id, Manga.id)
+
+    # Execute the statement and build a mapping of external_id to manga_id
+    id_map = {}
+    mal_id_to_external_id = {r.mal_id: r.external_id for r in records}
+    for mal_id, manga_id in db.execute(stmt):
+        external_id = mal_id_to_external_id.get(mal_id)
+        if external_id:
+            id_map[external_id] = manga_id
+
+    return id_map
+
+
+def bulk_update_or_create_manga(
+    db: Session, records: Sequence[NormalizedMangaRecord], source_id: uuid.UUID
+) -> dict[str, uuid.UUID]:
+    """Bulk upsert manga records, returning a mapping of external_id to manga_id."""
+    records_with_mal_id = [r for r in records if r.mal_id is not None]
+    records_without_mal_id = [r for r in records if r.mal_id is None]
+
+    return {
+        **_bulk_upsert_with_mal_id(db, records_with_mal_id),
+        **_bulk_upsert_without_mal_id(db, records_without_mal_id, source_id),
+    }
