@@ -69,8 +69,7 @@ def load_batch(
 ) -> None:
     """Persist a batch of normalized manga records to the database in one transaction.
 
-    Manga and genre writes are bulk-upserted. Rating upserts still run one
-    record at a time — see TODO.md.
+    Manga, genre, and rating writes are all bulk-upserted — one round trip each.
     """
     with session_scope() as session:
         external_id_to_manga_id = bulk_update_or_create_manga(
