@@ -4,7 +4,10 @@
 # binary where the plugin isn't installed.
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
-.PHONY: help setup test lint format typecheck migrate migration run-ingest run-app docker-build docker-run run db-up db-down clean
+.PHONY: help setup test lint format typecheck clean \
+        migrate migration \
+        serve ingest \
+        docker-build docker-run db-up stack down
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -12,6 +15,8 @@ help: ## Show this help
 setup: ## Install deps and create .env from template if missing
 	uv sync
 	@[ -f .env ] || cp .env.example .env
+
+# --- Code quality ---
 
 test: ## Run the test suite
 	uv run pytest
@@ -25,31 +30,37 @@ format: ## Auto-format code
 typecheck: ## Run mypy
 	uv run mypy src
 
+# --- Database (Alembic) ---
+
 migrate: ## Apply pending Alembic migrations
 	uv run alembic upgrade head
 
 migration: ## Create a new migration, e.g. make migration name="describe change"
 	uv run alembic revision --autogenerate -m "$(name)"
 
-run-app: ## Run the API locally
+# --- Run on the host (no Docker) ---
+
+serve: ## Run the API on the host
 	uv run python -m manga_recommender app
 
-run-ingest: ## Run the AniList ingestion pipeline (make run-ingest source=anilist, or all=1 for every source)
+ingest: ## Run the AniList ingestion pipeline (make ingest source=anilist, or all=1 for every source)
 	uv run python -m manga_recommender ingest $(if $(all),--all,--source $(source))
 
-docker-build: ## Build the production Docker image
+# --- Docker ---
+
+docker-build: ## Build the production image (no Postgres - mirrors Railway)
 	docker build -t mangarec .
 
-docker-run: ## Run the Docker image locally (mirrors production)
+docker-run: ## Run the production image standalone (mirrors Railway; uses .env's DB_URL as-is)
 	docker run --env-file .env -p 8000:8000 mangarec
 
-run: ## Start the full local stack in Docker (Postgres + the app container)
-	$(COMPOSE) up -d --build
-
-db-up: ## Start local Postgres only (dev + test databases) - needed for tests
+db-up: ## Start local Postgres only - enough for tests, no app container
 	$(COMPOSE) up -d --wait postgres
 
-db-down: ## Stop all local containers (Postgres and/or the app)
+stack: ## Start the full local stack in Docker Compose (Postgres + the app)
+	$(COMPOSE) up -d --build
+
+down: ## Stop all local Compose containers, whichever are running
 	$(COMPOSE) down
 
 clean: ## Remove caches and build artifacts

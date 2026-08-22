@@ -121,9 +121,9 @@ databases: `mangarec` (an alternative to Supabase for local dev/offline use)
 and `mangarec_test` (used automatically by the test suite - see below).
 
 ```bash
-make run      # start the full stack: the app (built from the Dockerfile) + Postgres
+make stack    # start the full stack: the app (built from the Dockerfile) + Postgres
 make db-up    # start only Postgres (postgres:16, host port 5433) - enough for tests
-make db-down  # stop everything
+make down     # stop everything
 ```
 
 > Postgres is on host port 5433, not the default 5432, to avoid clashing with
@@ -136,7 +136,7 @@ The `app` service builds from the same Dockerfile as production and reads
 ingestion is a separate, offline job (see below) and is never run in this
 container, so there's no shared-entrypoint reason to route the container
 through the CLI. Since the FastAPI app itself isn't built yet (see above),
-`make run` will start Postgres fine but the `app` container currently fails to
+`make stack` will start Postgres fine but the `app` container currently fails to
 import its (not-yet-existing) `manga_recommender.main:app` - expected until
 that module exists.
 
