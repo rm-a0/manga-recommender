@@ -241,6 +241,8 @@ def _bulk_upsert_with_mal_id(
     """Bulk-upsert manga records that have a mal_id in one round trip."""
     if not records:
         return {}
+    # Deduplicate records by mal_id to prevent CardinalityViolation
+    records = list({r["mal_id"]: r for r in records}.values())
     values = [
         {
             "mal_id": record["mal_id"],

@@ -48,6 +48,6 @@ def run_ingestion(sources: list[str], batch_size: int) -> None:
                     count=len(batch),
                     elapsed_s=round(time.monotonic() - start_time, 1),
                 )
+            logger.info("ingestion_completed", source=source)
         except Exception:
             logger.exception("ingestion_failed", source=source)
-        logger.info("ingestion_completed", source=source)
