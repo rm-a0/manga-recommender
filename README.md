@@ -116,13 +116,12 @@ docker run --env-file .env -p 8000:8000 mangarec
 
 ## Local Docker Compose (app + Postgres)
 
-`docker-compose.yml` runs the app alongside a local Postgres with two
-databases: `mangarec` (an alternative to Supabase for local dev/offline use)
-and `mangarec_test` (used automatically by the test suite - see below).
+`docker-compose.yml` runs the app alongside a local Postgres (database
+`mangarec`) - an alternative to Supabase for local dev/offline use.
 
 ```bash
 make stack    # start the full stack: the app (built from the Dockerfile) + Postgres
-make db-up    # start only Postgres (postgres:16, host port 5433) - enough for tests
+make db-up    # start only Postgres (postgres:16, host port 5433) - for local dev
 make down     # stop everything
 ```
 
@@ -140,10 +139,15 @@ through the CLI. Since the FastAPI app itself isn't built yet (see above),
 import its (not-yet-existing) `manga_recommender.main:app` - expected until
 that module exists.
 
-`tests/conftest.py` forces `DB_URL` to the `mangarec_test` database for every
-test run, regardless of what `.env` points at, and runs pending Alembic
-migrations against it automatically at the start of the test session. Start
-Postgres with `make db-up` before `make test`/`pytest`.
+## Tests and Postgres
+
+The test suite doesn't use the `docker-compose.yml` Postgres at all - `tests/
+conftest.py` spins up its own ephemeral Postgres container via
+[testcontainers](https://testcontainers-python.readthedocs.io/) once per test
+session, forces `DB_URL` to point at it (overriding whatever `.env` says), and
+runs Alembic migrations automatically before any test runs. Just `uv run
+pytest` / `make test` - no `make db-up` step needed, and nothing ever touches
+Supabase or the local dev database. Requires Docker to be running locally.
 
 ## Deployment (Railway)
 

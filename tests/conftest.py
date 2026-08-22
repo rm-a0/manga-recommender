@@ -1,21 +1,12 @@
 import os
-
-# Force tests onto the local Docker Postgres test database, unconditionally
-# overriding whatever `.env`/the environment sets `DB_URL` to (Supabase, the
-# local dev database, anything). This must run before any import below
-# triggers `get_database_settings()`/`get_engine()`, both `lru_cache`d on
-# first call.
-os.environ["DB_URL"] = "postgresql://postgres:password@localhost:5433/mangarec_test"
-
-import time
 from collections.abc import Generator
 from pathlib import Path
 
 import pytest
 from alembic.config import Config
 from sqlalchemy import event
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from testcontainers.community.postgres import PostgresContainer
 
 from alembic import command
 from manga_recommender.db.engine import get_engine
@@ -25,25 +16,20 @@ REPO_ROOT = Path(__file__).parent.parent
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _migrate_test_db() -> None:
-    """Wait for the local Postgres container and migrate the test database.
+def _test_database() -> Generator[None, None, None]:
+    """Spin up an ephemeral Postgres container and migrate it to head.
 
     Runs once per test session, before any test touches the database.
+    Sets `DB_URL` to the container's URL - unconditionally overriding
+    whatever `.env`/the environment sets it to (Supabase, the local dev
+    database, anything) - before any other fixture's first call to the
+    `lru_cache`d `get_database_settings()`/`get_engine()`. Requires Docker to
+    be running locally.
     """
-    deadline = time.monotonic() + 30
-    while True:
-        try:
-            get_engine().connect().close()
-            break
-        except OperationalError:
-            if time.monotonic() > deadline:
-                raise RuntimeError(
-                    "Could not reach the local test database at "
-                    f"{os.environ['DB_URL']!r}. Run `make db-up` first."
-                ) from None
-            time.sleep(0.5)
-
-    command.upgrade(Config(str(REPO_ROOT / "alembic.ini")), "head")
+    with PostgresContainer("postgres:16") as postgres:
+        os.environ["DB_URL"] = postgres.get_connection_url()
+        command.upgrade(Config(str(REPO_ROOT / "alembic.ini")), "head")
+        yield
 
 
 @pytest.fixture

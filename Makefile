@@ -54,7 +54,7 @@ docker-build: ## Build the production image (no Postgres - mirrors Railway)
 docker-run: ## Run the production image standalone (mirrors Railway; uses .env's DB_URL as-is)
 	docker run --env-file .env -p 8000:8000 mangarec
 
-db-up: ## Start local Postgres only - enough for tests, no app container
+db-up: ## Start local Postgres only, for local dev (tests spin up their own container)
 	$(COMPOSE) up -d --wait postgres
 
 stack: ## Start the full local stack in Docker Compose (Postgres + the app)
