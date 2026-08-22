@@ -2,8 +2,9 @@
 
 from typing import NamedTuple
 
-from manga_recommender.ingestion.anilist import AnilistExtractor
 from manga_recommender.ingestion.base import BaseExtractor
+from manga_recommender.ingestion.extractors.anilist import AnilistExtractor
+from manga_recommender.ingestion.extractors.kaggle_mal import KaggleMalExtractor
 
 
 class SourceRegistration(NamedTuple):
@@ -17,6 +18,10 @@ _SOURCE_EXTRACTOR_MAP: dict[str, SourceRegistration] = {
     "anilist": SourceRegistration(
         weight=1.0,
         extractor_class=AnilistExtractor,
+    ),
+    "kaggle_mal": SourceRegistration(
+        weight=0.5,
+        extractor_class=KaggleMalExtractor,
     ),
 }
 

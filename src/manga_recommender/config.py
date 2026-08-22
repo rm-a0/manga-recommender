@@ -68,6 +68,22 @@ class AniListSettings(BaseSettings):
     )
 
 
+class KaggleMalSettings(BaseSettings):
+    """Kaggle MAL extractor settings."""
+
+    path: str = "data/kaggle_mal_2026.csv"
+    direct_download_url: str = (
+        "https://www.kaggle.com/datasets/patelris/anime-and-manga-dataset-2026"
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KAGGLE_MAL_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 class IngestionSettings(BaseSettings):
     """Ingestion pipeline settings."""
 
@@ -109,6 +125,12 @@ def get_api_settings() -> APISettings:
 def get_anilist_settings() -> AniListSettings:
     """Return the cached AniListSettings instance."""
     return AniListSettings()
+
+
+@functools.lru_cache
+def get_kaggle_mal_settings() -> KaggleMalSettings:
+    """Return the cached KaggleMalSettings instance."""
+    return KaggleMalSettings()
 
 
 @functools.lru_cache

@@ -7,7 +7,7 @@ from aiolimiter import AsyncLimiter
 
 from manga_recommender.config import AniListSettings
 from manga_recommender.db.models.manga import MangaStatus
-from manga_recommender.ingestion.anilist import AnilistExtractor
+from manga_recommender.ingestion.extractors.anilist import AnilistExtractor
 
 
 def _extractor(**settings_overrides) -> AnilistExtractor:
@@ -249,7 +249,7 @@ def test_get_max_id_returns_highest_media_id(monkeypatch):
 
     real_client = httpx.Client
     monkeypatch.setattr(
-        "manga_recommender.ingestion.anilist.httpx.Client",
+        "manga_recommender.ingestion.extractors.anilist.httpx.Client",
         lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
     )
 
@@ -302,7 +302,9 @@ async def test_fetch_chunk_retries_after_429(monkeypatch):
     async def fake_sleep(seconds: float) -> None:
         sleep_calls.append(seconds)
 
-    monkeypatch.setattr("manga_recommender.ingestion.anilist.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr(
+        "manga_recommender.ingestion.extractors.anilist.asyncio.sleep", fake_sleep
+    )
     responses = iter(
         [
             httpx.Response(429, headers={"Retry-After": "5"}),
@@ -329,7 +331,7 @@ def test_extract_yields_records_for_each_media(monkeypatch):
 
     real_async_client = httpx.AsyncClient
     monkeypatch.setattr(
-        "manga_recommender.ingestion.anilist.httpx.AsyncClient",
+        "manga_recommender.ingestion.extractors.anilist.httpx.AsyncClient",
         lambda **kwargs: real_async_client(
             transport=httpx.MockTransport(handler), **kwargs
         ),
@@ -353,13 +355,13 @@ def test_extract_resolves_max_id_when_not_configured(monkeypatch):
     real_client = httpx.Client
     real_async_client = httpx.AsyncClient
     monkeypatch.setattr(
-        "manga_recommender.ingestion.anilist.httpx.Client",
+        "manga_recommender.ingestion.extractors.anilist.httpx.Client",
         lambda **kwargs: real_client(
             transport=httpx.MockTransport(sync_handler), **kwargs
         ),
     )
     monkeypatch.setattr(
-        "manga_recommender.ingestion.anilist.httpx.AsyncClient",
+        "manga_recommender.ingestion.extractors.anilist.httpx.AsyncClient",
         lambda **kwargs: real_async_client(
             transport=httpx.MockTransport(async_handler), **kwargs
         ),
@@ -379,7 +381,7 @@ def test_extract_skips_max_id_lookup_when_configured(monkeypatch):
 
     real_async_client = httpx.AsyncClient
     monkeypatch.setattr(
-        "manga_recommender.ingestion.anilist.httpx.AsyncClient",
+        "manga_recommender.ingestion.extractors.anilist.httpx.AsyncClient",
         lambda **kwargs: real_async_client(
             transport=httpx.MockTransport(async_handler), **kwargs
         ),

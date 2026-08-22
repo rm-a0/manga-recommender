@@ -1,6 +1,6 @@
 import pytest
 
-from manga_recommender.ingestion.anilist import AnilistExtractor
+from manga_recommender.ingestion.extractors.anilist import AnilistExtractor
 from manga_recommender.ingestion.registry import (
     get_all_registered_sources,
     get_extractor_for_source,

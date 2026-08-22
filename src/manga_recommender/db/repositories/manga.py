@@ -289,7 +289,9 @@ def bulk_update_or_create_manga(
     """Upsert a batch of manga records, returning external_id to manga_id.
 
     Records with a mal_id go through one bulk ON CONFLICT statement. Records
-    without one fall back to a slower, per-record upsert.
+    without one fall back to a slower, per-record upsert. mal_id is the
+    cross-source identity key, so checking it first stops the same title
+    from being inserted twice as multiple sources are ingested.
     """
     records_with_mal_id = [r for r in records if r["mal_id"] is not None]
     records_without_mal_id = [r for r in records if r["mal_id"] is None]
