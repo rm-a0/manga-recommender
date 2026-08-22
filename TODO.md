@@ -27,13 +27,3 @@ Deferred ideas worth remembering, not yet scheduled.
   versus one small array column per rating. Useful later as a rating-variance
   signal (a controversial title and a universally-loved one can share the same
   average score today).
-
-## Testing
-
-- **Run tests against a local Docker Postgres instead of the real Supabase DB.**
-  No longer theoretical — a real ingestion run seeded real data, and
-  `test_genres.py`/`test_manga.py`/`test_sources.py` now actively fail on
-  unique-constraint collisions with hardcoded test literals (`mal_id=1/2/3`,
-  `name="action"`, `name="anilist"`). `db_session`'s rollback only protects a
-  test's own writes, not against data already committed by something else
-  beforehand.

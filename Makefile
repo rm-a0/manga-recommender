@@ -1,6 +1,10 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help setup test lint format typecheck migrate migration run-ingest run-app docker-build docker-run clean
+# Prefer the `docker compose` plugin; fall back to the standalone `docker-compose`
+# binary where the plugin isn't installed.
+COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+
+.PHONY: help setup test lint format typecheck migrate migration run-ingest run-app docker-build docker-run run db-up db-down clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -38,6 +42,15 @@ docker-build: ## Build the production Docker image
 
 docker-run: ## Run the Docker image locally (mirrors production)
 	docker run --env-file .env -p 8000:8000 mangarec
+
+run: ## Start the full local stack in Docker (Postgres + the app container)
+	$(COMPOSE) up -d --build
+
+db-up: ## Start local Postgres only (dev + test databases) - needed for tests
+	$(COMPOSE) up -d --wait postgres
+
+db-down: ## Stop all local containers (Postgres and/or the app)
+	$(COMPOSE) down
 
 clean: ## Remove caches and build artifacts
 	rm -rf .pytest_cache .ruff_cache .mypy_cache dist build

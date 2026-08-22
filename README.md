@@ -106,15 +106,44 @@ uv add --group ml torch         # ML dep
 ## Docker
 
 The Docker image contains only **base dependencies** - no dev tools, no ML libs,
-no data files. The database lives on Supabase; the container is stateless.
+no data files. Production still deploys against Supabase (via Railway); the
+container itself is stateless.
 
 ```bash
 docker build -t mangarec .
 docker run --env-file .env -p 8000:8000 mangarec
 ```
 
-> There is intentionally **no `docker-compose.yml`**. The database is managed
-> (Supabase), so there is nothing to compose. One Dockerfile, one container.
+## Local Docker Compose (app + Postgres)
+
+`docker-compose.yml` runs the app alongside a local Postgres with two
+databases: `mangarec` (an alternative to Supabase for local dev/offline use)
+and `mangarec_test` (used automatically by the test suite - see below).
+
+```bash
+make run      # start the full stack: the app (built from the Dockerfile) + Postgres
+make db-up    # start only Postgres (postgres:16, host port 5433) - enough for tests
+make db-down  # stop everything
+```
+
+> Postgres is on host port 5433, not the default 5432, to avoid clashing with
+> a natively-installed Postgres if one is already running. Inside the compose
+> network the app reaches it at `postgres:5432` instead.
+
+The `app` service builds from the same Dockerfile as production and reads
+`.env` (if present), with `DB_URL` overridden to point at the compose
+`postgres` service. Its `CMD` runs `uvicorn` directly against the FastAPI app -
+ingestion is a separate, offline job (see below) and is never run in this
+container, so there's no shared-entrypoint reason to route the container
+through the CLI. Since the FastAPI app itself isn't built yet (see above),
+`make run` will start Postgres fine but the `app` container currently fails to
+import its (not-yet-existing) `manga_recommender.main:app` - expected until
+that module exists.
+
+`tests/conftest.py` forces `DB_URL` to the `mangarec_test` database for every
+test run, regardless of what `.env` points at, and runs pending Alembic
+migrations against it automatically at the start of the test session. Start
+Postgres with `make db-up` before `make test`/`pytest`.
 
 ## Deployment (Railway)
 

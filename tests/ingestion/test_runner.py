@@ -91,7 +91,7 @@ def test_run_ingestion_seeds_source_and_batches_extracted_records(
     monkeypatch.setattr(
         runner,
         "load_batch",
-        lambda records, sid: loaded_batches.append((records, sid)),
+        lambda records, sid, genre_cache: loaded_batches.append((records, sid)),
     )
 
     runner.run_ingestion(["anilist"], batch_size=2)
@@ -116,7 +116,7 @@ def test_run_ingestion_continues_after_a_source_errors(
     monkeypatch.setattr(
         runner, "get_extractor_for_source", lambda name: _FakeExtractor([])
     )
-    monkeypatch.setattr(runner, "load_batch", lambda records, sid: None)
+    monkeypatch.setattr(runner, "load_batch", lambda records, sid, genre_cache: None)
 
     runner.run_ingestion(["broken", "anilist"], batch_size=50)
 
