@@ -15,6 +15,8 @@ from manga_recommender.ingestion.base import BaseExtractor, NormalizedMangaRecor
 
 logger = structlog.get_logger(__name__)
 
+MAX_RETRIES = 3
+
 
 class AnilistExtractor(BaseExtractor):
     """Extracts and normalizes manga data from AniList."""
@@ -167,6 +169,7 @@ class AnilistExtractor(BaseExtractor):
         client: httpx.AsyncClient,
         limiter: AsyncLimiter,
         ids: list[int],
+        attempt: int = 1,
     ) -> list[dict]:
         """Fetch one chunk of manga data from AniList.
 
@@ -174,13 +177,21 @@ class AnilistExtractor(BaseExtractor):
         the request.
         """
         async with limiter:
-            response = await client.post(
-                self.anilist_settings.base_url,
-                json={
-                    "query": self.MANGA_QUERY,
-                    "variables": {"ids": ids, "perPage": len(ids)},
-                },
-            )
+            try:
+                response = await client.post(
+                    self.anilist_settings.base_url,
+                    json={
+                        "query": self.MANGA_QUERY,
+                        "variables": {"ids": ids, "perPage": len(ids)},
+                    },
+                )
+            except httpx.TransportError:
+                if attempt >= MAX_RETRIES:
+                    raise
+                logger.warning("transport_error_retrying", attempt=attempt, ids=ids)
+                await asyncio.sleep(2**attempt)
+                return await self._fetch_chunk(client, limiter, ids, attempt + 1)
+
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 60))
             logger.warning("rate_limited", retry_after=retry_after)
@@ -210,5 +221,14 @@ class AnilistExtractor(BaseExtractor):
             ]
             for i, coro in enumerate(asyncio.as_completed(tasks), start=1):
                 for media in await coro:
-                    yield self._to_record(media)
+                    try:
+                        record = self._to_record(media)
+                    except Exception:
+                        logger.warning(
+                            "record_conversion_failed",
+                            media_id=media.get("id"),
+                            exc_info=True,
+                        )
+                        continue
+                    yield record
                 logger.info("chunk_fetched", chunk_number=i, total_chunks=len(tasks))
