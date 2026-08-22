@@ -2,7 +2,7 @@
 
 import asyncio
 import re
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 
 import httpx
@@ -189,23 +189,8 @@ class AnilistExtractor(BaseExtractor):
 
         return self._parse_response(response)["data"]["Page"]["media"]
 
-    async def _fetch_all(
-        self, min_id: int, max_id: int, rpm: int, chunk_size: int
-    ) -> list[dict]:
-        """Fetch all manga data from AniList, from min_id up to max_id.
-
-        Runs chunk requests concurrently under a shared rate limit.
-        """
-        limiter = AsyncLimiter(1, 60 / rpm)
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            chunks = self._id_chunks(min_id, max_id, chunk_size)
-            results = await asyncio.gather(
-                *[self._fetch_chunk(client, limiter, c) for c in chunks]
-            )
-        return [media for chunk in results for media in chunk]
-
-    def extract(self) -> Iterator[NormalizedMangaRecord]:
-        """Yield normalized manga records for AniList's entire manga catalogue.
+    async def _stream(self) -> AsyncIterator[NormalizedMangaRecord]:
+        """Yield normalized manga records asynchronously, as they arrive.
 
         Fetches all manga IDs concurrently, in fixed-size chunks, under a shared
         rate limit. This avoids AniList's page-based pagination, which caps out
@@ -214,11 +199,16 @@ class AnilistExtractor(BaseExtractor):
         rpm = self.anilist_settings.requests_per_minute
         min_id = self.anilist_settings.min_id
         chunk_size = self.anilist_settings.chunk_size
-        max_id = self.anilist_settings.max_id
-        if max_id is None:
-            max_id = self._get_max_id()
-
+        max_id = self.anilist_settings.max_id or self._get_max_id()
         logger.info("max_id_resolved", max_id=max_id)
 
-        for media in asyncio.run(self._fetch_all(min_id, max_id, rpm, chunk_size)):
-            yield self._to_record(media)
+        limiter = AsyncLimiter(1, 60 / rpm)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            tasks = [
+                self._fetch_chunk(client, limiter, ids)
+                for ids in self._id_chunks(min_id, max_id, chunk_size)
+            ]
+            for i, coro in enumerate(asyncio.as_completed(tasks), start=1):
+                for media in await coro:
+                    yield self._to_record(media)
+                logger.info("chunk_fetched", chunk_number=i, total_chunks=len(tasks))

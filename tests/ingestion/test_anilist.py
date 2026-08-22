@@ -321,27 +321,6 @@ async def test_fetch_chunk_retries_after_429(monkeypatch):
     assert sleep_calls == [5]
 
 
-async def test_fetch_all_returns_flattened_media_across_chunks(monkeypatch):
-    def handler(request: httpx.Request) -> httpx.Response:
-        ids = json.loads(request.content)["variables"]["ids"]
-        return httpx.Response(
-            200, json={"data": {"Page": {"media": [{"id": i} for i in ids]}}}
-        )
-
-    real_async_client = httpx.AsyncClient
-    monkeypatch.setattr(
-        "manga_recommender.ingestion.anilist.httpx.AsyncClient",
-        lambda **kwargs: real_async_client(
-            transport=httpx.MockTransport(handler), **kwargs
-        ),
-    )
-
-    extractor = _extractor()
-    media = await extractor._fetch_all(min_id=1, max_id=4, rpm=1_000_000, chunk_size=2)
-
-    assert sorted(m["id"] for m in media) == [1, 2, 3, 4]
-
-
 def test_extract_yields_records_for_each_media(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         ids = json.loads(request.content)["variables"]["ids"]
