@@ -24,6 +24,7 @@ class NormalizedMangaRecord:
     raw_score: float | None
     raw_scale_max: float | None
     votes_count: int | None
+    score_distribution: list[int] | None
     fetched_at: datetime
 
 

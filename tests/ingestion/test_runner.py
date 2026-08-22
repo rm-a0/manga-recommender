@@ -43,6 +43,7 @@ def _record(external_id: str) -> NormalizedMangaRecord:
         raw_score=None,
         raw_scale_max=None,
         votes_count=None,
+        score_distribution=None,
         fetched_at=datetime.now(UTC),
     )
 

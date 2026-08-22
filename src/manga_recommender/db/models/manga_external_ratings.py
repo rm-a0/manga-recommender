@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import ARRAY, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from manga_recommender.db.base import Base
@@ -24,6 +24,7 @@ class MangaExternalRating(Base):
     votes_count: Mapped[int | None] = mapped_column()
     fetched_at: Mapped[datetime] = mapped_column()
     raw_score: Mapped[float | None] = mapped_column()
+    score_distribution: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))
 
     __table_args__ = (
         UniqueConstraint("manga_id", "source_id"),

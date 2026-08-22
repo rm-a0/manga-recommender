@@ -112,6 +112,7 @@ def load_batch(
                     votes_count=r.votes_count,
                     fetched_at=r.fetched_at,
                     raw_score=r.raw_score,
+                    score_distribution=r.score_distribution,
                 )
                 for r in records
             ],

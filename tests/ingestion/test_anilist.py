@@ -47,7 +47,7 @@ def _media(
         "stats": {
             "scoreDistribution": score_distribution
             if score_distribution is not None
-            else [{"amount": 3}, {"amount": 7}]
+            else [{"score": 10, "amount": 3}, {"score": 90, "amount": 7}]
         },
     }
 
@@ -96,6 +96,37 @@ def test_extract_votes_count_returns_none_when_no_distribution():
     media = _media(score_distribution=[])
 
     assert extractor._extract_votes_count(media) is None
+
+
+def test_extract_score_distribution_maps_scores_to_buckets():
+    extractor = _extractor()
+    media = _media(
+        score_distribution=[
+            {"score": 10, "amount": 2},
+            {"score": 50, "amount": 5},
+            {"score": 100, "amount": 1},
+        ]
+    )
+
+    assert extractor._extract_score_distribution(media) == [
+        2,
+        0,
+        0,
+        0,
+        5,
+        0,
+        0,
+        0,
+        0,
+        1,
+    ]
+
+
+def test_extract_score_distribution_returns_none_when_no_distribution():
+    extractor = _extractor()
+    media = _media(score_distribution=[])
+
+    assert extractor._extract_score_distribution(media) is None
 
 
 def test_extract_description_strips_html_tags():
@@ -161,6 +192,7 @@ def test_to_record_converts_media_to_normalized_record():
     assert record.raw_score == 91.0
     assert record.raw_scale_max == 100.0
     assert record.votes_count == 10
+    assert record.score_distribution == [3, 0, 0, 0, 0, 0, 0, 0, 7, 0]
     assert record.published_date is None
     assert record.description == "A story about things."
     assert record.fetched_at is not None

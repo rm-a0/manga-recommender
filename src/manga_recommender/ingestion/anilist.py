@@ -38,7 +38,7 @@ class AnilistExtractor(BaseExtractor):
                         node { name { full } }
                     }
                 }
-                stats { scoreDistribution { amount } }
+                stats { scoreDistribution { score amount } }
             }
         }
     }
@@ -130,6 +130,20 @@ class AnilistExtractor(BaseExtractor):
             return None
         return datetime(year, month, day, tzinfo=UTC)
 
+    def _extract_score_distribution(self, media: dict) -> list[int] | None:
+        """Return vote counts for AniList's 10 score buckets (10, 20, ..., 100).
+
+        Bucket `i` holds the vote count for score `(i + 1) * 10`. Missing buckets
+        are 0.
+        """
+        score_distribution = media.get("stats", {}).get("scoreDistribution", [])
+        if not score_distribution:
+            return None
+        amounts_by_score = {
+            item["score"]: item["amount"] for item in score_distribution
+        }
+        return [amounts_by_score.get((i + 1) * 10, 0) for i in range(10)]
+
     def _to_record(self, media: dict) -> NormalizedMangaRecord:
         """Convert a raw AniList media object into a NormalizedMangaRecord."""
         return NormalizedMangaRecord(
@@ -144,6 +158,7 @@ class AnilistExtractor(BaseExtractor):
             raw_score=media["averageScore"],
             raw_scale_max=100.0,
             votes_count=self._extract_votes_count(media),
+            score_distribution=self._extract_score_distribution(media),
             fetched_at=datetime.now(UTC),
         )
 

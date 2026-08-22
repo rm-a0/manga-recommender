@@ -56,6 +56,7 @@ def _record(
         raw_score=raw_score,
         raw_scale_max=10.0,
         votes_count=100,
+        score_distribution=None,
         fetched_at=datetime.now(UTC),
     )
 

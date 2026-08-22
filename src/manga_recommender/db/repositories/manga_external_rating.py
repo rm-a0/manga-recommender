@@ -22,6 +22,7 @@ class RatingUpsertValues(TypedDict):
     votes_count: int | None
     fetched_at: datetime
     raw_score: float | None
+    score_distribution: list[int] | None
 
 
 def create_external_rating(
@@ -34,6 +35,7 @@ def create_external_rating(
     votes_count: int | None = None,
     fetched_at: datetime,
     raw_score: float | None = None,
+    score_distribution: list[int] | None = None,
 ) -> MangaExternalRating:
     """Create and persist a new external rating."""
     db_external_rating = MangaExternalRating(
@@ -44,6 +46,7 @@ def create_external_rating(
         votes_count=votes_count,
         fetched_at=fetched_at,
         raw_score=raw_score,
+        score_distribution=score_distribution,
     )
     db.add(db_external_rating)
     db.flush()
@@ -58,6 +61,7 @@ def update_external_rating(
     votes_count: int | None = None,
     fetched_at: datetime | None = None,
     raw_score: float | None = None,
+    score_distribution: list[int] | None = None,
 ) -> MangaExternalRating:
     """Update the given external rating's fields and persist the changes.
 
@@ -100,6 +104,7 @@ def update_or_create_external_rating(
     votes_count: int | None = None,
     fetched_at: datetime,
     raw_score: float | None = None,
+    score_distribution: list[int] | None = None,
 ) -> MangaExternalRating:
     """Update the matching external rating if one exists, otherwise create it."""
     external_rating = get_external_rating_by_manga_and_source(db, manga_id, source_id)
@@ -111,6 +116,7 @@ def update_or_create_external_rating(
             votes_count=votes_count,
             fetched_at=fetched_at,
             raw_score=raw_score,
+            score_distribution=score_distribution,
         )
     return create_external_rating(
         db,
@@ -121,6 +127,7 @@ def update_or_create_external_rating(
         votes_count=votes_count,
         fetched_at=fetched_at,
         raw_score=raw_score,
+        score_distribution=score_distribution,
     )
 
 
@@ -154,6 +161,10 @@ def bulk_update_or_create_external_ratings(
             ),
             "raw_score": func.coalesce(
                 insert_stmt.excluded.raw_score, MangaExternalRating.raw_score
+            ),
+            "score_distribution": func.coalesce(
+                insert_stmt.excluded.score_distribution,
+                MangaExternalRating.score_distribution,
             ),
         },
     )
