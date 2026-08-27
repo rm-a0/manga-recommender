@@ -96,6 +96,21 @@ when unattended.
 Read-only inspection is fine and encouraged: `status`, `diff`, `log`, `show`, `branch`
 (listing), `blame`. Use these freely to understand state before proposing changes.
 
+### Database — use the local Docker Postgres, never the real one
+
+Any command that reads or writes a database — smoke-testing an extractor end to end,
+running the ingestion pipeline, `alembic upgrade`, ad-hoc queries — must run against
+the local Docker Postgres, never the `DB_URL` in `.env` (which points at Supabase or
+the shared dev database).
+
+- Start it with `make db-up` (Postgres only, host port `5433`, database `mangarec`).
+- Override `DB_URL` inline so the command targets it, e.g.
+  `DB_URL=postgresql://postgres:password@localhost:5433/mangarec uv run alembic upgrade head`,
+  then the same prefix for `uv run python -m manga_recommender ingest ...`.
+- `uv run pytest` needs no special handling — `tests/conftest.py` already spins up its
+  own ephemeral container and forces `DB_URL` at it.
+- If a task seems to genuinely need the real database, stop and ask.
+
 ### If unsure which bucket something falls into
 
 Ask the user rather than assuming. Getting this wrong defeats the point of the project.
