@@ -18,12 +18,3 @@ Deferred ideas worth remembering, not yet scheduled.
   it fires even right after `ingestion_failed` for the same source. Should
   move inside the `try` block so it only logs on actual success.
 
-## Data model
-
-- **Store AniList's score distribution**, not just the summed `votes_count`.
-  Add it as a native `ARRAY(Integer)` column (10 buckets) on
-  `manga_external_ratings` rather than a normalized child table — a child
-  table would be ~1.75M rows (175k manga × 10 buckets) with a UUID PK+FK each,
-  versus one small array column per rating. Useful later as a rating-variance
-  signal (a controversial title and a universally-loved one can share the same
-  average score today).
