@@ -12,7 +12,8 @@ from manga_recommender.db.base import Base
 class MangaExternalRating(Base):
     """ORM model for a manga's raw rating data from one external source.
 
-    Unique per (manga, source) and per (source, external_id).
+    Unique per (source, external_id). A manga can hold more than one rating
+    from the same source when merged source entries each keep their own score.
     """
 
     __tablename__ = "manga_external_ratings"
@@ -26,7 +27,4 @@ class MangaExternalRating(Base):
     raw_score: Mapped[float | None] = mapped_column()
     score_distribution: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))
 
-    __table_args__ = (
-        UniqueConstraint("manga_id", "source_id"),
-        UniqueConstraint("source_id", "external_id"),
-    )
+    __table_args__ = (UniqueConstraint("source_id", "external_id"),)

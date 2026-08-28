@@ -41,12 +41,12 @@ before touching anything, whether you're an AI agent or a human contributor.
   or non-idiomatic pattern seems necessary, flag it to the user instead of silently
   taking it.
 
-### Docstrings — agent-written, using Simplified Technical English
+### Docstrings and Comments — agent-written, using Simplified Technical English
 
-Unlike the rest of backend `src/` code, docstrings themselves are fine for an agent to
+Unlike the rest of backend `src/` code, docstrings and comments themselves are fine for an agent to
 write or generate directly, even inside otherwise hand-coded files — this is a narrow
-exception to the "hand-coded only" rule above, scoped to docstrings only (not the
-surrounding code, not comments elsewhere).
+exception to the "hand-coded only" rule above, scoped to docstrings and comments only (not the
+surrounding code).
 
 Follow Simplified Technical English (ASD-STE100) principles, adapted for code — not
 literal compliance with the full approved-word dictionary, which is impractical for

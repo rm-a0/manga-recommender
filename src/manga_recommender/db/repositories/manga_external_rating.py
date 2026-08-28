@@ -140,16 +140,17 @@ def bulk_update_or_create_external_ratings(
 ) -> None:
     """Upsert a batch of external ratings in one round trip.
 
-    Conflicts on (manga_id, source_id) overwrite existing fields; NULLs are
-    coalesced against the current row instead of clearing it.
+    Conflicts on (source_id, external_id) overwrite existing fields, manga_id
+    included; NULLs coalesce against the current row. Duplicate keys within
+    the batch are collapsed, last one wins.
     """
-    values = list({v["manga_id"]: v for v in values}.values())
+    values = list({(v["source_id"], v["external_id"]): v for v in values}.values())
     insert_stmt = pg_insert(MangaExternalRating).values(values)
     stmt = insert_stmt.on_conflict_do_update(
-        index_elements=["manga_id", "source_id"],
+        index_elements=["source_id", "external_id"],
         set_={
-            "external_id": func.coalesce(
-                insert_stmt.excluded.external_id, MangaExternalRating.external_id
+            "manga_id": func.coalesce(
+                insert_stmt.excluded.manga_id, MangaExternalRating.manga_id
             ),
             "raw_scale_max": func.coalesce(
                 insert_stmt.excluded.raw_scale_max, MangaExternalRating.raw_scale_max
