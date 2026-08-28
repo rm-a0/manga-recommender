@@ -30,18 +30,20 @@ Deferred ideas worth remembering, not yet scheduled.
   and nothing merges the two. Measure how many AniList entries lack `idMal`
   before choosing a fix — that number also drives ingest throughput, since
   `_bulk_upsert_without_mal_id` costs one or two queries per record.
-- **Manga that only ever came from Kaggle have no authors yet.** Migration
-  `f5a93d21c8e0` backfills only manga holding an AniList rating, because a comma
-  split is wrong for Kaggle names ("Urasawa, Naoki" is one person). A Kaggle
-  ingest fills them in and merges onto the existing author rows, but it cannot
-  run until the metadata-overwrite problem below is solved.
 - **Running a second source overwrites the first one's manga metadata.** The
   conflict update coalesces against the incumbent, so the source that runs last
   wins every field it has a value for. `title` always wins, because it is never
-  null. Running Kaggle after AniList therefore replaces the AniList titles,
-  descriptions and statuses across the whole shared catalogue. This is what the
-  per-source `--update-only` flag above is for; until it exists, run only one
-  source against a populated database.
+  null. Ingest order is therefore load-bearing: Kaggle first, then AniList, so
+  the richer AniList titles and descriptions end up on top. Until the per-source
+  `--update-only` flag above exists, do not re-run Kaggle against a populated
+  database.
+- **`delete_orphaned_manga` leans on an invariant the schema does not enforce.**
+  It deletes manga with no rating row, which today means "orphaned duplicate"
+  only because `load_batch` writes a rating for every record it maps. A source
+  that supplies descriptions without scores would make the prune eat good rows -
+  the ones semantic search would most want. Narrowing it to also require an empty
+  description does not work: the orphans it exists to remove are full AniList
+  records. Revisit the predicate when such a source appears, not before.
 - **Genre and author links only ever accumulate.** Both writers use
   `ON CONFLICT DO NOTHING`, and neither link table records which source added a
   row, so a second source adds links beside the first one's and a link nothing
