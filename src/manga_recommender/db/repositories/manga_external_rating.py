@@ -57,6 +57,7 @@ def update_external_rating(
     db: Session,
     external_rating: MangaExternalRating,
     *,
+    manga_id: uuid.UUID | None = None,
     raw_scale_max: float | None = None,
     votes_count: int | None = None,
     fetched_at: datetime | None = None,
@@ -68,10 +69,12 @@ def update_external_rating(
     Only fields with a non-None value are updated.
     """
     updates = {
+        "manga_id": manga_id,
         "raw_scale_max": raw_scale_max,
         "votes_count": votes_count,
         "fetched_at": fetched_at,
         "raw_score": raw_score,
+        "score_distribution": score_distribution,
     }
     for field, value in updates.items():
         if value is not None:
@@ -80,16 +83,34 @@ def update_external_rating(
     return external_rating
 
 
-def get_external_rating_by_manga_and_source(
+def get_external_ratings_by_manga_and_source(
     db: Session,
     manga_id: uuid.UUID,
     source_id: uuid.UUID,
-) -> MangaExternalRating | None:
-    """Return the external rating for the given manga and source, or None if not found."""
-    return db.scalar(
+) -> Sequence[MangaExternalRating]:
+    """Return every external rating for the given manga and source.
+
+    One manga can hold several ratings from one source, so this returns a
+    sequence. It is empty when there is no match.
+    """
+    return db.scalars(
         select(MangaExternalRating).where(
             MangaExternalRating.manga_id == manga_id,
             MangaExternalRating.source_id == source_id,
+        )
+    ).all()
+
+
+def get_external_rating_by_source_and_external_id(
+    db: Session,
+    source_id: uuid.UUID,
+    external_id: str,
+) -> MangaExternalRating | None:
+    """Return the rating for the given source and external ID, or None if not found."""
+    return db.scalar(
+        select(MangaExternalRating).where(
+            MangaExternalRating.source_id == source_id,
+            MangaExternalRating.external_id == external_id,
         )
     )
 
@@ -107,11 +128,14 @@ def update_or_create_external_rating(
     score_distribution: list[int] | None = None,
 ) -> MangaExternalRating:
     """Update the matching external rating if one exists, otherwise create it."""
-    external_rating = get_external_rating_by_manga_and_source(db, manga_id, source_id)
+    external_rating = get_external_rating_by_source_and_external_id(
+        db, source_id, external_id
+    )
     if external_rating:
         return update_external_rating(
             db,
             external_rating,
+            manga_id=manga_id,
             raw_scale_max=raw_scale_max,
             votes_count=votes_count,
             fetched_at=fetched_at,
@@ -145,6 +169,8 @@ def bulk_update_or_create_external_ratings(
     the batch are collapsed, last one wins.
     """
     values = list({(v["source_id"], v["external_id"]): v for v in values}.values())
+    if not values:
+        return
     insert_stmt = pg_insert(MangaExternalRating).values(values)
     stmt = insert_stmt.on_conflict_do_update(
         index_elements=["source_id", "external_id"],

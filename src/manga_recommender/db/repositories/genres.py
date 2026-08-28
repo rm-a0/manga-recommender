@@ -49,7 +49,10 @@ def bulk_get_or_create_genres(
     names: Sequence[str],
 ) -> dict[str, uuid.UUID]:
     """Return a mapping of genre names to their UUIDs, creating any that don't exist."""
-    values = [{"name": n} for n in names]
+    # A repeated name in one INSERT raises CardinalityViolation.
+    values = [{"name": n} for n in dict.fromkeys(names)]
+    if not values:
+        return {}
     insert_stmt = pg_insert(Genre).values(values)
     stmt = insert_stmt.on_conflict_do_update(
         index_elements=["name"],
