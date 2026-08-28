@@ -6,6 +6,7 @@ import uuid
 
 import structlog
 
+from manga_recommender.db.repositories.manga import delete_orphaned_manga
 from manga_recommender.db.repositories.sources import get_or_create_source
 from manga_recommender.db.session import session_scope
 from manga_recommender.ingestion.loader import load_batch
@@ -27,21 +28,32 @@ def seed_source(source_name: str) -> uuid.UUID:
         ).id
 
 
+def prune_orphaned_manga() -> int:
+    """Delete manga left without any external rating, and return how many went."""
+    with session_scope() as session:
+        return delete_orphaned_manga(session)
+
+
 def run_ingestion(sources: list[str], batch_size: int) -> None:
     """Run the ingestion pipeline for the given list of source names.
 
-    Logs and continues with the next source if one fails.
+    Logs and continues on failure, at both the batch and the source level.
     """
     genre_cache: dict[str, uuid.UUID] = {}
+    author_cache: dict[str, uuid.UUID] = {}
     for source in sources:
         try:
             logger.info("ingestion_started", source=source)
             source_id = seed_source(source)
             extractor = get_extractor_for_source(source)
             for batch in itertools.batched(extractor.extract(), batch_size):
-                batch = batch
                 start_time = time.monotonic()
-                load_batch(batch, source_id, genre_cache)
+                try:
+                    load_batch(batch, source_id, genre_cache, author_cache)
+                except Exception:
+                    # One bad batch must not end the source's whole run.
+                    logger.exception("batch_failed", source=source, count=len(batch))
+                    continue
                 logger.info(
                     "batch_loaded",
                     source=source,
@@ -51,3 +63,8 @@ def run_ingestion(sources: list[str], batch_size: int) -> None:
             logger.info("ingestion_completed", source=source)
         except Exception:
             logger.exception("ingestion_failed", source=source)
+
+    try:
+        logger.info("orphans_pruned", count=prune_orphaned_manga())
+    except Exception:
+        logger.exception("orphan_prune_failed")
