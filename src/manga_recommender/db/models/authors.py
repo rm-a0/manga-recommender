@@ -14,7 +14,14 @@ manga_authors = Table(
     "manga_authors",
     Base.metadata,
     Column("manga_id", ForeignKey("manga.id", ondelete="CASCADE"), primary_key=True),
-    Column("author_id", ForeignKey("authors.id", ondelete="CASCADE"), primary_key=True),
+    # Indexed: the composite primary key only covers manga_id, so a
+    # lookup by author_id alone has nothing to use.
+    Column(
+        "author_id",
+        ForeignKey("authors.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    ),
 )
 
 
