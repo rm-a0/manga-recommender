@@ -164,6 +164,22 @@ class AnilistExtractor(BaseExtractor):
             fetched_at=datetime.now(UTC),
         )
 
+    async def _retry(
+        self,
+        client: httpx.AsyncClient,
+        limiter: AsyncLimiter,
+        ids: list[int],
+        reason: str,
+        attempt: int = 1,
+    ) -> list[dict]:
+        """Back off, then re-fetch the chunk with an incremented attempt count.
+
+        The caller must stop at MAX_RETRIES; this method does not check the limit.
+        """
+        logger.warning("chunk_retrying", attempt=attempt, reason=reason, ids=ids)
+        await asyncio.sleep(2**attempt)
+        return await self._fetch_chunk(client, limiter, ids, attempt + 1)
+
     async def _fetch_chunk(
         self,
         client: httpx.AsyncClient,
@@ -188,9 +204,9 @@ class AnilistExtractor(BaseExtractor):
             except httpx.TransportError:
                 if attempt >= MAX_RETRIES:
                     raise
-                logger.warning("transport_error_retrying", attempt=attempt, ids=ids)
-                await asyncio.sleep(2**attempt)
-                return await self._fetch_chunk(client, limiter, ids, attempt + 1)
+                return await self._retry(
+                    client, limiter, ids, "transport_error", attempt
+                )
 
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 60))
@@ -198,7 +214,42 @@ class AnilistExtractor(BaseExtractor):
             await asyncio.sleep(retry_after)
             return await self._fetch_chunk(client, limiter, ids)
 
+        if response.status_code >= 500:
+            if attempt >= MAX_RETRIES:
+                response.raise_for_status()
+            return await self._retry(
+                client, limiter, ids, f"http_{response.status_code}", attempt
+            )
+
         return self._parse_response(response)["data"]["Page"]["media"]
+
+    async def _fetch_chunk_records(
+        self,
+        client: httpx.AsyncClient,
+        limiter: AsyncLimiter,
+        ids: list[int],
+    ) -> list[NormalizedMangaRecord] | None:
+        """Fetch one chunk and convert it to records.
+
+        Return None if the chunk fails after retries. Skip any media object
+        that fails to convert.
+        """
+        try:
+            media_list = await self._fetch_chunk(client, limiter, ids)
+        except Exception:
+            logger.warning(
+                "chunk_failed", first_id=ids[0], last_id=ids[-1], exc_info=True
+            )
+            return None
+        records = []
+        for media in media_list:
+            try:
+                records.append(self._to_record(media))
+            except Exception:
+                logger.warning(
+                    "record_conversion_failed", media_id=media.get("id"), exc_info=True
+                )
+        return records
 
     async def _stream(self) -> AsyncIterator[NormalizedMangaRecord]:
         """Yield normalized manga records asynchronously, as they arrive.
@@ -216,19 +267,18 @@ class AnilistExtractor(BaseExtractor):
         limiter = AsyncLimiter(1, 60 / rpm)
         async with httpx.AsyncClient(timeout=30.0) as client:
             tasks = [
-                self._fetch_chunk(client, limiter, ids)
+                self._fetch_chunk_records(client, limiter, ids)
                 for ids in self._id_chunks(min_id, max_id, chunk_size)
             ]
+            failed = 0
             for i, coro in enumerate(asyncio.as_completed(tasks), start=1):
-                for media in await coro:
-                    try:
-                        record = self._to_record(media)
-                    except Exception:
-                        logger.warning(
-                            "record_conversion_failed",
-                            media_id=media.get("id"),
-                            exc_info=True,
-                        )
-                        continue
+                records = await coro
+                if records is None:
+                    failed += 1
+                    continue
+                for record in records:
                     yield record
                 logger.info("chunk_fetched", chunk_number=i, total_chunks=len(tasks))
+
+            if failed:
+                logger.warning("chunks_failed", failed=failed, total=len(tasks))

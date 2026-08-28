@@ -242,7 +242,7 @@ def _bulk_upsert_with_mal_id(
     if not records:
         return {}
     # Deduplicate records by mal_id to prevent CardinalityViolation
-    records = list({r["mal_id"]: r for r in records}.values())
+    deduped = list({r["mal_id"]: r for r in records}.values())
     values = [
         {
             "mal_id": record["mal_id"],
@@ -252,7 +252,7 @@ def _bulk_upsert_with_mal_id(
             "description": record["description"],
             "status": record["status"],
         }
-        for record in records
+        for record in deduped  # SQL insert must be unique
     ]
     insert_stmt = pg_insert(Manga).values(values)
     stmt = insert_stmt.on_conflict_do_update(
@@ -270,13 +270,13 @@ def _bulk_upsert_with_mal_id(
         },
     ).returning(Manga.mal_id, Manga.id)
 
-    # RETURNING only exposes Manga columns, so recover external_id via mal_id.
-    id_map = {}
-    mal_id_to_external_id = {r["mal_id"]: r["external_id"] for r in records}
-    for mal_id, manga_id in db.execute(stmt):
-        external_id = mal_id_to_external_id.get(mal_id)
-        if external_id:
-            id_map[external_id] = manga_id
+    # Re-key to get external_id via mal_id
+    mal_id_to_manga_id = {mal_id: manga_id for mal_id, manga_id in db.execute(stmt)}
+    id_map = {
+        r["external_id"]: mal_id_to_manga_id[r["mal_id"]]
+        for r in records  # Full input (duplicates need mapping)
+        if r["mal_id"] in mal_id_to_manga_id
+    }
 
     return id_map
 
