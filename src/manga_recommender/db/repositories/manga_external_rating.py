@@ -143,6 +143,7 @@ def bulk_update_or_create_external_ratings(
     Conflicts on (manga_id, source_id) overwrite existing fields; NULLs are
     coalesced against the current row instead of clearing it.
     """
+    values = list({v["manga_id"]: v for v in values}.values())
     insert_stmt = pg_insert(MangaExternalRating).values(values)
     stmt = insert_stmt.on_conflict_do_update(
         index_elements=["manga_id", "source_id"],
