@@ -21,7 +21,7 @@ class NormalizedMangaRecord:
     external_id: str
     mal_id: int | None
     title: str
-    author: str
+    authors: list[str]
     status: MangaStatus | None
     description: str | None
     genres: list[str] | None

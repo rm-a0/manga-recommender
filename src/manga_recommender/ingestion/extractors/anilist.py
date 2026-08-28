@@ -2,6 +2,7 @@
 
 import asyncio
 import re
+from calendar import monthrange
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 
@@ -91,15 +92,18 @@ class AnilistExtractor(BaseExtractor):
         for i in range(start_id, end_id + 1, chunk_size):
             yield list(range(i, min(i + chunk_size, end_id + 1)))
 
-    def _extract_author(self, media: dict) -> str:
-        """Return a comma-separated list of story and art staff names."""
+    def _extract_authors(self, media: dict) -> list[str]:
+        """Return the names of the story and art staff, without repeats.
+
+        One person credited for both story and art appears once.
+        """
         staff_edges = media.get("staff", {}).get("edges", [])
-        authors = [
+        names = [
             edge["node"]["name"]["full"]
             for edge in staff_edges
             if edge["role"].lower().startswith(("story", "art"))
         ]
-        return ", ".join(authors) if authors else "Unknown"
+        return list(dict.fromkeys(names))
 
     def _extract_status(self, media: dict) -> MangaStatus | None:
         """Map an AniList status string to a MangaStatus, or None if unmapped."""
@@ -122,15 +126,17 @@ class AnilistExtractor(BaseExtractor):
     def _extract_published_date(self, media: dict) -> datetime | None:
         """Return the manga's published date as a datetime object.
 
-        Defaults a missing month or day to 1.
+        Defaults a missing month or day to 1. AniList returns days that the
+        month does not have, so the day is clamped instead of raising, which
+        would drop the whole record.
         """
         start_date = media.get("startDate") or {}
         year = start_date.get("year")
-        month = start_date.get("month") or 1
-        day = start_date.get("day", 1) or 1
         if year is None:
             return None
-        return datetime(year, month, day, tzinfo=UTC)
+        month = min(max(start_date.get("month") or 1, 1), 12)
+        day = max(start_date.get("day") or 1, 1)
+        return datetime(year, month, min(day, monthrange(year, month)[1]), tzinfo=UTC)
 
     def _extract_score_distribution(self, media: dict) -> list[int] | None:
         """Return vote counts for AniList's 10 score buckets (10, 20, ..., 100).
@@ -152,7 +158,7 @@ class AnilistExtractor(BaseExtractor):
             external_id=str(media["id"]),
             mal_id=media["idMal"],
             title=media["title"]["romaji"],
-            author=self._extract_author(media),
+            authors=self._extract_authors(media),
             status=self._extract_status(media),
             published_date=self._extract_published_date(media),
             description=self._extract_description(media),

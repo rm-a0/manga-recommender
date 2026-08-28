@@ -3,28 +3,32 @@
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
-from typing import TypedDict
+from typing import TypedDict, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import CursorResult, delete, exists, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from manga_recommender.db.models.authors import Author, manga_authors
 from manga_recommender.db.models.genres import Genre, manga_genres
 from manga_recommender.db.models.manga import Manga, MangaStatus
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
 
 
 class MangaUpsertValues(TypedDict):
-    """Column values for one bulk-upserted manga row, plus its correlation key."""
+    """Column values for one bulk-upserted manga row, plus its correlation keys."""
 
     # Note: external_id is not a Manga column. It's the correlation key used to
     # route no-mal_id records to the fallback path and to recover external_id
     # from mal_id after the bulk RETURNING.
     external_id: str
 
+    # Note: votes_count is not a Manga column either. It only arbitrates which
+    # source entry wins when several share one mal_id. See _bulk_upsert_with_mal_id.
+    votes_count: int | None
+
     mal_id: int | None
     title: str
-    author: str
     published_date: datetime | None
     description: str | None
     status: MangaStatus | None
@@ -35,7 +39,6 @@ def create_manga(
     *,
     mal_id: int | None = None,
     title: str,
-    author: str,
     published_date: datetime | None = None,
     description: str | None = None,
     status: MangaStatus | None = None,
@@ -44,7 +47,6 @@ def create_manga(
     db_manga = Manga(
         mal_id=mal_id,
         title=title,
-        author=author,
         published_date=published_date,
         description=description,
         status=status,
@@ -61,7 +63,6 @@ def get_or_create_manga(
     source_id: uuid.UUID | None = None,
     external_id: str | None = None,
     title: str,
-    author: str,
     published_date: datetime | None = None,
     description: str | None = None,
     status: MangaStatus | None = None,
@@ -81,7 +82,6 @@ def get_or_create_manga(
         db,
         mal_id=mal_id,
         title=title,
-        author=author,
         published_date=published_date,
         description=description,
         status=status,
@@ -94,7 +94,6 @@ def update_manga(
     *,
     mal_id: int | None = None,
     title: str | None = None,
-    author: str | None = None,
     published_date: datetime | None = None,
     description: str | None = None,
     status: MangaStatus | None = None,
@@ -106,7 +105,6 @@ def update_manga(
     updates = {
         "mal_id": mal_id,
         "title": title,
-        "author": author,
         "published_date": published_date,
         "description": description,
         "status": status,
@@ -125,7 +123,6 @@ def update_or_create_manga(
     source_id: uuid.UUID | None = None,
     external_id: str | None = None,
     title: str,
-    author: str,
     published_date: datetime | None = None,
     description: str | None = None,
     status: MangaStatus | None = None,
@@ -145,7 +142,6 @@ def update_or_create_manga(
             manga,
             mal_id=mal_id,
             title=title,
-            author=author,
             published_date=published_date,
             description=description,
             status=status,
@@ -154,7 +150,6 @@ def update_or_create_manga(
         db,
         mal_id=mal_id,
         title=title,
-        author=author,
         published_date=published_date,
         description=description,
         status=status,
@@ -180,7 +175,7 @@ def get_manga_by_source_external_id(
     """Return the manga matching a source's external ID, or None if not found."""
     return db.scalar(
         select(Manga)
-        .join(MangaExternalRating)
+        .join(Manga.external_ratings)
         .where(
             MangaExternalRating.source_id == source_id,
             MangaExternalRating.external_id == external_id,
@@ -200,6 +195,22 @@ def add_genres_to_manga(db: Session, manga: Manga, genres: list[Genre]) -> Manga
     for genre in genres:
         if genre not in manga.genres:
             manga.genres.append(genre)
+    db.flush()
+    return manga
+
+
+def assign_authors_to_manga(db: Session, manga: Manga, authors: list[Author]) -> Manga:
+    """Replace a manga's authors with the given list."""
+    manga.authors = authors
+    db.flush()
+    return manga
+
+
+def add_authors_to_manga(db: Session, manga: Manga, authors: list[Author]) -> Manga:
+    """Add authors to a manga, skipping any it already has."""
+    for author in authors:
+        if author not in manga.authors:
+            manga.authors.append(author)
     db.flush()
     return manga
 
@@ -225,13 +236,33 @@ def _bulk_upsert_without_mal_id(
             source_id=source_id,
             external_id=record["external_id"],
             title=record["title"],
-            author=record["author"],
             published_date=record["published_date"],
             description=record["description"],
             status=record["status"],
         )
         id_map[record["external_id"]] = manga_id.id
     return id_map
+
+
+def _pick_canonical_by_votes(
+    records: Sequence[MangaUpsertValues],
+) -> list[MangaUpsertValues]:
+    """Keep one record per mal_id, the one with the most votes.
+
+    Several source entries can share a mal_id. A SQL insert needs them collapsed
+    to one row, and the vote count decides which entry's metadata to keep.
+    """
+    winners: dict[int, MangaUpsertValues] = {}
+    for record in records:
+        mal_id = record["mal_id"]
+        if mal_id is None:
+            continue
+        incumbent = winners.get(mal_id)
+        if incumbent is None or (record["votes_count"] or -1) > (
+            incumbent["votes_count"] or -1
+        ):
+            winners[mal_id] = record
+    return list(winners.values())
 
 
 def _bulk_upsert_with_mal_id(
@@ -241,25 +272,21 @@ def _bulk_upsert_with_mal_id(
     """Bulk-upsert manga records that have a mal_id in one round trip."""
     if not records:
         return {}
-    # Deduplicate records by mal_id to prevent CardinalityViolation
-    deduped = list({r["mal_id"]: r for r in records}.values())
     values = [
         {
             "mal_id": record["mal_id"],
             "title": record["title"],
-            "author": record["author"],
             "published_date": record["published_date"],
             "description": record["description"],
             "status": record["status"],
         }
-        for record in deduped  # SQL insert must be unique
+        for record in _pick_canonical_by_votes(records)
     ]
     insert_stmt = pg_insert(Manga).values(values)
     stmt = insert_stmt.on_conflict_do_update(
         index_elements=[Manga.mal_id],
         set_={
             "title": func.coalesce(insert_stmt.excluded.title, Manga.title),
-            "author": func.coalesce(insert_stmt.excluded.author, Manga.author),
             "published_date": func.coalesce(
                 insert_stmt.excluded.published_date, Manga.published_date
             ),
@@ -316,3 +343,31 @@ def bulk_add_genres_to_manga(
         .on_conflict_do_nothing(index_elements=["manga_id", "genre_id"])
     )
     db.execute(stmt)
+
+
+def bulk_add_authors_to_manga(
+    db: Session,
+    pairs: Sequence[tuple[uuid.UUID, uuid.UUID]],
+) -> None:
+    """Attach (manga_id, author_id) pairs, skipping ones that already exist."""
+    if not pairs:
+        return
+    values = [{"manga_id": m, "author_id": a} for m, a in pairs]
+    stmt = (
+        pg_insert(manga_authors)
+        .values(values)
+        .on_conflict_do_nothing(index_elements=["manga_id", "author_id"])
+    )
+    db.execute(stmt)
+
+
+def delete_orphaned_manga(db: Session) -> int:
+    """Delete manga that hold no external rating, and return how many went.
+
+    A re-pointed rating can leave its old manga row behind. Every ingested
+    record writes a rating, so a manga without one is unreachable.
+    """
+    stmt = delete(Manga).where(
+        ~exists().where(MangaExternalRating.manga_id == Manga.id)
+    )
+    return cast(CursorResult, db.execute(stmt)).rowcount

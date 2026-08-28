@@ -46,10 +46,9 @@ class KaggleMalExtractor(BaseExtractor):
         """Split a pipe-delimited field into stripped, non-empty parts."""
         return [part.strip() for part in value.split("|") if part.strip()]
 
-    def _extract_author(self, row: dict[str, str]) -> str:
-        """Return the row's authors as a comma-joined string, or "Unknown" if none."""
-        authors = self._split_pipe(row.get("authors", ""))
-        return ", ".join(authors) if authors else "Unknown"
+    def _extract_authors(self, row: dict[str, str]) -> list[str]:
+        """Return the row's author names, without repeats."""
+        return list(dict.fromkeys(self._split_pipe(row.get("authors", ""))))
 
     def _extract_genres(self, row: dict[str, str]) -> list[str] | None:
         """Return the row's genres, themes, and demographics as one tag list."""
@@ -67,12 +66,22 @@ class KaggleMalExtractor(BaseExtractor):
         return float(value) if value else None
 
     def _to_record(self, row: dict[str, str]) -> NormalizedMangaRecord:
-        """Convert one CSV row into a NormalizedMangaRecord."""
+        """Convert one CSV row into a NormalizedMangaRecord.
+
+        Raise if the row has no mal_id or no title. Both default to an empty
+        string otherwise, which would collapse every such row onto one manga.
+        """
+        mal_id = self._extract_int(row.get("mal_id", ""))
+        if mal_id is None:
+            raise ValueError("row has no mal_id")
+        title = row.get("title", "").strip()
+        if not title:
+            raise ValueError(f"row {mal_id} has no title")
         return NormalizedMangaRecord(
-            external_id=row.get("mal_id", ""),
-            mal_id=self._extract_int(row.get("mal_id", "")),
-            title=row.get("title", ""),
-            author=self._extract_author(row),
+            external_id=str(mal_id),
+            mal_id=mal_id,
+            title=title,
+            authors=self._extract_authors(row),
             status=self._extract_status(row),
             published_date=self._extract_published_date(row),
             description=row.get("synopsis") or None,
