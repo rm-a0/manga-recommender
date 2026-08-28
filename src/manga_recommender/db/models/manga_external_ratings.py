@@ -2,11 +2,15 @@
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import ARRAY, ForeignKey, Integer, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import ARRAY, DateTime, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from manga_recommender.db.base import Base
+
+if TYPE_CHECKING:
+    from manga_recommender.db.models.manga import Manga
 
 
 class MangaExternalRating(Base):
@@ -18,13 +22,16 @@ class MangaExternalRating(Base):
 
     __tablename__ = "manga_external_ratings"
 
-    manga_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("manga.id"))
+    manga_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("manga.id", ondelete="CASCADE")
+    )
     source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sources.id"))
     external_id: Mapped[str] = mapped_column()
     raw_scale_max: Mapped[float | None] = mapped_column()
     votes_count: Mapped[int | None] = mapped_column()
-    fetched_at: Mapped[datetime] = mapped_column()
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     raw_score: Mapped[float | None] = mapped_column()
     score_distribution: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))
+    manga: Mapped["Manga"] = relationship(back_populates="external_ratings")
 
     __table_args__ = (UniqueConstraint("source_id", "external_id"),)
