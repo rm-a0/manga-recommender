@@ -244,6 +244,12 @@ def _bulk_upsert_without_mal_id(
     return id_map
 
 
+def _vote_count(record: MangaUpsertValues) -> int:
+    """Return a record's vote count, sorting a missing count below zero votes."""
+    votes = record["votes_count"]
+    return -1 if votes is None else votes
+
+
 def _pick_canonical_by_votes(
     records: Sequence[MangaUpsertValues],
 ) -> list[MangaUpsertValues]:
@@ -258,9 +264,7 @@ def _pick_canonical_by_votes(
         if mal_id is None:
             continue
         incumbent = winners.get(mal_id)
-        if incumbent is None or (record["votes_count"] or -1) > (
-            incumbent["votes_count"] or -1
-        ):
+        if incumbent is None or _vote_count(record) > _vote_count(incumbent):
             winners[mal_id] = record
     return list(winners.values())
 

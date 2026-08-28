@@ -263,3 +263,19 @@ class TestLoadBatch:
         manga = get_manga_by_mal_id(patched_session_scope, 505)
         assert manga is not None
         assert manga.title == "Winner Title"
+
+
+def test_zero_votes_wins_over_a_missing_count(
+    patched_session_scope: Session, test_source: Source
+) -> None:
+    """Zero votes is a reported count; None is no data. The reported one wins."""
+    records = [
+        _record("1", mal_id=606, title="Loser Title", votes_count=None),
+        _record("2", mal_id=606, title="Winner Title", votes_count=0),
+    ]
+
+    load_batch(records, test_source.id, genre_cache={}, author_cache={})
+
+    manga = get_manga_by_mal_id(patched_session_scope, 606)
+    assert manga is not None
+    assert manga.title == "Winner Title"
