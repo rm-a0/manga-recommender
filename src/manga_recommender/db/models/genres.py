@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 manga_genres = Table(
     "manga_genres",
     Base.metadata,
-    Column("manga_id", ForeignKey("manga.id"), primary_key=True),
-    Column("genre_id", ForeignKey("genres.id"), primary_key=True),
+    Column("manga_id", ForeignKey("manga.id", ondelete="CASCADE"), primary_key=True),
+    Column("genre_id", ForeignKey("genres.id", ondelete="CASCADE"), primary_key=True),
 )
 
 
