@@ -12,13 +12,17 @@ from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from manga_recommender.db.models.manga import Manga
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
 from manga_recommender.db.models.sources import Source
+from manga_recommender.db.repositories.authors import bulk_get_or_create_authors
 from manga_recommender.db.repositories.genres import bulk_get_or_create_genres
 from manga_recommender.db.repositories.manga import (
+    bulk_add_authors_to_manga,
     bulk_add_genres_to_manga,
     create_manga,
     delete_manga,
+    delete_orphaned_manga,
 )
 from manga_recommender.db.repositories.manga_external_rating import (
     create_external_rating,
@@ -228,3 +232,80 @@ def test_source_and_external_id_stay_unique(
             external_id="dup",
             fetched_at=datetime.now(UTC),
         )
+
+
+# --- delete_orphaned_manga only looks at whether a rating row exists ---
+
+
+def test_orphan_prune_keeps_manga_whose_rating_has_no_score_or_votes(
+    db_session: Session, test_source: Source
+) -> None:
+    """A rating row with nothing in it still means the manga is reachable."""
+    manga = create_manga(db_session, title="Unrated But Real")
+    create_external_rating(
+        db_session,
+        manga_id=manga.id,
+        source_id=test_source.id,
+        external_id="ext-1",
+        fetched_at=datetime.now(UTC),
+        raw_score=None,
+        votes_count=0,
+    )
+
+    delete_orphaned_manga(db_session)
+
+    db_session.expire_all()
+    assert db_session.get(Manga, manga.id) is not None
+
+
+def test_orphan_prune_keeps_a_description_when_a_rating_row_exists(
+    db_session: Session, test_source: Source
+) -> None:
+    """Guards the row that semantic search would want to embed."""
+    manga = create_manga(
+        db_session,
+        title="Descriptive",
+        description="A long synopsis worth embedding.",
+    )
+    create_external_rating(
+        db_session,
+        manga_id=manga.id,
+        source_id=test_source.id,
+        external_id="ext-2",
+        fetched_at=datetime.now(UTC),
+        raw_score=None,
+        votes_count=None,
+    )
+
+    delete_orphaned_manga(db_session)
+
+    db_session.expire_all()
+    assert db_session.get(Manga, manga.id) is not None
+
+
+def test_orphan_prune_removes_a_manga_with_no_rating_row(
+    db_session: Session,
+) -> None:
+    manga = create_manga(db_session, title="Left Behind")
+
+    removed = delete_orphaned_manga(db_session)
+
+    db_session.expire_all()
+    assert removed >= 1
+    assert db_session.get(Manga, manga.id) is None
+
+
+def test_orphan_prune_takes_the_genre_and_author_links_with_it(
+    db_session: Session,
+) -> None:
+    """The link rows must cascade, not block the delete."""
+    manga = create_manga(db_session, title="Orphan With Links")
+    genre_ids = bulk_get_or_create_genres(db_session, ["seinen"])
+    author_ids = bulk_get_or_create_authors(db_session, ["Naoki Urasawa"])
+    bulk_add_genres_to_manga(db_session, [(manga.id, genre_ids["seinen"])])
+    bulk_add_authors_to_manga(db_session, [(manga.id, author_ids["Naoki Urasawa"])])
+
+    delete_orphaned_manga(db_session)
+
+    db_session.expire_all()
+    assert db_session.get(Manga, manga.id) is None
