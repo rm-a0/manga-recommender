@@ -2,6 +2,8 @@ import csv
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from manga_recommender.config import KaggleMalSettings
 from manga_recommender.db.models.manga import MangaStatus
 from manga_recommender.ingestion.extractors.kaggle_mal import KaggleMalExtractor
@@ -146,26 +148,28 @@ def test_split_pipe_returns_empty_list_for_empty_string():
     assert extractor._split_pipe("") == []
 
 
-# --- _extract_author ---
+# --- _extract_authors ---
 
 
-def test_extract_author_joins_multiple_authors():
+def test_extract_authors_splits_on_the_pipe_not_the_comma():
     extractor = _extractor()
     row = _row(authors="Miura, Kentarou|Studio Gaga")
 
-    assert extractor._extract_author(row) == "Miura, Kentarou, Studio Gaga"
+    assert extractor._extract_authors(row) == ["Miura, Kentarou", "Studio Gaga"]
 
 
-def test_extract_author_returns_single_author_unchanged():
+def test_extract_authors_returns_single_author_unchanged():
     extractor = _extractor()
 
-    assert extractor._extract_author(_row(authors="Urasawa, Naoki")) == "Urasawa, Naoki"
+    assert extractor._extract_authors(_row(authors="Urasawa, Naoki")) == [
+        "Urasawa, Naoki"
+    ]
 
 
-def test_extract_author_returns_unknown_when_empty():
+def test_extract_authors_returns_empty_when_absent():
     extractor = _extractor()
 
-    assert extractor._extract_author(_row(authors="")) == "Unknown"
+    assert extractor._extract_authors(_row(authors="")) == []
 
 
 # --- _extract_genres ---
@@ -237,7 +241,7 @@ def test_to_record_maps_all_fields():
     assert record.external_id == "1"
     assert record.mal_id == 1
     assert record.title == "Monster"
-    assert record.author == "Urasawa, Naoki"
+    assert record.authors == ["Urasawa, Naoki"]
     assert record.status == MangaStatus.FINISHED
     assert record.published_date == datetime(1994, 12, 5, tzinfo=UTC)
     assert record.description == "A story."
@@ -306,3 +310,17 @@ def test_extract_preserves_embedded_newlines_in_synopsis(tmp_path):
     (record,) = list(extractor.extract())
 
     assert record.description == "line one\n\nline two"
+
+
+def test_to_record_rejects_a_row_without_a_mal_id():
+    extractor = _extractor()
+
+    with pytest.raises(ValueError, match="no mal_id"):
+        extractor._to_record(_row(mal_id=""))
+
+
+def test_to_record_rejects_a_row_without_a_title():
+    extractor = _extractor()
+
+    with pytest.raises(ValueError, match="no title"):
+        extractor._to_record(_row(title="   "))

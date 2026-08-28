@@ -19,7 +19,6 @@ def test_create_manga_persists_given_fields(db_session: Session) -> None:
         db_session,
         mal_id=1,
         title="One Piece",
-        author="Eiichiro Oda",
         description="A boy sets out to become the Pirate King.",
         status=MangaStatus.ONGOING,
     )
@@ -27,13 +26,12 @@ def test_create_manga_persists_given_fields(db_session: Session) -> None:
     assert manga.id is not None
     assert manga.mal_id == 1
     assert manga.title == "One Piece"
-    assert manga.author == "Eiichiro Oda"
     assert manga.description == "A boy sets out to become the Pirate King."
     assert manga.status == MangaStatus.ONGOING
 
 
 def test_create_manga_defaults_optional_fields_to_none(db_session: Session) -> None:
-    manga = create_manga(db_session, title="Berserk", author="Kentaro Miura")
+    manga = create_manga(db_session, title="Berserk")
 
     assert manga.mal_id is None
     assert manga.published_date is None
@@ -42,9 +40,7 @@ def test_create_manga_defaults_optional_fields_to_none(db_session: Session) -> N
 
 
 def test_get_manga_by_mal_id_returns_matching_manga(db_session: Session) -> None:
-    created = create_manga(
-        db_session, mal_id=2, title="Vagabond", author="Takehiko Inoue"
-    )
+    created = create_manga(db_session, mal_id=2, title="Vagabond")
 
     found = get_manga_by_mal_id(db_session, 2)
 
@@ -60,7 +56,6 @@ def test_update_manga_overwrites_only_given_fields(db_session: Session) -> None:
     manga = create_manga(
         db_session,
         title="Chainsaw Man",
-        author="Tatsuki Fujimoto",
         status=MangaStatus.ONGOING,
     )
 
@@ -68,14 +63,12 @@ def test_update_manga_overwrites_only_given_fields(db_session: Session) -> None:
 
     assert updated.status == MangaStatus.FINISHED
     assert updated.title == "Chainsaw Man"
-    assert updated.author == "Tatsuki Fujimoto"
 
 
 def test_update_manga_updates_description(db_session: Session) -> None:
     manga = create_manga(
         db_session,
         title="Chainsaw Man",
-        author="Tatsuki Fujimoto",
         description="Original description.",
     )
 
@@ -86,18 +79,15 @@ def test_update_manga_updates_description(db_session: Session) -> None:
 
 
 def test_update_manga_with_no_args_changes_nothing(db_session: Session) -> None:
-    manga = create_manga(db_session, title="Dandadan", author="Yukinobu Tatsu")
+    manga = create_manga(db_session, title="Dandadan")
 
     updated = update_manga(db_session, manga)
 
     assert updated.title == "Dandadan"
-    assert updated.author == "Yukinobu Tatsu"
 
 
 def test_delete_manga_removes_the_row(db_session: Session) -> None:
-    manga = create_manga(
-        db_session, mal_id=3, title="Oyasumi Punpun", author="Inio Asano"
-    )
+    manga = create_manga(db_session, mal_id=3, title="Oyasumi Punpun")
 
     delete_manga(db_session, manga)
 
@@ -107,7 +97,7 @@ def test_delete_manga_removes_the_row(db_session: Session) -> None:
 def test_get_manga_by_source_external_id_returns_matching_manga(
     db_session: Session, test_source: Source
 ) -> None:
-    manga = create_manga(db_session, title="Solo Leveling", author="Chugong")
+    manga = create_manga(db_session, title="Solo Leveling")
     db_session.add(
         MangaExternalRating(
             manga_id=manga.id,
@@ -136,8 +126,8 @@ def test_get_manga_by_source_external_id_returns_none_on_miss(
 def test_get_manga_by_source_external_id_does_not_cross_match(
     db_session: Session, test_source: Source
 ) -> None:
-    manga_a = create_manga(db_session, title="Manga A", author="Author A")
-    manga_b = create_manga(db_session, title="Manga B", author="Author B")
+    manga_a = create_manga(db_session, title="Manga A")
+    manga_b = create_manga(db_session, title="Manga B")
     db_session.add_all(
         [
             MangaExternalRating(

@@ -35,7 +35,7 @@ def _record(external_id: str) -> NormalizedMangaRecord:
         external_id=external_id,
         mal_id=None,
         title="Test Manga",
-        author="Test Author",
+        authors=["Test Author"],
         status=None,
         description=None,
         genres=None,
@@ -92,7 +92,7 @@ def test_run_ingestion_seeds_source_and_batches_extracted_records(
     monkeypatch.setattr(
         runner,
         "load_batch",
-        lambda records, sid, genre_cache: loaded_batches.append((records, sid)),
+        lambda records, sid, gc, ac: loaded_batches.append((records, sid)),
     )
 
     runner.run_ingestion(["anilist"], batch_size=2)
@@ -117,7 +117,7 @@ def test_run_ingestion_continues_after_a_source_errors(
     monkeypatch.setattr(
         runner, "get_extractor_for_source", lambda name: _FakeExtractor([])
     )
-    monkeypatch.setattr(runner, "load_batch", lambda records, sid, genre_cache: None)
+    monkeypatch.setattr(runner, "load_batch", lambda records, sid, gc, ac: None)
 
     runner.run_ingestion(["broken", "anilist"], batch_size=50)
 
