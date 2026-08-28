@@ -29,7 +29,7 @@ def seed_source(source_name: str) -> uuid.UUID:
 
 
 def prune_orphaned_manga() -> int:
-    """Delete manga left without any external rating, and return how many went."""
+    """Delete manga left without any external rating and return the number removed."""
     with session_scope() as session:
         return delete_orphaned_manga(session)
 

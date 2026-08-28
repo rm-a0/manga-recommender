@@ -42,8 +42,8 @@ def _sync_links_for_manga(
     uncached = [n for n in names if n not in cache]
     if uncached:
         cache.update(resolve_names(db, uncached))
-    # A name that resolves to nothing (an author whose spelling normalizes to
-    # an empty key) has no id to link.
+    # A name can resolve to no id, when its spelling normalizes to an empty
+    # key. Such a name has nothing to link.
     pairs = [
         (manga_id, cache[name])
         for manga_id, linked_names in manga_to_names.items()
@@ -108,8 +108,8 @@ def load_batch(
                 for r in records
             ],
         )
-        # A record the manga upsert could not map has no id to hang its genres,
-        # authors, or rating on. Drop it instead of failing the whole batch.
+        # A record the manga upsert could not map has no id for its genres,
+        # authors, or rating. Drop it instead of failing the whole batch.
         mapped = [r for r in records if r.external_id in external_id_to_manga_id]
         if len(mapped) != len(records):
             logger.warning(

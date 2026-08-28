@@ -68,8 +68,8 @@ class KaggleMalExtractor(BaseExtractor):
     def _to_record(self, row: dict[str, str]) -> NormalizedMangaRecord:
         """Convert one CSV row into a NormalizedMangaRecord.
 
-        Raise if the row has no mal_id or no title. Both default to an empty
-        string otherwise, which would collapse every such row onto one manga.
+        Raise if the row has no mal_id or no title. An empty mal_id would give
+        every such row the same external_id, collapsing them onto one manga.
         """
         mal_id = self._extract_int(row.get("mal_id", ""))
         if mal_id is None:

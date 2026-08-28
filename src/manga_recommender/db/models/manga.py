@@ -43,8 +43,8 @@ class Manga(Base):
     authors: Mapped[list["Author"]] = relationship(
         secondary=manga_authors, back_populates="manga"
     )
-    # passive_deletes hands the delete to the database's ON DELETE CASCADE,
-    # instead of loading every child row and deleting it one at a time.
+    # passive_deletes lets the database's ON DELETE CASCADE remove the child
+    # rows. Without it, SQLAlchemy loads and deletes each one separately.
     external_ratings: Mapped[list["MangaExternalRating"]] = relationship(
         back_populates="manga",
         cascade="all, delete-orphan",

@@ -22,8 +22,8 @@ class MangaExternalRating(Base):
 
     __tablename__ = "manga_external_ratings"
 
-    # Indexed: Postgres does not index a foreign key on its own, and every
-    # cascade delete and rating lookup filters on this column.
+    # Postgres does not index a foreign key on its own. Every cascade delete
+    # and every rating lookup filters on this column.
     manga_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("manga.id", ondelete="CASCADE"), index=True
     )

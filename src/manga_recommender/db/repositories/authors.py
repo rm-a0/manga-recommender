@@ -16,21 +16,12 @@ def normalize_author_name(name: str) -> str:
     """Return the key that decides whether two spellings are the same author.
 
     Sources write one person several ways: "Inoue, Takehiko" and
-    "Takehiko Inoue". Folding case, dropping punctuation and accents, and
-    sorting the name parts makes both reach one key.
+    "Takehiko Inoue". The key folds case, drops punctuation and accents, and
+    sorts the name parts, so both spellings reach it.
     """
     stripped = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
     parts = [part for part in re.split(r"[^a-z0-9]+", stripped.lower()) if part]
     return " ".join(sorted(parts))
-
-
-def _is_better_display_name(candidate: str, incumbent: str) -> bool:
-    """Report whether the candidate spelling reads better than the incumbent.
-
-    A name without a comma is the natural order, so "Takehiko Inoue" wins over
-    "Inoue, Takehiko".
-    """
-    return "," in incumbent and "," not in candidate
 
 
 def create_author(
@@ -71,6 +62,15 @@ def get_or_create_author(
 
 
 # --- Bulk operations ---
+
+
+def _is_better_display_name(candidate: str, incumbent: str) -> bool:
+    """Return whether the candidate spelling reads better than the incumbent.
+
+    A name without a comma is the natural order, so "Takehiko Inoue" wins over
+    "Inoue, Takehiko".
+    """
+    return "," in incumbent and "," not in candidate
 
 
 def bulk_get_or_create_authors(

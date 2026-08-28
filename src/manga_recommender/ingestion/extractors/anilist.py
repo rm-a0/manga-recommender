@@ -127,8 +127,8 @@ class AnilistExtractor(BaseExtractor):
         """Return the manga's published date as a datetime object.
 
         Defaults a missing month or day to 1. AniList returns days that the
-        month does not have, so the day is clamped instead of raising, which
-        would drop the whole record.
+        month does not have. The day is clamped, because raising here would
+        drop the whole record.
         """
         start_date = media.get("startDate") or {}
         year = start_date.get("year")

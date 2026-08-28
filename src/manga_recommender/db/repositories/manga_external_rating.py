@@ -90,8 +90,8 @@ def get_external_ratings_by_manga_and_source(
 ) -> Sequence[MangaExternalRating]:
     """Return every external rating for the given manga and source.
 
-    One manga can hold several ratings from one source, so this returns a
-    sequence. It is empty when there is no match.
+    One manga can hold several ratings from one source. The result is empty
+    when there is no match.
     """
     return db.scalars(
         select(MangaExternalRating).where(

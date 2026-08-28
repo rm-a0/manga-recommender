@@ -14,8 +14,8 @@ manga_genres = Table(
     "manga_genres",
     Base.metadata,
     Column("manga_id", ForeignKey("manga.id", ondelete="CASCADE"), primary_key=True),
-    # Indexed: the composite primary key only covers manga_id, so a
-    # lookup by genre_id alone has nothing to use.
+    # The composite primary key covers manga_id only. A lookup by
+    # genre_id alone needs its own index.
     Column(
         "genre_id",
         ForeignKey("genres.id", ondelete="CASCADE"),

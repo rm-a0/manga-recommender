@@ -14,8 +14,8 @@ manga_authors = Table(
     "manga_authors",
     Base.metadata,
     Column("manga_id", ForeignKey("manga.id", ondelete="CASCADE"), primary_key=True),
-    # Indexed: the composite primary key only covers manga_id, so a
-    # lookup by author_id alone has nothing to use.
+    # The composite primary key covers manga_id only. A lookup by
+    # author_id alone needs its own index.
     Column(
         "author_id",
         ForeignKey("authors.id", ondelete="CASCADE"),
@@ -29,8 +29,7 @@ class Author(Base):
     """ORM model for a manga author.
 
     `name` is the spelling to show. `normalized_name` is the identity key, so
-    one person written several ways stays one row. The repository owns the rule
-    that produces it.
+    one person written several ways stays one row.
     """
 
     __tablename__ = "authors"

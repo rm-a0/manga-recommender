@@ -3,9 +3,9 @@
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
-from typing import TypedDict, cast
+from typing import TypedDict
 
-from sqlalchemy import CursorResult, delete, exists, func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -247,10 +247,10 @@ def _bulk_upsert_without_mal_id(
 def _pick_canonical_by_votes(
     records: Sequence[MangaUpsertValues],
 ) -> list[MangaUpsertValues]:
-    """Keep one record per mal_id, the one with the most votes.
+    """Keep one record per mal_id: the one with the most votes.
 
-    Several source entries can share a mal_id. A SQL insert needs them collapsed
-    to one row, and the vote count decides which entry's metadata to keep.
+    Several source entries can share a mal_id. A SQL insert needs one row per
+    key. The vote count decides which entry's metadata to keep.
     """
     winners: dict[int, MangaUpsertValues] = {}
     for record in records:
@@ -362,12 +362,14 @@ def bulk_add_authors_to_manga(
 
 
 def delete_orphaned_manga(db: Session) -> int:
-    """Delete manga that hold no external rating, and return how many went.
+    """Delete manga that hold no external rating and return the number removed.
 
     A re-pointed rating can leave its old manga row behind. Every ingested
     record writes a rating, so a manga without one is unreachable.
     """
-    stmt = delete(Manga).where(
-        ~exists().where(MangaExternalRating.manga_id == Manga.id)
+    stmt = (
+        delete(Manga)
+        .where(~exists().where(MangaExternalRating.manga_id == Manga.id))
+        .returning(Manga.id)
     )
-    return cast(CursorResult, db.execute(stmt)).rowcount
+    return len(db.execute(stmt).all())

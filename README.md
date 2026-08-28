@@ -32,7 +32,8 @@ The CLI is wired up. The FastAPI app itself isn't built yet — `app` currently 
 raises `NotImplementedError`.
 
 ```bash
-uv run python -m manga_recommender ingest --source anilist   # run ingestion
+uv run python -m manga_recommender ingest --source anilist    # run ingestion
+uv run python -m manga_recommender ingest --source kaggle_mal # the other source
 uv run python -m manga_recommender app                        # not implemented yet
 ```
 
@@ -53,23 +54,34 @@ uv run alembic downgrade -1                                        # roll back o
 
 ## Ingestion pipeline
 
-Pulls manga from the AniList GraphQL API and writes to the database. A **one-shot
-offline job**, not triggered by the API. Walks AniList's raw ID space in concurrent,
-rate-limited `id_in` chunk requests rather than paginating, since AniList's
-page-based pagination caps out at 5,000 results.
+A **one-shot offline job**, not triggered by the API. Two sources feed the same
+`NormalizedMangaRecord` shape and the same loader.
+
+| Source | Where from | Full run |
+|---|---|---|
+| `anilist` | AniList GraphQL API, concurrent rate-limited `id_in` chunks | ~2.5 hours |
+| `kaggle_mal` | Local CSV of the Kaggle MAL 2026 dataset | minutes |
+
+AniList is walked by raw ID space rather than paginated, since its page-based
+pagination caps out at 5,000 results.
 
 ```bash
-uv sync --group pipeline                                     # install pipeline extras
-uv run python -m manga_recommender ingest --source anilist   # full catalogue
+uv sync --group pipeline                                      # install pipeline extras
+uv run python -m manga_recommender ingest --source kaggle_mal
+uv run python -m manga_recommender ingest --source anilist
 
 # Small test run, capped to a handful of chunks instead of the whole catalogue
 ANILIST_MAX_ID=30201 uv run python -m manga_recommender ingest --source anilist
 ```
 
-A full run currently fetches in roughly ~2 hours (bounded by AniList's rate limit) —
-now the dominant cost. Loading (manga, genre, and rating writes, all bulk-upserted)
-takes roughly ~20-25 minutes for the full ~175k-manga catalogue, confirmed via a
-capped timed run (`ANILIST_MAX_ID=30201`).
+> **Order matters.** Manga metadata is upserted with `COALESCE`, so the source
+> that runs last wins every field it has a value for. Run `kaggle_mal` first and
+> `anilist` second, so the richer AniList titles and descriptions end up on top.
+> Re-running `kaggle_mal` against a populated database overwrites them.
+
+Fetching dominates the AniList run (bounded by its rate limit); a full pass took
+~2h30m for the ~186k-ID space. Loading — manga, genre, author and rating writes,
+all bulk-upserted — takes roughly ~20-25 minutes of that.
 
 ## Dependency groups
 
@@ -176,13 +188,14 @@ manga-recommender/
 │   ├── db/
 │   │   ├── base.py              # Declarative Base + shared column helpers
 │   │   ├── engine.py, session.py  # SQLAlchemy engine/session factory
-│   │   ├── models/              # One ORM model per file (manga, genres, sources,
-│   │   │                          manga_external_ratings, users)
+│   │   ├── models/              # One ORM model per file (manga, genres, authors,
+│   │   │                          sources, manga_external_ratings, users)
 │   │   └── repositories/        # Data-access functions, one module per model
 │   │
 │   └── ingestion/
 │       ├── base.py              # BaseExtractor ABC, NormalizedMangaRecord
-│       ├── anilist.py           # AniList extractor — concurrent id_in chunk fetch
+│       ├── extractors/          # anilist.py (concurrent id_in chunk fetch),
+│       │                          kaggle_mal.py (local CSV)
 │       ├── registry.py          # source name -> extractor/default-weight mapping
 │       ├── loader.py            # persists NormalizedMangaRecords to the database
 │       └── runner.py            # seeds sources, batches extraction, calls loader
@@ -217,6 +230,7 @@ no SQL strings) and the recommendation engine itself.
 | `ANILIST_MIN_ID` | — | Lowest manga ID to fetch (default `30001` — below this is all anime) |
 | `ANILIST_MAX_ID` | — | Highest manga ID to fetch (default: resolved live from AniList) |
 | `INGESTION_BATCH_SIZE` | — | Records per `load_batch` transaction (default `50`) |
+| `KAGGLE_MAL_PATH` | — | Path to the Kaggle MAL CSV (default `data/kaggle_mal_2026.csv`) |
 
 Every variable has a fallback in `config.py`, so none are strictly required to boot —
 `DB_URL`/`DB_URL_POOLED` are marked "recommended" because the fallback points at a
