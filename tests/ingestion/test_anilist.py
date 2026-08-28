@@ -52,7 +52,7 @@ def _media(
     }
 
 
-def test_extract_author_joins_story_and_art_staff():
+def test_extract_authors_returns_story_and_art_staff():
     extractor = _extractor()
     media = _media(
         staff_edges=[
@@ -62,14 +62,14 @@ def test_extract_author_joins_story_and_art_staff():
         ]
     )
 
-    assert extractor._extract_author(media) == "Writer A, Artist B"
+    assert extractor._extract_authors(media) == ["Writer A", "Artist B"]
 
 
-def test_extract_author_returns_unknown_when_no_story_or_art_staff():
+def test_extract_authors_returns_empty_when_no_story_or_art_staff():
     extractor = _extractor()
     media = _media(staff_edges=[{"role": "Producer", "node": {"name": {"full": "P"}}}])
 
-    assert extractor._extract_author(media) == "Unknown"
+    assert extractor._extract_authors(media) == []
 
 
 def test_extract_status_maps_known_status():
@@ -157,6 +157,20 @@ def test_extract_published_date_defaults_missing_month_and_day_to_one():
     assert extractor._extract_published_date(media) == datetime(1985, 1, 1, tzinfo=UTC)
 
 
+def test_extract_published_date_clamps_a_day_the_month_does_not_have():
+    extractor = _extractor()
+    media = _media(start_date={"year": 2001, "month": 2, "day": 31})
+
+    assert extractor._extract_published_date(media) == datetime(2001, 2, 28, tzinfo=UTC)
+
+
+def test_extract_published_date_clamps_an_out_of_range_month():
+    extractor = _extractor()
+    media = _media(start_date={"year": 2001, "month": 13, "day": 1})
+
+    assert extractor._extract_published_date(media) == datetime(2001, 12, 1, tzinfo=UTC)
+
+
 def test_extract_published_date_returns_none_when_year_missing():
     extractor = _extractor()
     media = _media(start_date={"year": None, "month": None, "day": None})
@@ -186,7 +200,7 @@ def test_to_record_converts_media_to_normalized_record():
     assert record.external_id == "42"
     assert record.mal_id == 100
     assert record.title == "Vagabond"
-    assert record.author == "Author One"
+    assert record.authors == ["Author One"]
     assert record.status == MangaStatus.ONGOING
     assert record.genres == ["Action", "Drama"]
     assert record.raw_score == 91.0

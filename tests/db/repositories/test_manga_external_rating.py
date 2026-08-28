@@ -11,7 +11,7 @@ from manga_recommender.db.repositories.manga_external_rating import (
     RatingUpsertValues,
     bulk_update_or_create_external_ratings,
     create_external_rating,
-    get_external_rating_by_manga_and_source,
+    get_external_ratings_by_manga_and_source,
     update_external_rating,
     update_or_create_external_rating,
 )
@@ -57,7 +57,7 @@ def _ratings_for_source(
 def test_create_external_rating_persists_given_fields(
     db_session: Session, test_source: Source
 ) -> None:
-    manga = create_manga(db_session, title="One Piece", author="Eiichiro Oda")
+    manga = create_manga(db_session, title="One Piece")
 
     rating = create_external_rating(
         db_session,
@@ -77,41 +77,43 @@ def test_create_external_rating_persists_given_fields(
     assert rating.votes_count == 1000
 
 
-def test_get_external_rating_by_manga_and_source_returns_matching_rating(
+def test_get_external_ratings_by_manga_and_source_returns_every_match(
     db_session: Session, test_source: Source
 ) -> None:
-    manga = create_manga(db_session, title="Berserk", author="Kentaro Miura")
-    created = create_external_rating(
-        db_session,
-        manga_id=manga.id,
-        source_id=test_source.id,
-        external_id="ext-2",
-        fetched_at=datetime.now(UTC),
-    )
+    manga = create_manga(db_session, title="Berserk")
+    created = [
+        create_external_rating(
+            db_session,
+            manga_id=manga.id,
+            source_id=test_source.id,
+            external_id=external_id,
+            fetched_at=datetime.now(UTC),
+        )
+        for external_id in ("ext-2", "ext-3")
+    ]
 
-    found = get_external_rating_by_manga_and_source(
+    found = get_external_ratings_by_manga_and_source(
         db_session, manga.id, test_source.id
     )
 
-    assert found is not None
-    assert found.id == created.id
+    assert {r.id for r in found} == {r.id for r in created}
 
 
-def test_get_external_rating_by_manga_and_source_returns_none_when_missing(
+def test_get_external_ratings_by_manga_and_source_is_empty_when_missing(
     db_session: Session, test_source: Source
 ) -> None:
-    manga = create_manga(db_session, title="Vagabond", author="Takehiko Inoue")
+    manga = create_manga(db_session, title="Vagabond")
 
     assert (
-        get_external_rating_by_manga_and_source(db_session, manga.id, test_source.id)
-        is None
+        get_external_ratings_by_manga_and_source(db_session, manga.id, test_source.id)
+        == []
     )
 
 
 def test_update_external_rating_overwrites_only_given_fields(
     db_session: Session, test_source: Source
 ) -> None:
-    manga = create_manga(db_session, title="Chainsaw Man", author="Tatsuki Fujimoto")
+    manga = create_manga(db_session, title="Chainsaw Man")
     rating = create_external_rating(
         db_session,
         manga_id=manga.id,
@@ -131,7 +133,7 @@ def test_update_external_rating_overwrites_only_given_fields(
 def test_update_or_create_external_rating_creates_when_missing(
     db_session: Session, test_source: Source
 ) -> None:
-    manga = create_manga(db_session, title="Dandadan", author="Yukinobu Tatsu")
+    manga = create_manga(db_session, title="Dandadan")
 
     rating = update_or_create_external_rating(
         db_session,
@@ -149,7 +151,7 @@ def test_update_or_create_external_rating_creates_when_missing(
 def test_update_or_create_external_rating_updates_existing_rating(
     db_session: Session, test_source: Source
 ) -> None:
-    manga = create_manga(db_session, title="Oyasumi Punpun", author="Inio Asano")
+    manga = create_manga(db_session, title="Oyasumi Punpun")
     original = create_external_rating(
         db_session,
         manga_id=manga.id,
@@ -178,7 +180,7 @@ def test_update_or_create_external_rating_updates_existing_rating(
 def test_bulk_ratings_writes_one_row_per_distinct_manga(
     db_session: Session, test_source: Source
 ) -> None:
-    mangas = [create_manga(db_session, title=f"M{i}", author="A") for i in range(3)]
+    mangas = [create_manga(db_session, title=f"M{i}") for i in range(3)]
     values = [
         _rating_values(manga_id=m.id, source_id=test_source.id, raw_score=float(i))
         for i, m in enumerate(mangas)
@@ -197,7 +199,7 @@ def test_bulk_ratings_writes_one_row_per_distinct_manga(
 def test_bulk_ratings_dedupes_repeated_manga_source_last_wins(
     db_session: Session, test_source: Source
 ) -> None:
-    manga = create_manga(db_session, title="Monster", author="Urasawa")
+    manga = create_manga(db_session, title="Monster")
     values = [
         _rating_values(
             manga_id=manga.id,
@@ -224,7 +226,7 @@ def test_bulk_ratings_dedupes_repeated_manga_source_last_wins(
 def test_bulk_ratings_updates_existing_row_in_place(
     db_session: Session, test_source: Source
 ) -> None:
-    manga = create_manga(db_session, title="Pluto", author="Urasawa")
+    manga = create_manga(db_session, title="Pluto")
     original = create_external_rating(
         db_session,
         manga_id=manga.id,
