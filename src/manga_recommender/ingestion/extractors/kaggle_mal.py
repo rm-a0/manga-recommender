@@ -1,6 +1,5 @@
 """Extractor that pulls manga data from the Kaggle MAL dataset."""
 
-from annotationlib import call_annotate_function
 import csv
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime

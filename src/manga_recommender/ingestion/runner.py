@@ -39,7 +39,7 @@ def run_ingestion(sources: list[str], batch_size: int) -> None:
 
     Logs and continues on failure, at both the batch and the source level.
     """
-    genre_cache: dict[str, uuid.UUID] = {}
+    tag_cache: dict[str, uuid.UUID] = {}
     author_cache: dict[str, uuid.UUID] = {}
     for source in sources:
         try:
@@ -49,7 +49,7 @@ def run_ingestion(sources: list[str], batch_size: int) -> None:
             for batch in itertools.batched(extractor.extract(), batch_size):
                 start_time = time.monotonic()
                 try:
-                    load_batch(batch, source_id, genre_cache, author_cache)
+                    load_batch(batch, source_id, tag_cache, author_cache)
                 except Exception:
                     # One bad batch must not end the source's whole run.
                     logger.exception("batch_failed", source=source, count=len(batch))
