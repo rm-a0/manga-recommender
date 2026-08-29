@@ -16,10 +16,10 @@ from manga_recommender.db.models.manga import Manga
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
 from manga_recommender.db.models.sources import Source
 from manga_recommender.db.repositories.authors import bulk_get_or_create_authors
-from manga_recommender.db.repositories.genres import bulk_get_or_create_genres
 from manga_recommender.db.repositories.manga import (
+    TagLinkValues,
     bulk_add_authors_to_manga,
-    bulk_add_genres_to_manga,
+    bulk_add_tags_to_manga,
     create_manga,
     delete_manga,
     delete_orphaned_manga,
@@ -28,6 +28,10 @@ from manga_recommender.db.repositories.manga_external_rating import (
     create_external_rating,
     update_external_rating,
     update_or_create_external_rating,
+)
+from manga_recommender.db.repositories.tags import (
+    TagUpsertValues,
+    bulk_get_or_create_tags,
 )
 
 # --- Finding 2: update_external_rating drops score_distribution ---
@@ -149,23 +153,42 @@ def test_delete_manga_removes_its_external_ratings(
     assert remaining == []
 
 
-def test_delete_manga_removes_its_genre_links(db_session: Session) -> None:
-    """Deleting a manga must not fail on its manga_genres rows."""
+def test_delete_manga_removes_its_tag_links(db_session: Session) -> None:
+    """Deleting a manga must not fail on its manga_tags rows."""
     manga = create_manga(db_session, title="Blame!")
-    genre_ids = bulk_get_or_create_genres(db_session, ["cyberpunk"])
-    bulk_add_genres_to_manga(db_session, [(manga.id, genre_ids["cyberpunk"])])
+    tag_ids = bulk_get_or_create_tags(
+        db_session, [TagUpsertValues(name="cyberpunk", category=None)]
+    )
+    bulk_add_tags_to_manga(
+        db_session,
+        [
+            TagLinkValues(
+                manga_id=manga.id,
+                tag_id=tag_ids["cyberpunk"],
+                rank=None,
+                is_spoiler=False,
+            )
+        ],
+    )
 
     delete_manga(db_session, manga)
 
 
-# --- Finding "minor": bulk_get_or_create_genres does not deduplicate its input ---
+# --- Finding "minor": bulk_get_or_create_tags does not deduplicate its input ---
 
 
-def test_bulk_get_or_create_genres_tolerates_duplicate_names(
+def test_bulk_get_or_create_tags_tolerates_duplicate_names(
     db_session: Session,
 ) -> None:
     """Duplicate names in one call must collapse, not raise CardinalityViolation."""
-    result = bulk_get_or_create_genres(db_session, ["seinen", "seinen", "josei"])
+    result = bulk_get_or_create_tags(
+        db_session,
+        [
+            TagUpsertValues(name="seinen", category=None),
+            TagUpsertValues(name="seinen", category=None),
+            TagUpsertValues(name="josei", category=None),
+        ],
+    )
 
     assert set(result) == {"seinen", "josei"}
 
@@ -295,14 +318,26 @@ def test_orphan_prune_removes_a_manga_with_no_rating_row(
     assert db_session.get(Manga, manga.id) is None
 
 
-def test_orphan_prune_takes_the_genre_and_author_links_with_it(
+def test_orphan_prune_takes_the_tag_and_author_links_with_it(
     db_session: Session,
 ) -> None:
     """The link rows must cascade, not block the delete."""
     manga = create_manga(db_session, title="Orphan With Links")
-    genre_ids = bulk_get_or_create_genres(db_session, ["seinen"])
+    tag_ids = bulk_get_or_create_tags(
+        db_session, [TagUpsertValues(name="seinen", category=None)]
+    )
     author_ids = bulk_get_or_create_authors(db_session, ["Naoki Urasawa"])
-    bulk_add_genres_to_manga(db_session, [(manga.id, genre_ids["seinen"])])
+    bulk_add_tags_to_manga(
+        db_session,
+        [
+            TagLinkValues(
+                manga_id=manga.id,
+                tag_id=tag_ids["seinen"],
+                rank=None,
+                is_spoiler=False,
+            )
+        ],
+    )
     bulk_add_authors_to_manga(db_session, [(manga.id, author_ids["Naoki Urasawa"])])
 
     delete_orphaned_manga(db_session)

@@ -6,10 +6,10 @@ from alembic import context
 from manga_recommender.config import get_database_settings
 from manga_recommender.db.base import Base
 from manga_recommender.db.models import (  # noqa: F401
-    genres,
     manga,
     manga_external_ratings,
     sources,
+    tags,
     users,
 )
 

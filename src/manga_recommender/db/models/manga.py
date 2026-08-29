@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from manga_recommender.db.base import Base, enum_values
 from manga_recommender.db.models.authors import Author, manga_authors
-from manga_recommender.db.models.genres import Genre, manga_genres
+from manga_recommender.db.models.tags import Tag, manga_tags
 
 if TYPE_CHECKING:
     from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
@@ -37,8 +37,8 @@ class Manga(Base):
     status: Mapped[MangaStatus | None] = mapped_column(
         Enum(MangaStatus, name="manga_status", values_callable=enum_values)
     )
-    genres: Mapped[list["Genre"]] = relationship(
-        secondary=manga_genres, back_populates="manga"
+    tags: Mapped[list["Tag"]] = relationship(
+        secondary=manga_tags, back_populates="manga"
     )
     authors: Mapped[list["Author"]] = relationship(
         secondary=manga_authors, back_populates="manga"

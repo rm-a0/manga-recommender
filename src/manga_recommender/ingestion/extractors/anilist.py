@@ -42,6 +42,7 @@ class AnilistExtractor(BaseExtractor):
                     }
                 }
                 stats { scoreDistribution { score amount } }
+                tags { name rank category isMediaSpoiler }
             }
         }
     }

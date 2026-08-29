@@ -15,6 +15,16 @@ _SENTINEL = object()
 
 
 @dataclass
+class NormalizedTag:
+    """Tag data in a source-independent shape, ready for loading."""
+
+    name: str
+    category: str | None
+    rank: int | None
+    is_spoiler: bool
+
+
+@dataclass
 class NormalizedMangaRecord:
     """Manga data in a source-independent shape, ready for loading."""
 
@@ -24,7 +34,7 @@ class NormalizedMangaRecord:
     authors: list[str]
     status: MangaStatus | None
     description: str | None
-    genres: list[str] | None
+    tags: list[NormalizedTag] | None
     published_date: datetime | None
     raw_score: float | None
     raw_scale_max: float | None

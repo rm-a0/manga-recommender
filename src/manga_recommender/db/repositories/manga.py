@@ -10,9 +10,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.authors import Author, manga_authors
-from manga_recommender.db.models.genres import Genre, manga_genres
 from manga_recommender.db.models.manga import Manga, MangaStatus
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
+from manga_recommender.db.models.tags import manga_tags
 
 
 class MangaUpsertValues(TypedDict):
@@ -32,6 +32,15 @@ class MangaUpsertValues(TypedDict):
     published_date: datetime | None
     description: str | None
     status: MangaStatus | None
+
+
+class TagLinkValues(TypedDict):
+    """Column values for one bulk-upserted manga-tag link."""
+
+    manga_id: uuid.UUID
+    tag_id: uuid.UUID
+    rank: int | None
+    is_spoiler: bool
 
 
 def create_manga(
@@ -183,22 +192,6 @@ def get_manga_by_source_external_id(
     )
 
 
-def assign_genres_to_manga(db: Session, manga: Manga, genres: list[Genre]) -> Manga:
-    """Replace a manga's genres with the given list."""
-    manga.genres = genres
-    db.flush()
-    return manga
-
-
-def add_genres_to_manga(db: Session, manga: Manga, genres: list[Genre]) -> Manga:
-    """Add genres to a manga, skipping any it already has."""
-    for genre in genres:
-        if genre not in manga.genres:
-            manga.genres.append(genre)
-    db.flush()
-    return manga
-
-
 def assign_authors_to_manga(db: Session, manga: Manga, authors: list[Author]) -> Manga:
     """Replace a manga's authors with the given list."""
     manga.authors = authors
@@ -333,18 +326,38 @@ def bulk_update_or_create_manga(
     }
 
 
-def bulk_add_genres_to_manga(
+def bulk_add_tags_to_manga(
     db: Session,
-    pairs: Sequence[tuple[uuid.UUID, uuid.UUID]],
+    links: Sequence[TagLinkValues],
 ) -> None:
-    """Attach (manga_id, genre_id) pairs, skipping ones that already exist."""
-    if not pairs:
+    """Attach tag links to their manga, merging any that already exist.
+
+    A link without a rank keeps the stored rank, and a spoiler flag never
+    clears, so source ingest order does not change the result.
+    """
+    # Avoid raising CardinalityViolation by deduplicating by both ids.
+    by_key: dict[tuple[uuid.UUID, uuid.UUID], TagLinkValues] = {}
+    for link in links:
+        by_key.setdefault((link["manga_id"], link["tag_id"]), link)
+
+    values = [
+        {
+            "manga_id": m_id,
+            "tag_id": t_id,
+            "rank": link["rank"],
+            "is_spoiler": link["is_spoiler"],
+        }
+        for (m_id, t_id), link in by_key.items()
+    ]
+    if not values:
         return
-    values = [{"manga_id": m, "genre_id": g} for m, g in pairs]
-    stmt = (
-        pg_insert(manga_genres)
-        .values(values)
-        .on_conflict_do_nothing(index_elements=["manga_id", "genre_id"])
+    insert_stmt = pg_insert(manga_tags).values(values)
+    stmt = insert_stmt.on_conflict_do_update(
+        index_elements=["manga_id", "tag_id"],
+        set_={
+            "rank": func.coalesce(insert_stmt.excluded.rank, manga_tags.c.rank),
+            "is_spoiler": manga_tags.c.is_spoiler | insert_stmt.excluded.is_spoiler,
+        },
     )
     db.execute(stmt)
 
