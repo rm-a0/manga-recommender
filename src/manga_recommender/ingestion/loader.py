@@ -33,16 +33,25 @@ def _sync_tags_for_manga(
     tag_cache: dict[str, uuid.UUID],
     manga_to_tags: dict[uuid.UUID, Sequence[NormalizedTag]],
 ) -> None:
+    """Resolve tags to ids and bulk-attach them to their manga.
+
+    A cache miss triggers one bulk lookup-or-create query for all misses.
+    """
     uncached = [
         tag
-        for _, linked_tags in manga_to_tags.items()
+        for linked_tags in manga_to_tags.values()
         for tag in linked_tags
         if tag.name not in tag_cache
     ]
     if uncached:
+        # A cached name skips the upsert, so a tag keeps the category it was
+        # first seen with. AniList sends some names as both a genre and a tag,
+        # so which category sticks depends on which media comes first.
         values = [TagUpsertValues(name=t.name, category=t.category) for t in uncached]
         tag_cache.update(bulk_get_or_create_tags(db, values))
 
+    # A tag can resolve to no id, when its name normalizes to an empty key.
+    # Such a tag has nothing to link.
     link_values = [
         TagLinkValues(
             manga_id=manga_id,
@@ -56,8 +65,6 @@ def _sync_tags_for_manga(
     ]
     bulk_add_tags_to_manga(db, link_values)
 
-    return
-
 
 def _sync_authors_for_manga(
     db: Session,
@@ -70,7 +77,7 @@ def _sync_authors_for_manga(
     """
     uncached = [
         name
-        for _, linked_names in manga_to_authors.items()
+        for linked_names in manga_to_authors.values()
         for name in linked_names
         if name not in author_cache
     ]
@@ -104,6 +111,10 @@ def _map_manga_to_tags(
     records: Sequence[NormalizedMangaRecord],
     external_id_to_manga_id: dict[str, uuid.UUID],
 ) -> dict[uuid.UUID, Sequence[NormalizedTag]]:
+    """Map each manga id to its tags.
+
+    Skips records with no tags instead of mapping them to an empty list.
+    """
     return {external_id_to_manga_id[r.external_id]: r.tags for r in records if r.tags}
 
 

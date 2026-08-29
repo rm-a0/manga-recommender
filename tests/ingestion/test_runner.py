@@ -38,7 +38,7 @@ def _record(external_id: str) -> NormalizedMangaRecord:
         authors=["Test Author"],
         status=None,
         description=None,
-        genres=None,
+        tags=None,
         published_date=None,
         raw_score=None,
         raw_scale_max=None,

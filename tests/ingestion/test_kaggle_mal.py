@@ -6,6 +6,7 @@ import pytest
 
 from manga_recommender.config import KaggleMalSettings
 from manga_recommender.db.models.manga import MangaStatus
+from manga_recommender.ingestion.base import NormalizedTag
 from manga_recommender.ingestion.extractors.kaggle_mal import KaggleMalExtractor
 
 CSV_FIELDS = [
@@ -172,10 +173,10 @@ def test_extract_authors_returns_empty_when_absent():
     assert extractor._extract_authors(_row(authors="")) == []
 
 
-# --- _extract_genres ---
+# --- _extract_tags ---
 
 
-def test_extract_genres_combines_genres_themes_and_demographics():
+def test_extract_tags_combines_genres_themes_and_demographics():
     extractor = _extractor()
     row = _row(
         genres="Action|Drama",
@@ -183,19 +184,32 @@ def test_extract_genres_combines_genres_themes_and_demographics():
         demographics="Seinen",
     )
 
-    assert extractor._extract_genres(row) == [
-        "Action",
-        "Drama",
-        "Psychological",
-        "Seinen",
+    assert extractor._extract_tags(row) == [
+        NormalizedTag(name="Action", category="Genre", rank=None, is_spoiler=False),
+        NormalizedTag(name="Drama", category="Genre", rank=None, is_spoiler=False),
+        NormalizedTag(
+            name="Psychological", category="Theme", rank=None, is_spoiler=False
+        ),
+        NormalizedTag(
+            name="Seinen", category="Demographic", rank=None, is_spoiler=False
+        ),
     ]
 
 
-def test_extract_genres_skips_empty_columns():
+def test_extract_tags_skips_empty_columns():
     extractor = _extractor()
     row = _row(genres="Action", themes="", demographics="")
 
-    assert extractor._extract_genres(row) == ["Action"]
+    assert extractor._extract_tags(row) == [
+        NormalizedTag(name="Action", category="Genre", rank=None, is_spoiler=False)
+    ]
+
+
+def test_extract_tags_returns_none_when_every_column_is_empty():
+    extractor = _extractor()
+    row = _row(genres="", themes="", demographics="")
+
+    assert extractor._extract_tags(row) is None
 
 
 # --- _extract_int / _extract_float ---
@@ -245,7 +259,18 @@ def test_to_record_maps_all_fields():
     assert record.status == MangaStatus.FINISHED
     assert record.published_date == datetime(1994, 12, 5, tzinfo=UTC)
     assert record.description == "A story."
-    assert record.genres == ["Award Winning", "Drama", "Psychological", "Seinen"]
+    assert record.tags == [
+        NormalizedTag(
+            name="Award Winning", category="Genre", rank=None, is_spoiler=False
+        ),
+        NormalizedTag(name="Drama", category="Genre", rank=None, is_spoiler=False),
+        NormalizedTag(
+            name="Psychological", category="Theme", rank=None, is_spoiler=False
+        ),
+        NormalizedTag(
+            name="Seinen", category="Demographic", rank=None, is_spoiler=False
+        ),
+    ]
     assert record.raw_score == 9.16
     assert record.raw_scale_max == 10.0
     assert record.votes_count == 116668

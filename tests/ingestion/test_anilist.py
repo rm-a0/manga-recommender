@@ -7,6 +7,7 @@ from aiolimiter import AsyncLimiter
 
 from manga_recommender.config import AniListSettings
 from manga_recommender.db.models.manga import MangaStatus
+from manga_recommender.ingestion.base import NormalizedTag
 from manga_recommender.ingestion.extractors.anilist import AnilistExtractor
 
 
@@ -25,6 +26,7 @@ def _media(
     description: str | None = "<p>A story about <b>things</b>.</p>",
     start_date: dict | None = None,
     genres: list[str] | None = None,
+    tags: list[dict] | None = None,
     status: str = "RELEASING",
     average_score: float | None = 80.0,
     staff_edges: list[dict] | None = None,
@@ -37,6 +39,7 @@ def _media(
         "description": description,
         "startDate": start_date,
         "genres": genres if genres is not None else ["Action"],
+        "tags": tags if tags is not None else [],
         "status": status,
         "averageScore": average_score,
         "staff": {
@@ -185,6 +188,38 @@ def test_extract_published_date_returns_none_when_start_date_missing():
     assert extractor._extract_published_date(media) is None
 
 
+# --- _extract_tags ---
+
+
+@pytest.mark.parametrize("flag", ["isGeneralSpoiler", "isMediaSpoiler"])
+def test_extract_tags_marks_a_spoiler_from_either_flag(flag: str):
+    """Both AniList flags hide a tag, so the stored one is their union."""
+    extractor = _extractor()
+    tag = {
+        "name": "Time Skip",
+        "rank": 40,
+        "category": "Technical",
+        "isMediaSpoiler": False,
+        "isGeneralSpoiler": False,
+    }
+    tag[flag] = True
+
+    tags = extractor._extract_tags(_media(genres=[], tags=[tag]))
+
+    assert tags == [
+        NormalizedTag(name="Time Skip", category="Technical", rank=40, is_spoiler=True)
+    ]
+
+
+def test_extract_tags_returns_none_without_tags_or_genres():
+    extractor = _extractor()
+
+    assert extractor._extract_tags(_media(genres=[], tags=[])) is None
+
+
+# --- _to_record ---
+
+
 def test_to_record_converts_media_to_normalized_record():
     extractor = _extractor()
     media = _media(
@@ -192,6 +227,15 @@ def test_to_record_converts_media_to_normalized_record():
         mal_id=100,
         title="Vagabond",
         genres=["Action", "Drama"],
+        tags=[
+            {
+                "name": "Historical",
+                "rank": 88,
+                "category": "Setting-Time",
+                "isMediaSpoiler": False,
+                "isGeneralSpoiler": False,
+            }
+        ],
         average_score=91.0,
     )
 
@@ -202,7 +246,13 @@ def test_to_record_converts_media_to_normalized_record():
     assert record.title == "Vagabond"
     assert record.authors == ["Author One"]
     assert record.status == MangaStatus.ONGOING
-    assert record.genres == ["Action", "Drama"]
+    assert record.tags == [
+        NormalizedTag(
+            name="Historical", category="Setting-Time", rank=88, is_spoiler=False
+        ),
+        NormalizedTag(name="Action", category="Genre", rank=None, is_spoiler=False),
+        NormalizedTag(name="Drama", category="Genre", rank=None, is_spoiler=False),
+    ]
     assert record.raw_score == 91.0
     assert record.raw_scale_max == 100.0
     assert record.votes_count == 10
