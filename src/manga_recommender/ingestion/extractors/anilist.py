@@ -12,7 +12,11 @@ from aiolimiter import AsyncLimiter
 
 from manga_recommender.config import get_anilist_settings
 from manga_recommender.db.models.manga import MangaStatus
-from manga_recommender.ingestion.base import BaseExtractor, NormalizedMangaRecord
+from manga_recommender.ingestion.base import (
+    BaseExtractor,
+    NormalizedMangaRecord,
+    NormalizedTag,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -42,7 +46,13 @@ class AnilistExtractor(BaseExtractor):
                     }
                 }
                 stats { scoreDistribution { score amount } }
-                tags { name rank category isMediaSpoiler }
+                tags { 
+                    name
+                    rank
+                    category
+                    isMediaSpoiler
+                    isGeneralSpoiler
+                }
             }
         }
     }
@@ -153,6 +163,37 @@ class AnilistExtractor(BaseExtractor):
         }
         return [amounts_by_score.get((i + 1) * 10, 0) for i in range(10)]
 
+    def _extract_tags(self, media: dict) -> list[NormalizedTag] | None:
+        """Return the media's tags and genres as one list, or None if it has neither.
+
+        Tags come first, so a genre that normalizes onto a tag keeps AniList's
+        own category instead of the synthesized one.
+        """
+        tags = media["tags"]
+        genres = media["genres"]
+        if not tags and not genres:
+            return None
+        return [
+            *(
+                NormalizedTag(
+                    name=tag["name"],
+                    category=tag["category"],
+                    rank=tag["rank"],
+                    is_spoiler=tag["isGeneralSpoiler"] or tag["isMediaSpoiler"],
+                )
+                for tag in tags
+            ),
+            *(
+                NormalizedTag(
+                    name=genre,
+                    category="Genre",  # Not an API value
+                    rank=None,
+                    is_spoiler=False,
+                )
+                for genre in genres
+            ),
+        ]
+
     def _to_record(self, media: dict) -> NormalizedMangaRecord:
         """Convert a raw AniList media object into a NormalizedMangaRecord."""
         return NormalizedMangaRecord(
@@ -163,7 +204,7 @@ class AnilistExtractor(BaseExtractor):
             status=self._extract_status(media),
             published_date=self._extract_published_date(media),
             description=self._extract_description(media),
-            genres=media["genres"],
+            tags=self._extract_tags(media),
             raw_score=media["averageScore"],
             raw_scale_max=100.0,
             votes_count=self._extract_votes_count(media),

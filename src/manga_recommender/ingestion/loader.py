@@ -7,11 +7,11 @@ import structlog
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.repositories.authors import bulk_get_or_create_authors
-from manga_recommender.db.repositories.genres import bulk_get_or_create_genres
+from manga_recommender.db.repositories.tags import bulk_get_or_create_tags
 from manga_recommender.db.repositories.manga import (
     MangaUpsertValues,
     bulk_add_authors_to_manga,
-    bulk_add_genres_to_manga,
+    bulk_add_tags_to_manga,
     bulk_update_or_create_manga,
 )
 from manga_recommender.db.repositories.manga_external_rating import (
@@ -51,21 +51,6 @@ def _sync_links_for_manga(
         if name in cache
     ]
     write_links(db, pairs)
-
-
-def _map_manga_to_genres(
-    records: Sequence[NormalizedMangaRecord],
-    external_id_to_manga_id: dict[str, uuid.UUID],
-) -> dict[uuid.UUID, Sequence[str]]:
-    """Map each manga id to its lowercased genre names.
-
-    Skips records with no genres instead of mapping them to an empty list.
-    """
-    return {
-        external_id_to_manga_id[r.external_id]: [g.lower() for g in r.genres]
-        for r in records
-        if r.genres
-    }
 
 
 def _map_manga_to_authors(

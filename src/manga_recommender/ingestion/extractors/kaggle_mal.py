@@ -1,5 +1,6 @@
 """Extractor that pulls manga data from the Kaggle MAL dataset."""
 
+from annotationlib import call_annotate_function
 import csv
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -8,7 +9,11 @@ import structlog
 
 from manga_recommender.config import get_kaggle_mal_settings
 from manga_recommender.db.models.manga import MangaStatus
-from manga_recommender.ingestion.base import BaseExtractor, NormalizedMangaRecord
+from manga_recommender.ingestion.base import (
+    BaseExtractor,
+    NormalizedMangaRecord,
+    NormalizedTag,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -23,6 +28,11 @@ class KaggleMalExtractor(BaseExtractor):
         "On Hiatus": MangaStatus.HIATUS,
         "Discontinued": MangaStatus.CANCELLED,
     }
+    TAG_COLUMNS = (
+        ("genres", "Genre"),
+        ("themes", "Theme"),
+        ("demographics", "Demographic"),
+    )
 
     def __init__(self):
         """Initialize the Kaggle MAL extractor."""
@@ -50,12 +60,21 @@ class KaggleMalExtractor(BaseExtractor):
         """Return the row's author names, without repeats."""
         return list(dict.fromkeys(self._split_pipe(row.get("authors", ""))))
 
-    def _extract_genres(self, row: dict[str, str]) -> list[str] | None:
+    def _extract_tags(self, row: dict[str, str]) -> list[NormalizedTag] | None:
         """Return the row's genres, themes, and demographics as one tag list."""
-        genres = self._split_pipe(row.get("genres", ""))
-        genres.extend(self._split_pipe(row.get("themes", "")))
-        genres.extend(self._split_pipe(row.get("demographics", "")))
-        return genres
+        tags = [
+            NormalizedTag(
+                name=name,
+                category=category,
+                rank=None,
+                is_spoiler=False,
+            )
+            for col, category in self.TAG_COLUMNS
+            for name in self._split_pipe(row.get(col, ""))
+        ]
+        if not tags:
+            return None
+        return tags
 
     def _extract_int(self, value: str) -> int | None:
         """Parse an integer, returning None for an empty string."""
@@ -85,7 +104,7 @@ class KaggleMalExtractor(BaseExtractor):
             status=self._extract_status(row),
             published_date=self._extract_published_date(row),
             description=row.get("synopsis") or None,
-            genres=self._extract_genres(row),
+            tags=self._extract_tags(row),
             raw_score=self._extract_float(row.get("score", "")),
             raw_scale_max=10.0,
             votes_count=self._extract_int(row.get("scored_by", "")),
