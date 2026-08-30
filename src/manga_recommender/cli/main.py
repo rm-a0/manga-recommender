@@ -3,8 +3,10 @@
 from typing import Annotated
 
 import typer
+import uvicorn
 
 from manga_recommender.core.config import (
+    get_api_settings,
     get_app_settings,
     get_ingestion_settings,
     get_logging_settings,
@@ -47,8 +49,15 @@ def ingest(
 
 @app.command(name="app")
 def start_app() -> None:
-    """Start the FastAPI application. Not implemented yet."""
-    raise NotImplementedError("Starting the FastAPI app is not implemented yet.")
+    """Start the FastAPI application with uvicorn."""
+    settings = get_api_settings()
+    # Pass the import string, not the app object: uvicorn re-imports it per
+    # worker process, which `--workers` and `--reload` both need.
+    uvicorn.run(
+        "manga_recommender.api.main:app",
+        host=settings.host,
+        port=settings.port,
+    )
 
 
 if __name__ == "__main__":

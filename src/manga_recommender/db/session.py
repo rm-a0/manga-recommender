@@ -30,3 +30,16 @@ def session_scope() -> Generator[Session, None, None]:
         raise
     finally:
         session.close()
+
+
+def get_db() -> Generator[Session, None, None]:
+    """Yield a request-scoped session and close it afterward.
+
+    Does not commit. Read paths need no transaction, and a write path should
+    commit explicitly.
+    """
+    session = get_session_factory()()
+    try:
+        yield session
+    finally:
+        session.close()

@@ -2,12 +2,15 @@
 
 import functools
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AppSettings(BaseSettings):
     """General application settings."""
 
+    title: str = "manga-rec"
+    version: str = "0.1.0"
     env: str = "development"
     debug: bool = True
 
@@ -32,12 +35,34 @@ class LoggingSettings(BaseSettings):
 class DatabaseSettings(BaseSettings):
     """Database connection settings."""
 
+    use_pooled: bool = False
     url: str = "postgresql://postgres:password@localhost:5432/mydb"
-    url_pooled: str = "postgresql://postgres:password@localhost:6543/mydb"
+    url_pooled: str | None = None
+    pool_size: int = 5
+    max_overflow: int = 10
+    statement_timeout: int | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="DB_", env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
+
+    @model_validator(mode="after")
+    def _require_pooled_url(self) -> "DatabaseSettings":
+        """Reject `use_pooled` when no pooled URL is configured to connect to."""
+        if self.use_pooled and not self.url_pooled:
+            raise ValueError("DB_USE_POOLED is true but DB_URL_POOLED is not set")
+        return self
+
+    @property
+    def effective_url(self) -> str:
+        """Return the URL the application connects with.
+
+        Migrations and ingestion read `url` directly instead. Both need the
+        direct connection, which a transaction pooler cannot give them.
+        """
+        if self.use_pooled and self.url_pooled:
+            return self.url_pooled
+        return self.url
 
 
 class APISettings(BaseSettings):

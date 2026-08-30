@@ -148,7 +148,7 @@ ingestion is a separate, offline job (see below) and is never run in this
 container, so there's no shared-entrypoint reason to route the container
 through the CLI. Since the FastAPI app itself isn't built yet (see above),
 `make stack` will start Postgres fine but the `app` container currently fails to
-import its (not-yet-existing) `manga_recommender.main:app` - expected until
+import its (not-yet-existing) `manga_recommender.api.main:app` - expected until
 that module exists.
 
 ## Tests and Postgres
@@ -166,8 +166,11 @@ Supabase or the local dev database. Requires Docker to be running locally.
 1. Push your repo to GitHub
 2. Create a new Railway project → "Deploy from GitHub repo"
 3. In Railway dashboard: **Variables → Add all variables from `.env.example`**
-   - Set `DB_URL` to the **pooled** Supabase URL (handles connection limits)
-   - Set `DB_URL_POOLED` to the same pooled URL
+   - Set `DB_URL` to the **direct** Supabase URL — `alembic upgrade head` runs on
+     every deploy and needs it (see [Database migrations](#database-migrations))
+   - Set `DB_URL_POOLED` to the **pooled** (transaction pooler) URL
+   - Set `DB_USE_POOLED=true` so the API serves through the pooler while
+     migrations keep using the direct connection
    - Set `APP_ENV=production` and `APP_DEBUG=false`
 4. Railway reads `railway.toml` automatically — no further config needed
 5. Every `git push` to `main` triggers a new deploy:
@@ -180,17 +183,32 @@ Supabase or the local dev database. Requires Docker to be running locally.
 manga-recommender/
 │
 ├── src/manga_recommender/
-│   ├── __main__.py             # CLI entry point
-│   ├── cli.py                  # Typer app: `ingest`, `app` (not implemented)
-│   ├── config.py                # Settings loaded from .env via pydantic-settings
-│   ├── logging_config.py        # structlog + stdlib logging setup
+│   ├── __main__.py             # `python -m manga_recommender` shim -> cli.main
+│   │
+│   ├── api/                    # HTTP layer - the only place FastAPI is imported
+│   │   ├── main.py              # create_app() + the ASGI `app` object
+│   │   ├── router.py            # aggregates routes/ into one APIRouter
+│   │   ├── dependencies.py      # HTTP-shaped Depends (DbSession, pagination)
+│   │   ├── errors.py            # maps domain exceptions -> HTTP responses
+│   │   └── routes/              # One module per resource; HTTP only, no SQL
+│   │
+│   ├── cli/
+│   │   └── main.py              # Typer app: `ingest`, `app`
+│   │
+│   ├── core/                   # Cross-cutting infrastructure
+│   │   ├── config.py            # Settings loaded from .env via pydantic-settings
+│   │   └── logging_config.py    # structlog + stdlib logging setup
 │   │
 │   ├── db/
 │   │   ├── base.py              # Declarative Base + shared column helpers
-│   │   ├── engine.py, session.py  # SQLAlchemy engine/session factory
-│   │   ├── models/              # One ORM model per file (manga, genres, authors,
+│   │   ├── engine.py            # Cached SQLAlchemy engine
+│   │   ├── session.py           # Session factory; session_scope + get_db
+│   │   ├── models/              # One ORM model per file (manga, tags, authors,
 │   │   │                          sources, manga_external_ratings, users)
 │   │   └── repositories/        # Data-access functions, one module per model
+│   │
+│   ├── schemas/                # Pydantic request/response models, one per resource
+│   ├── services/               # Business logic - no HTTP, no SQL strings
 │   │
 │   └── ingestion/
 │       ├── base.py              # BaseExtractor ABC, NormalizedMangaRecord
@@ -211,15 +229,25 @@ manga-recommender/
 └── uv.lock                      # Commit this — pins exact versions
 ```
 
-Not built yet: the FastAPI `api`/`services` layer (routers, business logic — no HTTP,
-no SQL strings) and the recommendation engine itself.
+**Layering rule.** Each layer talks only to the one below it: `routes` parse HTTP and
+call a service or repository; `services` hold business logic and never import FastAPI;
+`repositories` are the only place SQL lives. Definitions live with the layer they
+belong to — `get_db` sits in `db/session.py` beside `session_scope`, and `api/` holds
+only the adapter to HTTP.
+
+Not built yet: everything under `api/`, `schemas/`, and `services/`, plus the
+recommendation engine itself.
 
 ## Environment variable reference
 
 | Variable | Required | Description |
 |---|---|---|
-| `DB_URL` | recommended | Direct Supabase connection — use for local dev and migrations |
-| `DB_URL_POOLED` | recommended | Supabase transaction pooler — use in production |
+| `DB_URL` | recommended | **Direct** connection — always used by migrations and ingestion |
+| `DB_URL_POOLED` | production | Transaction pooler — used by the API when `DB_USE_POOLED=true` |
+| `DB_USE_POOLED` | — | `true` routes the API through `DB_URL_POOLED` (default `false`) |
+| `DB_POOL_SIZE` | — | SQLAlchemy pool size (default `5`) |
+| `DB_MAX_OVERFLOW` | — | Connections allowed beyond the pool (default `10`) |
+| `DB_STATEMENT_TIMEOUT` | — | Milliseconds; unset inherits the server default, `0` disables it |
 | `APP_ENV` | — | `development` or `production` (default `development`) |
 | `APP_DEBUG` | — | `true` enables verbose errors (default `true`) |
 | `API_HOST` | — | Bind host — `0.0.0.0` for Docker/Railway (default `0.0.0.0`) |
@@ -232,7 +260,9 @@ no SQL strings) and the recommendation engine itself.
 | `INGESTION_BATCH_SIZE` | — | Records per `load_batch` transaction (default `50`) |
 | `KAGGLE_MAL_PATH` | — | Path to the Kaggle MAL CSV (default `data/kaggle_mal_2026.csv`) |
 
-Every variable has a fallback in `config.py`, so none are strictly required to boot —
-`DB_URL`/`DB_URL_POOLED` are marked "recommended" because the fallback points at a
-placeholder local Postgres, not a real database. `SECRET_KEY`/`CORS_ORIGINS` aren't
-listed because auth and CORS aren't implemented yet.
+Every variable has a fallback in `core/config.py`, so none are strictly required to boot —
+`DB_URL` is marked "recommended" because the fallback points at a placeholder local
+Postgres, not a real database. `DB_URL_POOLED` has no fallback: setting
+`DB_USE_POOLED=true` without it fails at startup rather than silently connecting
+direct. `SECRET_KEY`/`CORS_ORIGINS` aren't listed because auth and CORS aren't
+implemented yet.
