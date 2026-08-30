@@ -31,6 +31,7 @@ def _media(
     average_score: float | None = 80.0,
     staff_edges: list[dict] | None = None,
     score_distribution: list[dict] | None = None,
+    cover_image_url: str | None = "https://cdn.test/cover-large.jpg",
 ) -> dict:
     return {
         "id": media_id,
@@ -52,6 +53,7 @@ def _media(
             if score_distribution is not None
             else [{"score": 10, "amount": 3}, {"score": 90, "amount": 7}]
         },
+        "coverImage": {"large": cover_image_url},
     }
 
 
@@ -217,6 +219,35 @@ def test_extract_tags_returns_none_without_tags_or_genres():
     assert extractor._extract_tags(_media(genres=[], tags=[])) is None
 
 
+# --- _extract_image_url ---
+
+
+def test_extract_image_url_returns_the_large_cover():
+    extractor = _extractor()
+    media = _media(cover_image_url="https://cdn.test/vagabond.jpg")
+
+    assert extractor._extract_image_url(media) == "https://cdn.test/vagabond.jpg"
+
+
+def test_extract_image_url_returns_none_when_large_is_null():
+    extractor = _extractor()
+
+    assert extractor._extract_image_url(_media(cover_image_url=None)) is None
+
+
+def test_extract_image_url_returns_none_when_cover_image_is_missing():
+    extractor = _extractor()
+
+    assert extractor._extract_image_url({}) is None
+
+
+def test_extract_image_url_returns_none_when_cover_image_is_null():
+    """AniList sends a null `coverImage`, not an absent key, when there is no cover."""
+    extractor = _extractor()
+
+    assert extractor._extract_image_url({"coverImage": None}) is None
+
+
 # --- _to_record ---
 
 
@@ -259,6 +290,7 @@ def test_to_record_converts_media_to_normalized_record():
     assert record.score_distribution == [3, 0, 0, 0, 0, 0, 0, 0, 7, 0]
     assert record.published_date is None
     assert record.description == "A story about things."
+    assert record.image_url == "https://cdn.test/cover-large.jpg"
     assert record.fetched_at is not None
 
 

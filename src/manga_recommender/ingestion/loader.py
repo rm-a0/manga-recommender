@@ -138,6 +138,7 @@ def load_batch(
                     title=r.title,
                     published_date=r.published_date,
                     description=r.description,
+                    image_url=r.image_url,
                     status=r.status,
                     external_id=r.external_id,
                     votes_count=r.votes_count,

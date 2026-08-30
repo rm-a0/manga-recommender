@@ -32,6 +32,7 @@ class MangaUpsertValues(TypedDict):
     published_date: datetime | None
     description: str | None
     status: MangaStatus | None
+    image_url: str | None
 
 
 class TagLinkValues(TypedDict):
@@ -50,6 +51,7 @@ def create_manga(
     title: str,
     published_date: datetime | None = None,
     description: str | None = None,
+    image_url: str | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
     """Create and persist a new manga."""
@@ -58,6 +60,7 @@ def create_manga(
         title=title,
         published_date=published_date,
         description=description,
+        image_url=image_url,
         status=status,
     )
     db.add(db_manga)
@@ -74,6 +77,7 @@ def get_or_create_manga(
     title: str,
     published_date: datetime | None = None,
     description: str | None = None,
+    image_url: str | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
     """Return the matching manga, creating it if none exists.
@@ -93,6 +97,7 @@ def get_or_create_manga(
         title=title,
         published_date=published_date,
         description=description,
+        image_url=image_url,
         status=status,
     )
 
@@ -105,6 +110,7 @@ def update_manga(
     title: str | None = None,
     published_date: datetime | None = None,
     description: str | None = None,
+    image_url: str | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
     """Update the given manga's fields and persist the changes.
@@ -116,6 +122,7 @@ def update_manga(
         "title": title,
         "published_date": published_date,
         "description": description,
+        "image_url": image_url,
         "status": status,
     }
     for attr, value in updates.items():
@@ -134,6 +141,7 @@ def update_or_create_manga(
     title: str,
     published_date: datetime | None = None,
     description: str | None = None,
+    image_url: str | None = None,
     status: MangaStatus | None = None,
 ) -> Manga:
     """Update the matching manga if one exists, otherwise create it.
@@ -153,6 +161,7 @@ def update_or_create_manga(
             title=title,
             published_date=published_date,
             description=description,
+            image_url=image_url,
             status=status,
         )
     return create_manga(
@@ -161,6 +170,7 @@ def update_or_create_manga(
         title=title,
         published_date=published_date,
         description=description,
+        image_url=image_url,
         status=status,
     )
 
@@ -231,6 +241,7 @@ def _bulk_upsert_without_mal_id(
             title=record["title"],
             published_date=record["published_date"],
             description=record["description"],
+            image_url=record["image_url"],
             status=record["status"],
         )
         id_map[record["external_id"]] = manga_id.id
@@ -275,6 +286,7 @@ def _bulk_upsert_with_mal_id(
             "title": record["title"],
             "published_date": record["published_date"],
             "description": record["description"],
+            "image_url": record["image_url"],
             "status": record["status"],
         }
         for record in _pick_canonical_by_votes(records)
@@ -290,6 +302,7 @@ def _bulk_upsert_with_mal_id(
             "description": func.coalesce(
                 insert_stmt.excluded.description, Manga.description
             ),
+            "image_url": func.coalesce(insert_stmt.excluded.image_url, Manga.image_url),
             "status": func.coalesce(insert_stmt.excluded.status, Manga.status),
         },
     ).returning(Manga.mal_id, Manga.id)

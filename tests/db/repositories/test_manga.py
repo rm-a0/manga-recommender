@@ -20,6 +20,7 @@ def test_create_manga_persists_given_fields(db_session: Session) -> None:
         mal_id=1,
         title="One Piece",
         description="A boy sets out to become the Pirate King.",
+        image_url="https://cdn.test/one-piece.jpg",
         status=MangaStatus.ONGOING,
     )
 
@@ -27,6 +28,7 @@ def test_create_manga_persists_given_fields(db_session: Session) -> None:
     assert manga.mal_id == 1
     assert manga.title == "One Piece"
     assert manga.description == "A boy sets out to become the Pirate King."
+    assert manga.image_url == "https://cdn.test/one-piece.jpg"
     assert manga.status == MangaStatus.ONGOING
 
 
@@ -36,6 +38,7 @@ def test_create_manga_defaults_optional_fields_to_none(db_session: Session) -> N
     assert manga.mal_id is None
     assert manga.published_date is None
     assert manga.description is None
+    assert manga.image_url is None
     assert manga.status is None
 
 
@@ -76,6 +79,33 @@ def test_update_manga_updates_description(db_session: Session) -> None:
 
     assert updated.description == "Updated description."
     assert updated.title == "Chainsaw Man"
+
+
+def test_update_manga_updates_image_url(db_session: Session) -> None:
+    manga = create_manga(
+        db_session,
+        title="Chainsaw Man",
+        image_url="https://cdn.test/old.jpg",
+    )
+
+    updated = update_manga(db_session, manga, image_url="https://cdn.test/new.jpg")
+
+    assert updated.image_url == "https://cdn.test/new.jpg"
+
+
+def test_update_manga_keeps_an_image_url_the_caller_omits(
+    db_session: Session,
+) -> None:
+    """`update_manga` skips None, so an omitted cover never clears the stored one."""
+    manga = create_manga(
+        db_session,
+        title="Chainsaw Man",
+        image_url="https://cdn.test/old.jpg",
+    )
+
+    updated = update_manga(db_session, manga, title="Chainsaw Man: Part 2")
+
+    assert updated.image_url == "https://cdn.test/old.jpg"
 
 
 def test_update_manga_with_no_args_changes_nothing(db_session: Session) -> None:

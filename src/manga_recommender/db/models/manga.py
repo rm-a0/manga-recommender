@@ -34,6 +34,7 @@ class Manga(Base):
     title: Mapped[str] = mapped_column()
     published_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     description: Mapped[str | None] = mapped_column()
+    image_url: Mapped[str | None] = mapped_column()
     status: Mapped[MangaStatus | None] = mapped_column(
         Enum(MangaStatus, name="manga_status", values_callable=enum_values)
     )

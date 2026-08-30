@@ -23,6 +23,7 @@ CSV_FIELDS = [
     "themes",
     "demographics",
     "synopsis",
+    "image_url",
 ]
 
 
@@ -47,6 +48,7 @@ def _row(
     themes: str = "Adult Cast|Psychological",
     demographics: str = "Seinen",
     synopsis: str = "A neurosurgeon hunts the monster he once saved.",
+    image_url: str = "https://myanimelist.net/images/manga/3/258224.jpg",
 ) -> dict[str, str]:
     return {
         "mal_id": mal_id,
@@ -62,6 +64,7 @@ def _row(
         "themes": themes,
         "demographics": demographics,
         "synopsis": synopsis,
+        "image_url": image_url,
     }
 
 
@@ -248,6 +251,7 @@ def test_to_record_maps_all_fields():
         themes="Psychological",
         demographics="Seinen",
         synopsis="A story.",
+        image_url="https://myanimelist.net/images/manga/3/258224.jpg",
     )
 
     record = extractor._to_record(row)
@@ -259,6 +263,7 @@ def test_to_record_maps_all_fields():
     assert record.status == MangaStatus.FINISHED
     assert record.published_date == datetime(1994, 12, 5, tzinfo=UTC)
     assert record.description == "A story."
+    assert record.image_url == "https://myanimelist.net/images/manga/3/258224.jpg"
     assert record.tags == [
         NormalizedTag(
             name="Award Winning", category="Genre", rank=None, is_spoiler=False
@@ -292,6 +297,12 @@ def test_to_record_maps_empty_synopsis_to_none():
     extractor = _extractor()
 
     assert extractor._to_record(_row(synopsis="")).description is None
+
+
+def test_to_record_maps_empty_image_url_to_none():
+    extractor = _extractor()
+
+    assert extractor._to_record(_row(image_url="")).image_url is None
 
 
 # --- extract (full stream through the sync bridge) ---

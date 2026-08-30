@@ -64,6 +64,7 @@ def _record(
     authors: list[str] | None = None,
     raw_score: float | None = None,
     votes_count: int | None = 100,
+    image_url: str | None = None,
 ) -> NormalizedMangaRecord:
     return NormalizedMangaRecord(
         external_id=external_id,
@@ -79,6 +80,7 @@ def _record(
         votes_count=votes_count,
         score_distribution=None,
         fetched_at=datetime.now(UTC),
+        image_url=image_url,
     )
 
 
@@ -247,6 +249,43 @@ class TestLoadBatch:
         manga = get_manga_by_mal_id(patched_session_scope, 202)
         assert manga is not None
         assert manga.title == "New Title"
+
+    def test_persists_the_image_url(
+        self, patched_session_scope: Session, test_source: Source
+    ) -> None:
+        load_batch(
+            [_record("1", mal_id=808, image_url="https://cdn.test/808.jpg")],
+            test_source.id,
+            tag_cache={},
+            author_cache={},
+        )
+
+        manga = get_manga_by_mal_id(patched_session_scope, 808)
+        assert manga is not None
+        assert manga.image_url == "https://cdn.test/808.jpg"
+
+    def test_keeps_an_image_url_a_later_batch_omits(
+        self, patched_session_scope: Session, test_source: Source
+    ) -> None:
+        """A source without cover art must not blank one another source gave."""
+        load_batch(
+            [_record("1", mal_id=809, image_url="https://cdn.test/809.jpg")],
+            test_source.id,
+            tag_cache={},
+            author_cache={},
+        )
+
+        load_batch(
+            [_record("1", mal_id=809, title="Second Pass", image_url=None)],
+            test_source.id,
+            tag_cache={},
+            author_cache={},
+        )
+
+        manga = get_manga_by_mal_id(patched_session_scope, 809)
+        assert manga is not None
+        assert manga.title == "Second Pass"
+        assert manga.image_url == "https://cdn.test/809.jpg"
 
     def test_shares_the_tag_cache_across_calls(
         self, patched_session_scope: Session, test_source: Source

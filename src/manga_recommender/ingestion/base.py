@@ -41,6 +41,7 @@ class NormalizedMangaRecord:
     votes_count: int | None
     score_distribution: list[int] | None
     fetched_at: datetime
+    image_url: str | None
 
 
 class BaseExtractor(ABC):

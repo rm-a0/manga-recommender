@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: 6a32263ab208
+Revision ID: 258f0f1bf92c
 Revises:
-Create Date: 2026-08-29 23:39:37.293505
+Create Date: 2026-08-30 11:33:12.245114
 
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "6a32263ab208"
+revision: str = "258f0f1bf92c"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -38,6 +38,7 @@ def upgrade() -> None:
         sa.Column("title", sa.String(), nullable=False),
         sa.Column("published_date", sa.DateTime(timezone=True), nullable=True),
         sa.Column("description", sa.String(), nullable=True),
+        sa.Column("image_url", sa.String(), nullable=True),
         sa.Column(
             "status",
             sa.Enum(

@@ -53,6 +53,7 @@ class AnilistExtractor(BaseExtractor):
                     isMediaSpoiler
                     isGeneralSpoiler
                 }
+                coverImage { large }
             }
         }
     }
@@ -194,6 +195,13 @@ class AnilistExtractor(BaseExtractor):
             ),
         ]
 
+    def _extract_image_url(self, media: dict) -> str | None:
+        """Return the large cover image URL, or None if the media has no cover."""
+        image_url = (media.get("coverImage") or {}).get("large")
+        if not image_url:
+            return None
+        return image_url
+
     def _to_record(self, media: dict) -> NormalizedMangaRecord:
         """Convert a raw AniList media object into a NormalizedMangaRecord."""
         return NormalizedMangaRecord(
@@ -210,6 +218,7 @@ class AnilistExtractor(BaseExtractor):
             votes_count=self._extract_votes_count(media),
             score_distribution=self._extract_score_distribution(media),
             fetched_at=datetime.now(UTC),
+            image_url=self._extract_image_url(media),
         )
 
     async def _retry(

@@ -109,6 +109,7 @@ class KaggleMalExtractor(BaseExtractor):
             votes_count=self._extract_int(row.get("scored_by", "")),
             score_distribution=None,
             fetched_at=datetime.now(UTC),
+            image_url=row.get("image_url") or None,
         )
 
     async def _stream(self) -> AsyncIterator[NormalizedMangaRecord]:
