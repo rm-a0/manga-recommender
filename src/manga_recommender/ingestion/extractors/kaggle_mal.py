@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import structlog
 
-from manga_recommender.config import get_kaggle_mal_settings
+from manga_recommender.core.config import get_kaggle_mal_settings
 from manga_recommender.db.models.manga import MangaStatus
 from manga_recommender.ingestion.base import (
     BaseExtractor,

@@ -1,7 +1,7 @@
 import pytest
 from typer.testing import CliRunner
 
-from manga_recommender import cli
+from manga_recommender.cli import main as cli
 
 runner = CliRunner()
 

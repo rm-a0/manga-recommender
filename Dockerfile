@@ -34,10 +34,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
 # never run in this container, so there's no shared-entrypoint reason to route
 # through `manga_recommender`'s Typer app here.
 #
-# Placeholder module path: update `manga_recommender.main:app` once the
+# Placeholder module path: update `manga_recommender.api.main:app` once the
 # FastAPI app object actually exists (see README - not built yet).
 #
 # Invokes the baked venv's binary directly - `uv run uvicorn ...` would
 # otherwise re-sync (pulling in dev deps and re-resolving against
 # `.python-version`) on every container start, undoing --no-dev.
-CMD ["/app/.venv/bin/uvicorn", "manga_recommender.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/.venv/bin/uvicorn", "manga_recommender.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

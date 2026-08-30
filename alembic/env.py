@@ -3,7 +3,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-from manga_recommender.config import get_database_settings
+from manga_recommender.core.config import get_database_settings
 from manga_recommender.db.base import Base
 from manga_recommender.db.models import (  # noqa: F401
     manga,

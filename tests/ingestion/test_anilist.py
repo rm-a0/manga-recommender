@@ -5,7 +5,7 @@ import httpx
 import pytest
 from aiolimiter import AsyncLimiter
 
-from manga_recommender.config import AniListSettings
+from manga_recommender.core.config import AniListSettings
 from manga_recommender.db.models.manga import MangaStatus
 from manga_recommender.ingestion.base import NormalizedTag
 from manga_recommender.ingestion.extractors.anilist import AnilistExtractor

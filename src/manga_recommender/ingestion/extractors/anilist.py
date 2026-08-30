@@ -10,7 +10,7 @@ import httpx
 import structlog
 from aiolimiter import AsyncLimiter
 
-from manga_recommender.config import get_anilist_settings
+from manga_recommender.core.config import get_anilist_settings
 from manga_recommender.db.models.manga import MangaStatus
 from manga_recommender.ingestion.base import (
     BaseExtractor,
