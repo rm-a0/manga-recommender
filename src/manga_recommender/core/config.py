@@ -57,8 +57,8 @@ class DatabaseSettings(BaseSettings):
     def effective_url(self) -> str:
         """Return the URL the application connects with.
 
-        Migrations and ingestion read `url` directly instead. Both need the
-        direct connection, which a transaction pooler cannot give them.
+        Migrations and ingestion read `url` directly instead. Both need
+        session-level features, which a transaction pooler cannot give them.
         """
         if self.use_pooled and self.url_pooled:
             return self.url_pooled

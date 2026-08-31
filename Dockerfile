@@ -26,16 +26,13 @@ RUN uv sync --no-dev --frozen --no-cache
 
 EXPOSE 8000
 
-# Healthcheck so Railway / Docker knows when the app is ready.
+# Healthcheck for local Docker runs. Container Apps uses its own probes.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Runs uvicorn directly, not via the CLI - ingest is a separate offline job,
 # never run in this container, so there's no shared-entrypoint reason to route
 # through `manga_recommender`'s Typer app here.
-#
-# Placeholder module path: update `manga_recommender.api.main:app` once the
-# FastAPI app object actually exists (see README - not built yet).
 #
 # Invokes the baked venv's binary directly - `uv run uvicorn ...` would
 # otherwise re-sync (pulling in dev deps and re-resolving against
