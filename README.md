@@ -49,7 +49,7 @@ uv run alembic current                                             # check curre
 uv run alembic downgrade -1                                        # roll back one
 ```
 
-> Migrations run automatically on Railway before the app starts (see `railway.toml`).
+> Migrations run automatically on every deploy (see `.github/workflows/cd.yml`).
 > For local development, run them manually.
 
 ## Ingestion pipeline
@@ -118,7 +118,8 @@ uv add --group ml torch         # ML dep
 ## Docker
 
 The Docker image contains only **base dependencies** - no dev tools, no ML libs,
-no data files. Production still deploys against Supabase (via Railway); the
+no data files. Production still deploys against Supabase (via Azure Container
+Apps); the
 container itself is stateless.
 
 ```bash
@@ -161,21 +162,64 @@ runs Alembic migrations automatically before any test runs. Just `uv run
 pytest` / `make test` - no `make db-up` step needed, and nothing ever touches
 Supabase or the local dev database. Requires Docker to be running locally.
 
-## Deployment (Railway)
+## Deployment (Azure Container Apps)
 
-1. Push your repo to GitHub
-2. Create a new Railway project → "Deploy from GitHub repo"
-3. In Railway dashboard: **Variables → Add all variables from `.env.example`**
-   - Set `DB_URL` to the **direct** Supabase URL — `alembic upgrade head` runs on
-     every deploy and needs it (see [Database migrations](#database-migrations))
-   - Set `DB_URL_POOLED` to the **pooled** (transaction pooler) URL
-   - Set `DB_USE_POOLED=true` so the API serves through the pooler while
-     migrations keep using the direct connection
-   - Set `APP_ENV=production` and `APP_DEBUG=false`
-4. Railway reads `railway.toml` automatically — no further config needed
-5. Every `git push` to `main` triggers a new deploy:
-   `build image → run alembic upgrade head → start API`. If migrations fail, the
-   deploy is aborted and the previous version stays live.
+The API runs on Azure Container Apps. Postgres stays on Supabase. Every push to
+`main` deploys automatically through `.github/workflows/cd.yml`:
+
+```
+build image -> push to GHCR -> alembic upgrade head -> az containerapp update -> smoke test /ready
+```
+
+Migrations run from the GitHub Actions runner, not from the container start
+command. The app scales to zero, so replicas start unpredictably and several
+could otherwise run Alembic at the same time.
+
+### Supabase connection strings
+
+Use the **session pooler**: host `aws-0-<region>.pooler.supabase.com`, port
+`5432`, user `postgres.<project-ref>`.
+
+- The **direct** connection (`db.<project-ref>.supabase.co`) is IPv6-only.
+  Container Apps has no outbound IPv6 and fails with `Cannot assign requested
+  address`.
+- The **transaction pooler** (port `6543`) cannot run migrations. Alembic needs
+  DDL and session-level locks.
+
+The pooler user needs the project ref appended. Copying only the host across from
+the direct connection string does not work.
+
+### Required GitHub configuration
+
+Under Settings -> Environments -> `production`:
+
+| Kind | Name | Purpose |
+|------|------|---------|
+| secret | `AZURE_CLIENT_ID` | App registration used by `azure/login` |
+| secret | `AZURE_TENANT_ID` | Entra tenant |
+| secret | `AZURE_SUBSCRIPTION_ID` | Target subscription |
+| secret | `DB_URL` | Session pooler URL, for the migration step |
+| variable | `APP_FQDN` | Container app hostname, for the smoke test |
+
+Azure authentication uses OIDC federated credentials, so no client secret is
+stored. The credential subject is
+`repo:rm-a0/manga-recommender:environment:production` and must match the job's
+`environment: name`.
+
+### Azure resources
+
+| Resource | Name |
+|----------|------|
+| Resource group | `rg-manga-rec` |
+| Container apps environment | `cae-manga-rec` |
+| Container app | `manga-rec-api` |
+| Region | `germanywestcentral` |
+
+An allowed-locations policy on the subscription fixes the region. Scale is min 0
+/ max 2 replicas, so the first request after an idle period pays a cold start.
+
+The image at `ghcr.io/rm-a0/manga-recommender` must stay **public**. The
+container app pulls anonymously, with no registry credentials configured.
 
 ## Project structure
 
@@ -225,7 +269,7 @@ manga-recommender/
 ├── Dockerfile
 ├── Makefile
 ├── pyproject.toml               # All deps and tool config live here
-├── railway.toml                 # Railway deploy config
+├── .github/workflows/           # ci.yml gates merges, cd.yml deploys main
 └── uv.lock                      # Commit this — pins exact versions
 ```
 
@@ -235,14 +279,14 @@ call a service or repository; `services` hold business logic and never import Fa
 belong to — `get_db` sits in `db/session.py` beside `session_scope`, and `api/` holds
 only the adapter to HTTP.
 
-Not built yet: everything under `api/`, `schemas/`, and `services/`, plus the
-recommendation engine itself.
+Not built yet: everything under `services/`, plus the recommendation engine
+itself. `api/` currently serves only the probes.
 
 ## Environment variable reference
 
 | Variable | Required | Description |
 |---|---|---|
-| `DB_URL` | recommended | **Direct** connection — always used by migrations and ingestion |
+| `DB_URL` | recommended | Direct or **session pooler** — always used by migrations and ingestion |
 | `DB_URL_POOLED` | production | Transaction pooler — used by the API when `DB_USE_POOLED=true` |
 | `DB_USE_POOLED` | — | `true` routes the API through `DB_URL_POOLED` (default `false`) |
 | `DB_POOL_SIZE` | — | SQLAlchemy pool size (default `5`) |
@@ -250,7 +294,7 @@ recommendation engine itself.
 | `DB_STATEMENT_TIMEOUT` | — | Milliseconds; unset inherits the server default, `0` disables it |
 | `APP_ENV` | — | `development` or `production` (default `development`) |
 | `APP_DEBUG` | — | `true` enables verbose errors (default `true`) |
-| `API_HOST` | — | Bind host — `0.0.0.0` for Docker/Railway (default `0.0.0.0`) |
+| `API_HOST` | — | Bind host — `0.0.0.0` for Docker/Container Apps (default `0.0.0.0`) |
 | `API_PORT` | — | Bind port (default `8000`) |
 | `LOGGING_LEVEL` | — | Log level, e.g. `INFO`/`DEBUG` (default `INFO`) |
 | `ANILIST_REQUESTS_PER_MINUTE` | — | AniList rate limit budget (default `30`) |

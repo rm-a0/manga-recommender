@@ -20,8 +20,6 @@ def create_app() -> FastAPI:
         debug=app_settings.debug,
         version=app_settings.version,
     )
-    # Probes stay unversioned at the root: `railway.toml` points its healthcheck
-    # at `/health`, and they should not move with an API version.
     app.include_router(probes.router)
     return app
 
