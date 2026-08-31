@@ -46,7 +46,9 @@ def run_ingestion(sources: list[str], batch_size: int) -> None:
             logger.info("ingestion_started", source=source)
             source_id = seed_source(source)
             extractor = get_extractor_for_source(source)
-            for batch in itertools.batched(extractor.extract(), batch_size):
+            for batch in itertools.batched(
+                extractor.extract(), batch_size, strict=False
+            ):
                 start_time = time.monotonic()
                 try:
                     load_batch(batch, source_id, tag_cache, author_cache)

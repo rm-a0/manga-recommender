@@ -36,6 +36,6 @@ class Author(Base):
 
     name: Mapped[str] = mapped_column()
     normalized_name: Mapped[str] = mapped_column(unique=True, index=True)
-    manga: Mapped[list["Manga"]] = relationship(
+    manga: Mapped[list[Manga]] = relationship(
         secondary=manga_authors, back_populates="authors"
     )

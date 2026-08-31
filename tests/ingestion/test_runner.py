@@ -14,7 +14,7 @@ from manga_recommender.ingestion.base import NormalizedMangaRecord
 @pytest.fixture
 def patched_session_scope(
     monkeypatch: pytest.MonkeyPatch, db_session: Session
-) -> Generator[Session, None, None]:
+) -> Generator[Session]:
     """Point `runner.session_scope` at the rolled-back test session.
 
     `seed_source` opens its own `session_scope()` against the real engine, which

@@ -10,7 +10,7 @@ from manga_recommender.db.session import get_db
 
 
 @pytest.fixture
-def client(db_session: Session) -> Generator[TestClient, None, None]:
+def client(db_session: Session) -> Generator[TestClient]:
     """Yield a client whose requests share the rolled-back test session.
 
     Builds a fresh app per test, so one test's dependency overrides never
@@ -23,7 +23,7 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
 
 
 @pytest.fixture
-def client_with_broken_db() -> Generator[TestClient, None, None]:
+def client_with_broken_db() -> Generator[TestClient]:
     """Yield a client whose database session raises on every query."""
 
     class _BrokenSession:

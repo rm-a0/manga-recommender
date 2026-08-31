@@ -47,7 +47,7 @@ class DatabaseSettings(BaseSettings):
     )
 
     @model_validator(mode="after")
-    def _require_pooled_url(self) -> "DatabaseSettings":
+    def _require_pooled_url(self) -> DatabaseSettings:
         """Reject `use_pooled` when no pooled URL is configured to connect to."""
         if self.use_pooled and not self.url_pooled:
             raise ValueError("DB_USE_POOLED is true but DB_URL_POOLED is not set")

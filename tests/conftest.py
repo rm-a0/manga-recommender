@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).parent.parent
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _test_database() -> Generator[None, None, None]:
+def _test_database() -> Generator[None]:
     """Spin up an ephemeral Postgres container and migrate it to head.
 
     Runs once per test session, before any test touches the database.
@@ -33,7 +33,7 @@ def _test_database() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def db_session() -> Generator[Session, None, None]:
+def db_session() -> Generator[Session]:
     """Yield a session whose writes never survive the test.
 
     Binds the session to a connection wrapped in an outer transaction, and

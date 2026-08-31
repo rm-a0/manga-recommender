@@ -2,7 +2,7 @@
 name = "manga-recommender"
 version = "0.1.0"
 description = "Manga recommendation engine"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 
 dependencies = [
     # Web framework
@@ -73,7 +73,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 88
 
 [tool.ruff.lint]
@@ -89,7 +89,7 @@ quote-style = "double"
 "tests/**" = ["D"] # tests documented by their names
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 strict = false # flip to true once the codebase is stable
 ignore_missing_imports = true
 

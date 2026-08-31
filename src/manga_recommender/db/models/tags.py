@@ -46,6 +46,6 @@ class Tag(Base):
     name: Mapped[str] = mapped_column()
     normalized_name: Mapped[str] = mapped_column(unique=True, index=True)
     category: Mapped[str | None] = mapped_column()
-    manga: Mapped[list["Manga"]] = relationship(
+    manga: Mapped[list[Manga]] = relationship(
         secondary=manga_tags, back_populates="tags"
     )

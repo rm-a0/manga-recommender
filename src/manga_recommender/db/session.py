@@ -16,7 +16,7 @@ def get_session_factory() -> sessionmaker[Session]:
 
 
 @contextmanager
-def session_scope() -> Generator[Session, None, None]:
+def session_scope() -> Generator[Session]:
     """Yield a session, committing on success and rolling back on error.
 
     Always closes the session afterward.
@@ -32,7 +32,7 @@ def session_scope() -> Generator[Session, None, None]:
         session.close()
 
 
-def get_db() -> Generator[Session, None, None]:
+def get_db() -> Generator[Session]:
     """Yield a request-scoped session and close it afterward.
 
     Does not commit. Read paths need no transaction, and a write path should

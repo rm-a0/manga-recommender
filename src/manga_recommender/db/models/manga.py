@@ -38,15 +38,13 @@ class Manga(Base):
     status: Mapped[MangaStatus | None] = mapped_column(
         Enum(MangaStatus, name="manga_status", values_callable=enum_values)
     )
-    tags: Mapped[list["Tag"]] = relationship(
-        secondary=manga_tags, back_populates="manga"
-    )
-    authors: Mapped[list["Author"]] = relationship(
+    tags: Mapped[list[Tag]] = relationship(secondary=manga_tags, back_populates="manga")
+    authors: Mapped[list[Author]] = relationship(
         secondary=manga_authors, back_populates="manga"
     )
     # passive_deletes lets the database's ON DELETE CASCADE remove the child
     # rows. Without it, SQLAlchemy loads and deletes each one separately.
-    external_ratings: Mapped[list["MangaExternalRating"]] = relationship(
+    external_ratings: Mapped[list[MangaExternalRating]] = relationship(
         back_populates="manga",
         cascade="all, delete-orphan",
         passive_deletes=True,

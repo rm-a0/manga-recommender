@@ -34,6 +34,6 @@ class MangaExternalRating(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     raw_score: Mapped[float | None] = mapped_column()
     score_distribution: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))
-    manga: Mapped["Manga"] = relationship(back_populates="external_ratings")
+    manga: Mapped[Manga] = relationship(back_populates="external_ratings")
 
     __table_args__ = (UniqueConstraint("source_id", "external_id"),)

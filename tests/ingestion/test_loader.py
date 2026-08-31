@@ -29,7 +29,7 @@ from manga_recommender.ingestion.loader import (
 @pytest.fixture
 def patched_session_scope(
     monkeypatch: pytest.MonkeyPatch, db_session: Session
-) -> Generator[Session, None, None]:
+) -> Generator[Session]:
     """Point `loader.session_scope` at the rolled-back test session.
 
     `load_batch` opens its own `session_scope()` against the real engine,
