@@ -23,7 +23,7 @@ test: ## Run the test suite
 
 lint: ## Check formatting and lint rules
 	uv run ruff check .
-	uv run ruff fromat --check .
+	uv run ruff format --check .
 
 format: ## Auto-format code
 	uv run ruff format .
