@@ -3,16 +3,22 @@
 from fastapi import FastAPI
 
 from manga_recommender.api.routes import probes
-from manga_recommender.core.config import get_app_settings
+from manga_recommender.core.config import get_app_settings, get_logging_settings
+from manga_recommender.core.logging_config import configure_logging
 
 
 def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
-    settings = get_app_settings()
+    app_settings = get_app_settings()
+    log_settings = get_logging_settings()
+    configure_logging(
+        level=log_settings.level,
+        debug=app_settings.debug,
+    )
     app = FastAPI(
-        title=settings.title,
-        debug=settings.debug,
-        version=settings.version,
+        title=app_settings.title,
+        debug=app_settings.debug,
+        version=app_settings.version,
     )
     # Probes stay unversioned at the root: `railway.toml` points its healthcheck
     # at `/health`, and they should not move with an API version.
