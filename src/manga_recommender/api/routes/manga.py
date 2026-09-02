@@ -2,15 +2,12 @@
 
 import uuid
 
-import structlog
 from fastapi import APIRouter, HTTPException, status
 
 from manga_recommender.api.dependencies import DbSession, Pagination
 from manga_recommender.schemas.common import Page
 from manga_recommender.schemas.manga import MangaDetail, MangaSummary
 from manga_recommender.services.manga import get_manga_detail, get_manga_page
-
-logger = structlog.get_logger(__name__)
 
 router: APIRouter = APIRouter(prefix="/manga", tags=["manga"])
 
