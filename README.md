@@ -42,6 +42,9 @@ uv run python -m manga_recommender app                        # serve the API
 | `GET /ready` | Readiness. One entry per checked dependency |
 | `GET /manga` | One page of manga summaries (`limit`, `offset`) |
 | `GET /manga/{manga_id}` | One manga in full, or 404 |
+| `GET /authors` | One page of author summaries (`limit`, `offset`) |
+| `GET /authors/{author_id}` | One author in full, or 404 |
+| `GET /authors/{author_id}/manga` | One page of that author's manga (`limit`, `offset`) |
 
 Interactive docs are at `/docs` once the server is up.
 
@@ -241,7 +244,7 @@ manga-recommender/
 │   │   ├── main.py              # create_app() + the ASGI `app` object
 │   │   ├── dependencies.py      # HTTP-shaped Depends (DbSession, Pagination)
 │   │   └── routes/              # One module per resource; HTTP only, no SQL
-│   │                              (probes, manga)
+│   │                              (probes, manga, authors)
 │   │
 │   ├── cli/
 │   │   └── main.py              # Typer app: `ingest`, `app`
@@ -287,14 +290,29 @@ FastAPI; `repositories` are the only place SQL lives. Definitions live with the 
 belong to — `get_db` sits in `db/session.py` beside `session_scope`, and `api/` holds
 only the adapter to HTTP.
 
-The manga resource is live end to end — route, service, repository. Schemas name
-the payload shape rather than the endpoint: `MangaSummary` for a list item,
-`MangaDetail` for one resource, with `Page[T]` in `schemas/common.py` wrapping any
-paginated list.
+The manga and authors resources are live end to end — route, service, repository.
+Schemas name the payload shape rather than the endpoint: `MangaSummary` for a list
+item, `MangaDetail` for one resource, with `Page[T]` in `schemas/common.py` wrapping
+any paginated list. A third form, `<Parent><Child>`, appears only where the link
+between two resources carries data of its own — `MangaTag` holds the `rank` and
+`is_spoiler` that describe the manga-tag link rather than the tag itself.
 
-Not built yet: the authors and tags resources, and the recommendation engine
-itself. Domain exceptions map to HTTP inside each route for now; a shared
-`api/errors.py` is worth adding once several routes raise the same failure.
+Two rules keep the schema modules importable in any order:
+
+- **Embedding points from detail to summary, never the reverse**, so a module never
+  has to import the module that imports it. A summary holds only cheap fields,
+  because one page can carry up to a hundred of them.
+- **A relationship unbounded in one direction gets its own endpoint**, not a field.
+  An author's manga is `GET /authors/{author_id}/manga`; `AuthorDetail` carries only
+  `manga_count`, which costs one extra query and so stays out of the list response.
+
+That sub-collection answers `200` with an empty page for an author ID that matches
+no row, where `GET /authors/{author_id}` answers `404` — a collection that is empty
+is not a collection that is missing.
+
+Not built yet: the tags resource, and the recommendation engine itself. Domain
+exceptions map to HTTP inside each route for now; a shared `api/errors.py` is worth
+adding once several routes raise the same failure.
 
 ## Environment variable reference
 
