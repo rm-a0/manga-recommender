@@ -38,5 +38,5 @@ Planned work, not yet scheduled.
 
 ## Not built yet
 
-- The authors and tags resources: schemas, services and routes.
+- The tags resource: schemas, services and routes.
 - The recommendation engine, including semantic search over descriptions.
