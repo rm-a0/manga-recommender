@@ -1,9 +1,14 @@
+import uuid
+
 import pytest
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.repositories.authors import (
     bulk_get_or_create_authors,
+    count_authors,
     create_author,
+    get_all_authors,
+    get_author_by_id,
     get_author_by_name,
     get_or_create_author,
     normalize_author_name,
@@ -43,6 +48,82 @@ def test_get_or_create_author_creates_when_missing(db_session: Session) -> None:
 
     assert author.id is not None
     assert get_author_by_name(db_session, "horror") is not None
+
+
+# --- get_author_by_id ---
+
+
+def test_get_author_by_id_returns_matching_author(db_session: Session) -> None:
+    created = create_author(db_session, name="Kentaro Miura")
+
+    found = get_author_by_id(db_session, created.id)
+
+    assert found is not None
+    assert found.id == created.id
+    assert found.name == "Kentaro Miura"
+
+
+def test_get_author_by_id_returns_none_when_missing(db_session: Session) -> None:
+    assert get_author_by_id(db_session, uuid.uuid4()) is None
+
+
+# --- get_all_authors ---
+
+
+def test_get_all_authors_orders_by_name(db_session: Session) -> None:
+    for name in ("Naoki Urasawa", "Akira Toriyama", "Junji Ito"):
+        create_author(db_session, name=name)
+
+    found = get_all_authors(db_session, limit=10, offset=0)
+
+    assert [a.name for a in found] == [
+        "Akira Toriyama",
+        "Junji Ito",
+        "Naoki Urasawa",
+    ]
+
+
+def test_get_all_authors_pages_without_repeating_or_skipping(
+    db_session: Session,
+) -> None:
+    """Offset paging is only stable when the query orders deterministically."""
+    created = {
+        create_author(db_session, name=name).id
+        for name in ("Akira Toriyama", "Junji Ito", "Naoki Urasawa", "Q Hayashida")
+    }
+
+    first = get_all_authors(db_session, limit=2, offset=0)
+    second = get_all_authors(db_session, limit=2, offset=2)
+
+    assert len(first) == 2
+    assert len(second) == 2
+    assert {a.id for a in first}.isdisjoint({a.id for a in second})
+    assert {a.id for a in first} | {a.id for a in second} == created
+
+
+def test_get_all_authors_returns_empty_past_the_last_page(db_session: Session) -> None:
+    create_author(db_session, name="Kentaro Miura")
+
+    assert get_all_authors(db_session, limit=10, offset=10) == []
+
+
+# --- count_authors ---
+
+
+def test_count_authors_counts_every_row_not_only_a_page(db_session: Session) -> None:
+    assert count_authors(db_session) == 0
+    for name in ("Akira Toriyama", "Junji Ito", "Naoki Urasawa"):
+        create_author(db_session, name=name)
+
+    assert count_authors(db_session) == 3
+
+
+def test_count_authors_counts_merged_spellings_once(db_session: Session) -> None:
+    """One person written two ways is one row, so one count."""
+    get_or_create_author(db_session, name="Inoue, Takehiko")
+    get_or_create_author(db_session, name="Takehiko Inoue")
+
+    assert count_authors(db_session) == 1
 
 
 # --- normalize_author_name ---
