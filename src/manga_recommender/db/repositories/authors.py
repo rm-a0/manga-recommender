@@ -5,11 +5,36 @@ import unicodedata
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import and_, case, not_, select
+from sqlalchemy import and_, case, func, not_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.authors import Author
+
+
+def get_author_by_id(db: Session, author_id: uuid.UUID) -> Author | None:
+    """Return the author with the given ID, or None if not found."""
+    return db.scalar(select(Author).where(Author.id == author_id))
+
+
+def get_all_authors(
+    db: Session,
+    *,
+    limit: int,
+    offset: int,
+) -> Sequence[Author]:
+    """Return one page of authors, ordered by name."""
+    return db.scalars(
+        select(Author).order_by(Author.name, Author.id).offset(offset).limit(limit)
+    ).all()
+
+
+def count_authors(db: Session) -> int:
+    """Return the number of author rows."""
+    count = db.scalar(select(func.count()).select_from(Author))
+    if not count:
+        return 0
+    return count
 
 
 def normalize_author_name(name: str) -> str:

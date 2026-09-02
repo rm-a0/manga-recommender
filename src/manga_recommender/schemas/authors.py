@@ -10,3 +10,16 @@ class AuthorSummary(BaseModel):
 
     id: uuid.UUID
     name: str
+
+
+class AuthorDetail(BaseModel):
+    """An author as it appears in a single-resource response.
+
+    Adds `manga_count`, which costs one extra query per author and so is
+    kept out of the list response. The manga themselves are their own
+    endpoint, because one author can credit hundreds of them.
+    """
+
+    id: uuid.UUID
+    name: str
+    manga_count: int
