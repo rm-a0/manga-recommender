@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from manga_recommender.api.routes import manga, probes
+from manga_recommender.api.routes import authors, manga, probes
 from manga_recommender.core.config import get_app_settings, get_logging_settings
 from manga_recommender.core.logging_config import configure_logging
 
@@ -22,6 +22,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(probes.router)
     app.include_router(manga.router)
+    app.include_router(authors.router)
     return app
 
 

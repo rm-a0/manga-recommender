@@ -52,6 +52,41 @@ class TagLink(NamedTuple):
     is_spoiler: bool
 
 
+def get_manga_by_author_id(
+    db: Session,
+    author_id: uuid.UUID,
+    *,
+    limit: int,
+    offset: int,
+) -> Sequence[Manga]:
+    """Return one page of manga credited to one author, ordered by title.
+
+    `Manga.id` breaks ties, so a manga cannot repeat across pages or fall
+    between them when two share a title.
+    """
+    return db.scalars(
+        select(Manga)
+        .join(manga_authors, Manga.id == manga_authors.c.manga_id)
+        .where(manga_authors.c.author_id == author_id)
+        .order_by(Manga.title, Manga.id)
+        .offset(offset)
+        .limit(limit)
+        .options(selectinload(Manga.authors))
+    ).all()
+
+
+def count_manga_by_author_id(db: Session, author_id: uuid.UUID) -> int:
+    """Return the number of manga credited to one author."""
+    count = db.scalar(
+        select(func.count(Manga.id))
+        .join(manga_authors, Manga.id == manga_authors.c.manga_id)
+        .where(manga_authors.c.author_id == author_id)
+    )
+    if not count:
+        return 0
+    return count
+
+
 def get_manga_tag_links(db: Session, manga_id: uuid.UUID) -> Sequence[TagLink]:
     """Return the tag links for one manga, highest rank first.
 

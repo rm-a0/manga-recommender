@@ -9,7 +9,9 @@ from manga_recommender.db.models.manga import Manga
 from manga_recommender.db.repositories.manga import (
     TagLink,
     count_manga,
+    count_manga_by_author_id,
     get_all_manga,
+    get_manga_by_author_id,
     get_manga_by_id,
     get_manga_tag_links,
 )
@@ -82,6 +84,29 @@ def get_manga_page(
     return Page(
         items=[_to_summary(m) for m in get_all_manga(db, limit=limit, offset=offset)],
         total=count_manga(db),
+        limit=limit,
+        offset=offset,
+    )
+
+
+def get_manga_page_by_author_id(
+    db: Session,
+    author_id: uuid.UUID,
+    *,
+    limit: int,
+    offset: int,
+) -> Page[MangaSummary]:
+    """Return one page of the manga credited to one author.
+
+    `total` counts every manga credited to that author, not the items on
+    this page. An author with no credits gives an empty page.
+    """
+    return Page(
+        items=[
+            _to_summary(m)
+            for m in get_manga_by_author_id(db, author_id, limit=limit, offset=offset)
+        ],
+        total=count_manga_by_author_id(db, author_id),
         limit=limit,
         offset=offset,
     )
