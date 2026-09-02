@@ -25,8 +25,18 @@ Planned work, not yet scheduled.
 - Add `role` to `manga_authors` once something needs Story separate from Art.
 - Revisit `delete_orphaned_manga`'s predicate if a source ever supplies
   descriptions without ratings.
+- Canonical display names for tags. `normalize_tag_name` folds case, accents and
+  punctuation, so the stored `name` is whichever spelling a source wrote first
+  ("Sci-Fi" vs "Sci Fi"). Needs a display map keyed on `normalized_name`, applied
+  at upsert. The vocabulary is closed (~150 tags), so a backfill fixes existing
+  rows — no re-ingest.
+- Better display names for authors. `_is_better_display_name` only prefers a
+  spelling without a comma, so casing and accents fall to whichever arrived first
+  ("Kohei" beating "Kōhei", "CLAMP" flattened by an ALL-CAPS-first source). Needs
+  richer rules, or `Source.weight` as the tiebreak. Needs a re-ingest either way:
+  only the winning spelling is stored, so the alternatives are already gone.
 
 ## Not built yet
 
-- FastAPI routers and services.
+- The authors and tags resources: schemas, services and routes.
 - The recommendation engine, including semantic search over descriptions.

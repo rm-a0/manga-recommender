@@ -28,14 +28,22 @@ cp .env.example .env
 
 ## Running the app locally
 
-The CLI is wired up. The FastAPI app itself isn't built yet — `app` currently just
-raises `NotImplementedError`.
+Both CLI commands are wired up. `app` starts uvicorn on `API_HOST:API_PORT`.
 
 ```bash
 uv run python -m manga_recommender ingest --source anilist    # run ingestion
 uv run python -m manga_recommender ingest --source kaggle_mal # the other source
-uv run python -m manga_recommender app                        # not implemented yet
+uv run python -m manga_recommender app                        # serve the API
 ```
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Liveness. Touches no dependency |
+| `GET /ready` | Readiness. One entry per checked dependency |
+| `GET /manga` | One page of manga summaries (`limit`, `offset`) |
+| `GET /manga/{manga_id}` | One manga in full, or 404 |
+
+Interactive docs are at `/docs` once the server is up.
 
 ## Database migrations
 
@@ -231,10 +239,9 @@ manga-recommender/
 │   │
 │   ├── api/                    # HTTP layer - the only place FastAPI is imported
 │   │   ├── main.py              # create_app() + the ASGI `app` object
-│   │   ├── router.py            # aggregates routes/ into one APIRouter
-│   │   ├── dependencies.py      # HTTP-shaped Depends (DbSession, pagination)
-│   │   ├── errors.py            # maps domain exceptions -> HTTP responses
+│   │   ├── dependencies.py      # HTTP-shaped Depends (DbSession, Pagination)
 │   │   └── routes/              # One module per resource; HTTP only, no SQL
+│   │                              (probes, manga)
 │   │
 │   ├── cli/
 │   │   └── main.py              # Typer app: `ingest`, `app`
@@ -252,6 +259,7 @@ manga-recommender/
 │   │   └── repositories/        # Data-access functions, one module per model
 │   │
 │   ├── schemas/                # Pydantic request/response models, one per resource
+│   │                              (common Page[T], probes, manga, authors)
 │   ├── services/               # Business logic - no HTTP, no SQL strings
 │   │
 │   └── ingestion/
@@ -274,13 +282,19 @@ manga-recommender/
 ```
 
 **Layering rule.** Each layer talks only to the one below it: `routes` parse HTTP and
-call a service or repository; `services` hold business logic and never import FastAPI;
-`repositories` are the only place SQL lives. Definitions live with the layer they
+call a service, never a repository; `services` hold business logic and never import
+FastAPI; `repositories` are the only place SQL lives. Definitions live with the layer they
 belong to — `get_db` sits in `db/session.py` beside `session_scope`, and `api/` holds
 only the adapter to HTTP.
 
-Not built yet: everything under `services/`, plus the recommendation engine
-itself. `api/` currently serves only the probes.
+The manga resource is live end to end — route, service, repository. Schemas name
+the payload shape rather than the endpoint: `MangaSummary` for a list item,
+`MangaDetail` for one resource, with `Page[T]` in `schemas/common.py` wrapping any
+paginated list.
+
+Not built yet: the authors and tags resources, and the recommendation engine
+itself. Domain exceptions map to HTTP inside each route for now; a shared
+`api/errors.py` is worth adding once several routes raise the same failure.
 
 ## Environment variable reference
 
