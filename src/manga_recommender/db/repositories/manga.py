@@ -3,16 +3,16 @@
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
-from typing import TypedDict
+from typing import NamedTuple, TypedDict
 
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from manga_recommender.db.models.authors import Author, manga_authors
 from manga_recommender.db.models.manga import Manga, MangaStatus
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
-from manga_recommender.db.models.tags import manga_tags
+from manga_recommender.db.models.tags import Tag, manga_tags
 
 
 class MangaUpsertValues(TypedDict):
@@ -42,6 +42,70 @@ class TagLinkValues(TypedDict):
     tag_id: uuid.UUID
     rank: int | None
     is_spoiler: bool
+
+
+class TagLink(NamedTuple):
+    """One manga-tag link: the tag, plus the attributes of the link itself."""
+
+    tag: Tag
+    rank: int | None
+    is_spoiler: bool
+
+
+def get_manga_tag_links(db: Session, manga_id: uuid.UUID) -> Sequence[TagLink]:
+    """Return the tag links for one manga, highest rank first.
+
+    A link with no rank sorts last. A NULL rank means the source asserts the
+    tag but gives it no weight.
+    """
+    stmt = (
+        select(Tag, manga_tags.c.rank, manga_tags.c.is_spoiler)
+        .join(manga_tags, Tag.id == manga_tags.c.tag_id)
+        .where(manga_tags.c.manga_id == manga_id)
+        .order_by(manga_tags.c.rank.desc().nullslast())
+    )
+    return [TagLink(tag=t, rank=r, is_spoiler=s) for t, r, s in db.execute(stmt)]
+
+
+def get_manga_by_id(
+    db: Session,
+    manga_id: uuid.UUID,
+) -> Manga | None:
+    """Return the manga with the given ID, or None if not found.
+
+    Loads authors. Tags come from get_manga_tag_links, which also reads the
+    rank and spoiler flag off the link row.
+    """
+    return db.scalar(
+        select(Manga).where(Manga.id == manga_id).options(selectinload(Manga.authors))
+    )
+
+
+def get_all_manga(
+    db: Session,
+    *,
+    limit: int,
+    offset: int,
+) -> Sequence[Manga]:
+    """Return one page of manga, ordered by title.
+
+    Loads authors, because the list response needs the author names.
+    """
+    return db.scalars(
+        select(Manga)
+        .order_by(Manga.title, Manga.id)
+        .offset(offset)
+        .limit(limit)
+        .options(selectinload(Manga.authors))
+    ).all()
+
+
+def count_manga(db: Session) -> int:
+    """Return the number of manga rows."""
+    count = db.scalar(select(func.count()).select_from(Manga))
+    if not count:
+        return 0
+    return count
 
 
 def create_manga(
