@@ -2,17 +2,32 @@
 
 import uuid
 from collections.abc import Sequence
-from datetime import datetime
-from typing import NamedTuple, TypedDict
+from dataclasses import dataclass
+from datetime import date, datetime
+from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
 
-from sqlalchemy import delete, exists, func, select
+from sqlalchemy import ColumnElement, Select, delete, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import (
+    InstrumentedAttribute,
+    Session,
+    selectinload,
+)
 
 from manga_recommender.db.models.authors import Author, manga_authors
 from manga_recommender.db.models.manga import Manga, MangaStatus
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
 from manga_recommender.db.models.tags import Tag, manga_tags
+from manga_recommender.db.repositories.tags import normalize_tag_name
+
+if TYPE_CHECKING:
+    from manga_recommender.schemas.manga import MangaSort
+
+
+_SORT_COLUMNS: dict[str, InstrumentedAttribute[Any]] = {
+    "title": Manga.title,
+    "published_date": Manga.published_date,
+}
 
 
 class MangaUpsertValues(TypedDict):
@@ -50,6 +65,76 @@ class TagLink(NamedTuple):
     tag: Tag
     rank: int | None
     is_spoiler: bool
+
+
+@dataclass(frozen=True, slots=True)
+class MangaFilters:
+    """The WHERE clause of a manga list query, as one value."""
+
+    statuses: tuple[MangaStatus, ...] = ()
+    include_tag_keys: tuple[str, ...] = ()
+    require_all_tags: bool = False
+    exclude_tag_keys: tuple[str, ...] = ()
+    published_from: date | None = None
+    published_to: date | None = None
+
+
+def _has_tag(key: str) -> ColumnElement[bool]:
+    """Return a predicate that is true when a manga carries one tag."""
+    return (
+        select(1)
+        .select_from(manga_tags)
+        .join(Tag, Tag.id == manga_tags.c.tag_id)
+        .where(
+            manga_tags.c.manga_id == Manga.id,
+            Tag.normalized_name == normalize_tag_name(key),
+        )
+        .exists()
+    )
+
+
+def _tag_clauses(filters: MangaFilters) -> list[ColumnElement[bool]]:
+    """Return the tag predicates: include (ANY/ALL) plus exclusions."""
+    clauses: list[ColumnElement[bool]] = []
+    if filters.include_tag_keys:
+        if filters.require_all_tags:
+            clauses.extend(_has_tag(k) for k in filters.include_tag_keys)
+        else:
+            clauses.append(or_(*(_has_tag(k) for k in filters.include_tag_keys)))
+    clauses.extend(~_has_tag(k) for k in filters.exclude_tag_keys)
+    return clauses
+
+
+def _order_by(
+    sort: MangaSort,
+    descending: bool,
+) -> tuple[ColumnElement[Any], ...]:
+    """Return the ORDER BY terms, always ending in a unique tiebreaker.
+
+    `Manga.id` terminates every ordering, so a manga cannot repeat across
+    pages or fall between them when two share a sort value.
+    """
+    column = _SORT_COLUMNS[sort]
+    primary = (column.desc() if descending else column.asc()).nullslast()
+    return (primary, Manga.title.asc(), Manga.id.desc())
+
+
+def _filtered_manga(filters: MangaFilters) -> Select[tuple[Manga]]:
+    """Return the manga query with every filter applied, unordered.
+
+    The page query and the count query both build on this, so a filter
+    cannot reach one without reaching the other.
+    """
+    stmt = select(Manga)
+    if filters.statuses:
+        stmt = stmt.where(Manga.status.in_(filters.statuses))
+    for clause in _tag_clauses(filters):
+        stmt = stmt.where(clause)
+    if filters.published_from:
+        stmt = stmt.where(Manga.published_date >= filters.published_from)
+    if filters.published_to:
+        stmt = stmt.where(Manga.published_date < filters.published_to)
+    return stmt
 
 
 def get_manga_by_author_id(
@@ -149,26 +234,34 @@ def get_manga_by_id(
 
 def get_all_manga(
     db: Session,
+    filters: MangaFilters,
     *,
+    sort: MangaSort,
+    descending: bool,
     limit: int,
     offset: int,
 ) -> Sequence[Manga]:
-    """Return one page of manga, ordered by title.
+    """Return one page of manga matching the filters.
 
     Loads authors, because the list response needs the author names.
     """
     return db.scalars(
-        select(Manga)
-        .order_by(Manga.title, Manga.id)
+        _filtered_manga(filters)
+        .order_by(*_order_by(sort, descending))
         .offset(offset)
         .limit(limit)
         .options(selectinload(Manga.authors))
     ).all()
 
 
-def count_manga(db: Session) -> int:
-    """Return the number of manga rows."""
-    count = db.scalar(select(func.count()).select_from(Manga))
+def count_manga(db: Session, filters: MangaFilters) -> int:
+    """Return the number of manga matching the filters.
+
+    Counts every match, not the items on one page.
+    """
+    count = db.scalar(
+        select(func.count()).select_from(_filtered_manga(filters).subquery())
+    )
     return count or 0
 
 
