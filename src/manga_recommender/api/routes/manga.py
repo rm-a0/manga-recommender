@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 
-from manga_recommender.api.dependencies import DbSession, Pagination
+from manga_recommender.api.dependencies import DbSession, MangaQuery
 from manga_recommender.schemas.common import Page
 from manga_recommender.schemas.manga import MangaDetail, MangaSummary
 from manga_recommender.services.manga import get_manga_detail, get_manga_page
@@ -13,9 +13,9 @@ router: APIRouter = APIRouter(prefix="/manga", tags=["manga"])
 
 
 @router.get("", response_model=Page[MangaSummary])
-def list_manga(db: DbSession, page: Pagination) -> Page[MangaSummary]:
+def list_manga(db: DbSession, params: MangaQuery) -> Page[MangaSummary]:
     """Return one page of manga summaries."""
-    return get_manga_page(db, limit=page.limit, offset=page.offset)
+    return get_manga_page(db, params)
 
 
 @router.get("/{manga_id}", response_model=MangaDetail)

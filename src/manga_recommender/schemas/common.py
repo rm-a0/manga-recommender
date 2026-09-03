@@ -1,6 +1,15 @@
 """Request and response models shared by more than one resource."""
 
+from enum import StrEnum
+
 from pydantic import BaseModel, Field
+
+
+class SortOrder(StrEnum):
+    """Direction of a sorted list endpoint."""
+
+    ASC = "asc"
+    DESC = "desc"
 
 
 class PageParams(BaseModel):

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga import Manga
 from manga_recommender.db.repositories.manga import (
+    MangaFilters,
     TagLink,
     count_manga,
     count_manga_by_author_id,
@@ -18,8 +19,15 @@ from manga_recommender.db.repositories.manga import (
     get_manga_tag_links,
 )
 from manga_recommender.schemas.authors import AuthorSummary
-from manga_recommender.schemas.common import Page
-from manga_recommender.schemas.manga import MangaDetail, MangaSummary, MangaTag
+from manga_recommender.schemas.common import Page, SortOrder
+from manga_recommender.schemas.manga import (
+    MangaDetail,
+    MangaListParams,
+    MangaSort,
+    MangaSummary,
+    MangaTag,
+    TagMatch,
+)
 
 
 def _to_summary(manga: Manga) -> MangaSummary:
@@ -73,21 +81,43 @@ def _to_detail(manga: Manga, tag_links: Sequence[TagLink]) -> MangaDetail:
     )
 
 
-def get_manga_page(
-    db: Session,
-    *,
-    limit: int,
-    offset: int,
-) -> Page[MangaSummary]:
+def _to_filters(params: MangaListParams) -> MangaFilters:
+    """Map request vocabulary to storage vocabulary.
+
+    Tag names become normalized keys, because the tag table matches on
+    `normalized_name` rather than the spelling a source happened to write.
+    """
+    return MangaFilters(
+        statuses=tuple(params.status),
+        include_tag_keys=tuple(t for t in params.include_tag),
+        require_all_tags=params.tag_match is TagMatch.ALL,
+        exclude_tag_keys=tuple(params.exclude_tag),
+        published_from=params.published_from,
+        published_to=params.published_to,
+    )
+
+
+def get_manga_page(db: Session, params: MangaListParams) -> Page[MangaSummary]:
     """Return one page of manga summaries.
 
     `total` counts every manga, not the items on this page.
     """
+    filters = _to_filters(params)
     return Page(
-        items=[_to_summary(m) for m in get_all_manga(db, limit=limit, offset=offset)],
-        total=count_manga(db),
-        limit=limit,
-        offset=offset,
+        items=[
+            _to_summary(m)
+            for m in get_all_manga(
+                db,
+                filters,
+                sort=params.sort or MangaSort.TITLE,
+                descending=params.order is SortOrder.DESC,
+                limit=params.limit,
+                offset=params.offset,
+            )
+        ],
+        total=count_manga(db, filters),
+        limit=params.limit,
+        offset=params.offset,
     )
 
 

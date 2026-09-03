@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from manga_recommender.db.session import get_db
 from manga_recommender.schemas.common import PageParams
+from manga_recommender.schemas.manga import MangaListParams
 
 Pagination = Annotated[PageParams, Query()]
 DbSession = Annotated[Session, Depends(get_db)]
+MangaQuery = Annotated[MangaListParams, Query()]
