@@ -14,7 +14,9 @@ from manga_recommender.db.repositories.tags import (
     TagUpsertValues,
     bulk_get_or_create_tags,
     create_tag,
+    get_all_tags,
     get_or_create_tag,
+    get_tag_by_id,
     get_tag_by_name,
     normalize_tag_name,
 )
@@ -329,3 +331,57 @@ def test_bulk_add_tags_to_manga_tolerates_duplicate_links(db_session: Session) -
 
 def test_bulk_add_tags_to_manga_does_nothing_with_no_links(db_session: Session) -> None:
     bulk_add_tags_to_manga(db_session, [])
+
+
+# --- get_tag_by_id ---
+
+
+def test_get_tag_by_id_returns_matching_tag(db_session: Session) -> None:
+    created = create_tag(db_session, name="Mecha", category="Theme")
+
+    found = get_tag_by_id(db_session, created.id)
+
+    assert found is not None
+    assert found.id == created.id
+    assert found.name == "Mecha"
+
+
+def test_get_tag_by_id_returns_none_when_missing(db_session: Session) -> None:
+    assert get_tag_by_id(db_session, uuid.uuid4()) is None
+
+
+# --- get_all_tags ---
+
+
+def test_get_all_tags_orders_by_name(db_session: Session) -> None:
+    for name in ("Seinen", "Action", "Mecha"):
+        create_tag(db_session, name=name, category=None)
+
+    found = get_all_tags(db_session, limit=10, offset=0)
+
+    assert [t.name for t in found] == ["Action", "Mecha", "Seinen"]
+
+
+def test_get_all_tags_pages_without_repeating_or_skipping(
+    db_session: Session,
+) -> None:
+    created = {
+        create_tag(db_session, name=name, category=None).id
+        for name in ("Action", "Mecha", "Seinen", "Tragedy")
+    }
+
+    first = get_all_tags(db_session, limit=2, offset=0)
+    second = get_all_tags(db_session, limit=2, offset=2)
+
+    assert {t.id for t in first}.isdisjoint({t.id for t in second})
+    assert {t.id for t in first} | {t.id for t in second} == created
+
+
+def test_get_all_tags_returns_empty_past_the_last_page(db_session: Session) -> None:
+    create_tag(db_session, name="Action", category=None)
+
+    assert get_all_tags(db_session, limit=10, offset=10) == []
+
+
+def test_get_all_tags_returns_empty_with_no_tags(db_session: Session) -> None:
+    assert get_all_tags(db_session, limit=10, offset=0) == []
