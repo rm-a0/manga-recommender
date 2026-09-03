@@ -45,6 +45,9 @@ uv run python -m manga_recommender app                        # serve the API
 | `GET /authors` | One page of author summaries (`limit`, `offset`) |
 | `GET /authors/{author_id}` | One author in full, or 404 |
 | `GET /authors/{author_id}/manga` | One page of that author's manga (`limit`, `offset`) |
+| `GET /tags` | One page of tag summaries (`limit`, `offset`) |
+| `GET /tags/{tag_id}` | One tag in full, or 404 |
+| `GET /tags/{tag_id}/manga` | One page of the manga carrying that tag (`limit`, `offset`) |
 
 Interactive docs are at `/docs` once the server is up.
 
@@ -262,7 +265,7 @@ manga-recommender/
 │   │   └── repositories/        # Data-access functions, one module per model
 │   │
 │   ├── schemas/                # Pydantic request/response models, one per resource
-│   │                              (common Page[T], probes, manga, authors)
+│   │                              (common Page[T], probes, manga, authors, tags)
 │   ├── services/               # Business logic - no HTTP, no SQL strings
 │   │
 │   └── ingestion/
@@ -290,8 +293,8 @@ FastAPI; `repositories` are the only place SQL lives. Definitions live with the 
 belong to — `get_db` sits in `db/session.py` beside `session_scope`, and `api/` holds
 only the adapter to HTTP.
 
-The manga and authors resources are live end to end — route, service, repository.
-Schemas name the payload shape rather than the endpoint: `MangaSummary` for a list
+The manga, authors and tags resources are live end to end — route, service,
+repository. Schemas name the payload shape rather than the endpoint: `MangaSummary` for a list
 item, `MangaDetail` for one resource, with `Page[T]` in `schemas/common.py` wrapping
 any paginated list. A third form, `<Parent><Child>`, appears only where the link
 between two resources carries data of its own — `MangaTag` holds the `rank` and
@@ -308,9 +311,10 @@ Two rules keep the schema modules importable in any order:
 
 That sub-collection answers `200` with an empty page for an author ID that matches
 no row, where `GET /authors/{author_id}` answers `404` — a collection that is empty
-is not a collection that is missing.
+is not a collection that is missing. `GET /tags/{tag_id}/manga` follows the same
+rule.
 
-Not built yet: the tags resource, and the recommendation engine itself. Domain
+Not built yet: the recommendation engine itself. Domain
 exceptions map to HTTP inside each route for now; a shared `api/errors.py` is worth
 adding once several routes raise the same failure.
 

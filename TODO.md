@@ -36,7 +36,21 @@ Planned work, not yet scheduled.
   richer rules, or `Source.weight` as the tiebreak. Needs a re-ingest either way:
   only the winning spelling is stored, so the alternatives are already gone.
 
+## API
+
+- Filtering, sorting and search on `GET /manga`: `q`, `status`, `tag`, `tag_match`,
+  a `published_date` range, and `sort`/`order`. Build the filter clause once and
+  give it to both the page query and the count, so `total` cannot disagree with
+  `items`. Filter tags with a correlated `EXISTS` rather than a join, which keeps
+  a manga from repeating once per matching tag. Search lands as `ILIKE` first,
+  then `pg_trgm` behind the same parameter.
+- Sorting by score. `raw_score` sits on `manga_external_ratings` against a
+  per-source `raw_scale_max`, so ordering by it means normalizing and aggregating
+  per row. Needs a normalized score column on `manga`, written at ingest —
+  the same shape as the arbitration column the database section already wants.
+- An index on `manga.title`. Every page already pays a full sort for
+  `ORDER BY title OFFSET n`.
+
 ## Not built yet
 
-- The tags resource: schemas, services and routes.
 - The recommendation engine, including semantic search over descriptions.
