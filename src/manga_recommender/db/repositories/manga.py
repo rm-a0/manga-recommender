@@ -105,9 +105,7 @@ def count_manga_by_author_id(db: Session, author_id: uuid.UUID) -> int:
         .join(manga_authors, Manga.id == manga_authors.c.manga_id)
         .where(manga_authors.c.author_id == author_id)
     )
-    if not count:
-        return 0
-    return count
+    return count or 0
 
 
 def count_manga_by_tag_id(db: Session, tag_id: uuid.UUID) -> int:
@@ -117,9 +115,7 @@ def count_manga_by_tag_id(db: Session, tag_id: uuid.UUID) -> int:
         .join(manga_tags, Manga.id == manga_tags.c.manga_id)
         .where(manga_tags.c.tag_id == tag_id)
     )
-    if not count:
-        return 0
-    return count
+    return count or 0
 
 
 def get_manga_tag_links(db: Session, manga_id: uuid.UUID) -> Sequence[TagLink]:
@@ -173,9 +169,7 @@ def get_all_manga(
 def count_manga(db: Session) -> int:
     """Return the number of manga rows."""
     count = db.scalar(select(func.count()).select_from(Manga))
-    if not count:
-        return 0
-    return count
+    return count or 0
 
 
 def create_manga(

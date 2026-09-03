@@ -32,9 +32,7 @@ def get_all_authors(
 def count_authors(db: Session) -> int:
     """Return the number of author rows."""
     count = db.scalar(select(func.count()).select_from(Author))
-    if not count:
-        return 0
-    return count
+    return count or 0
 
 
 def normalize_author_name(name: str) -> str:
@@ -81,9 +79,7 @@ def get_or_create_author(
 ) -> Author:
     """Return the existing author with the given name, creating it if needed."""
     author = get_author_by_name(db, name)
-    if author:
-        return author
-    return create_author(db, name=name)
+    return author or create_author(db, name=name)
 
 
 # --- Bulk operations ---
