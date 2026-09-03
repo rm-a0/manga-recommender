@@ -10,9 +10,11 @@ from manga_recommender.db.repositories.manga import (
     TagLink,
     count_manga,
     count_manga_by_author_id,
+    count_manga_by_tag_id,
     get_all_manga,
     get_manga_by_author_id,
     get_manga_by_id,
+    get_manga_by_tag_id,
     get_manga_tag_links,
 )
 from manga_recommender.schemas.authors import AuthorSummary
@@ -107,6 +109,29 @@ def get_manga_page_by_author_id(
             for m in get_manga_by_author_id(db, author_id, limit=limit, offset=offset)
         ],
         total=count_manga_by_author_id(db, author_id),
+        limit=limit,
+        offset=offset,
+    )
+
+
+def get_manga_page_by_tag_id(
+    db: Session,
+    tag_id: uuid.UUID,
+    *,
+    limit: int,
+    offset: int,
+) -> Page[MangaSummary]:
+    """Return one page of the manga that carry one tag.
+
+    `total` counts every manga with that tag, not the items on this page.
+    A tag on no manga gives an empty page.
+    """
+    return Page(
+        items=[
+            _to_summary(t)
+            for t in get_manga_by_tag_id(db, tag_id, limit=limit, offset=offset)
+        ],
+        total=count_manga_by_tag_id(db, tag_id),
         limit=limit,
         offset=offset,
     )

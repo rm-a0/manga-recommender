@@ -36,7 +36,7 @@ def get_author(db: DbSession, author_id: uuid.UUID) -> AuthorDetail:
 
 
 @router.get("/{author_id}/manga", response_model=Page[MangaSummary])
-def list_authors_manga(
+def list_authored_manga(
     db: DbSession,
     author_id: uuid.UUID,
     page: Pagination,
