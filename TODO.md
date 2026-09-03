@@ -25,6 +25,14 @@ Planned work, not yet scheduled.
 - Add `role` to `manga_authors` once something needs Story separate from Art.
 - Revisit `delete_orphaned_manga`'s predicate if a source ever supplies
   descriptions without ratings.
+- Narrow `manga.published_date` from `DateTime(timezone=True)` to `Date`. Neither
+  source carries a time: Kaggle gives `YYYY-MM-DD` and AniList gives
+  `{year, month, day}`, so both extractors build a midnight datetime that means
+  nothing. Saves 4 bytes a row, drops the timezone question, and lets the API's
+  `published_from`/`published_to` filters compare date to date instead of a naive
+  datetime against a tz-aware column. `ALTER COLUMN ... TYPE date` casts in place,
+  so no re-ingest. Touches the model, `MangaUpsertValues`, `MangaDetail`, both
+  extractors and `ingestion/base.py`, plus ~25 test references.
 - Canonical display names for tags. `normalize_tag_name` folds case, accents and
   punctuation, so the stored `name` is whichever spelling a source wrote first
   ("Sci-Fi" vs "Sci Fi"). Needs a display map keyed on `normalized_name`, applied

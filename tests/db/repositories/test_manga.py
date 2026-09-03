@@ -1,14 +1,17 @@
 import uuid
-from datetime import datetime
+from collections.abc import Sequence
+from datetime import UTC, date, datetime
 
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
-from manga_recommender.db.models.manga import MangaStatus
+from manga_recommender.db.models.manga import Manga, MangaStatus
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
 from manga_recommender.db.models.sources import Source
 from manga_recommender.db.repositories.authors import get_or_create_author
 from manga_recommender.db.repositories.manga import (
+    _SORT_COLUMNS,
+    MangaFilters,
     TagLinkValues,
     assign_authors_to_manga,
     bulk_add_tags_to_manga,
@@ -27,6 +30,7 @@ from manga_recommender.db.repositories.manga import (
     update_manga,
 )
 from manga_recommender.db.repositories.tags import get_or_create_tag
+from manga_recommender.schemas.manga import MangaSort
 
 
 def test_create_manga_persists_given_fields(db_session: Session) -> None:
@@ -231,11 +235,49 @@ def test_get_manga_by_id_eager_loads_authors(db_session: Session) -> None:
 # --- get_all_manga ---
 
 
+def _page(
+    db: Session,
+    filters: MangaFilters | None = None,
+    *,
+    sort: MangaSort = MangaSort.TITLE,
+    descending: bool = False,
+    limit: int = 10,
+    offset: int = 0,
+) -> Sequence[Manga]:
+    """Call get_all_manga with the defaults most tests want."""
+    return get_all_manga(
+        db,
+        filters or MangaFilters(),
+        sort=sort,
+        descending=descending,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def _dated(db: Session, title: str, published: date | None) -> uuid.UUID:
+    """Create one manga with a publication date, and return its ID."""
+    stamp = (
+        datetime(published.year, published.month, published.day, tzinfo=UTC)
+        if published
+        else None
+    )
+    return create_manga(db, title=title, published_date=stamp).id
+
+
+def _tagged(db: Session, title: str, *tag_names: str) -> uuid.UUID:
+    """Create one manga carrying the named tags, and return its ID."""
+    manga = create_manga(db, title=title)
+    for name in tag_names:
+        _link_tag(db, manga.id, name, rank=None)
+    return manga.id
+
+
 def test_get_all_manga_orders_by_title(db_session: Session) -> None:
     for title in ("Chainsaw Man", "Akira", "Berserk"):
         create_manga(db_session, title=title)
 
-    found = get_all_manga(db_session, limit=10, offset=0)
+    found = _page(db_session)
 
     assert [m.title for m in found] == ["Akira", "Berserk", "Chainsaw Man"]
 
@@ -246,8 +288,8 @@ def test_get_all_manga_pages_without_repeating_or_skipping(
     """Offset paging is only stable when the query orders deterministically."""
     created = {create_manga(db_session, title=t).id for t in "ABCD"}
 
-    first = get_all_manga(db_session, limit=2, offset=0)
-    second = get_all_manga(db_session, limit=2, offset=2)
+    first = _page(db_session, limit=2, offset=0)
+    second = _page(db_session, limit=2, offset=2)
 
     assert len(first) == 2
     assert len(second) == 2
@@ -258,7 +300,7 @@ def test_get_all_manga_pages_without_repeating_or_skipping(
 def test_get_all_manga_returns_empty_past_the_last_page(db_session: Session) -> None:
     create_manga(db_session, title="Solo Leveling")
 
-    assert get_all_manga(db_session, limit=10, offset=10) == []
+    assert _page(db_session, offset=10) == []
 
 
 def test_get_all_manga_eager_loads_authors(db_session: Session) -> None:
@@ -268,20 +310,167 @@ def test_get_all_manga_eager_loads_authors(db_session: Session) -> None:
     )
     db_session.expire_all()
 
-    found = get_all_manga(db_session, limit=10, offset=0)
+    found = _page(db_session)
 
     assert "authors" not in inspect(found[0]).unloaded
+
+
+def test_get_all_manga_sorts_by_title_descending(db_session: Session) -> None:
+    for title in ("Akira", "Berserk", "Chainsaw Man"):
+        create_manga(db_session, title=title)
+
+    found = _page(db_session, sort=MangaSort.TITLE, descending=True)
+
+    assert [m.title for m in found] == ["Chainsaw Man", "Berserk", "Akira"]
+
+
+def test_get_all_manga_sorts_an_undated_manga_last_ascending(
+    db_session: Session,
+) -> None:
+    """Postgres defaults ASC to NULLS LAST, but the rule must not be implicit."""
+    _dated(db_session, "Undated", None)
+    _dated(db_session, "Dated", date(1990, 1, 1))
+
+    found = _page(db_session, sort=MangaSort.PUBLISHED_DATE)
+
+    assert [m.title for m in found] == ["Dated", "Undated"]
+
+
+def test_get_all_manga_sorts_an_undated_manga_last_descending(
+    db_session: Session,
+) -> None:
+    """Postgres defaults DESC to NULLS FIRST, which would float undated rows up."""
+    _dated(db_session, "Undated", None)
+    _dated(db_session, "Dated", date(1990, 1, 1))
+
+    found = _page(db_session, sort=MangaSort.PUBLISHED_DATE, descending=True)
+
+    assert [m.title for m in found] == ["Dated", "Undated"]
+
+
+# --- get_all_manga: filters ---
+
+
+def test_get_all_manga_filters_by_status(db_session: Session) -> None:
+    create_manga(db_session, title="Ongoing One", status=MangaStatus.ONGOING)
+    create_manga(db_session, title="Finished One", status=MangaStatus.FINISHED)
+
+    found = _page(db_session, MangaFilters(statuses=(MangaStatus.ONGOING,)))
+
+    assert [m.title for m in found] == ["Ongoing One"]
+
+
+def test_get_all_manga_filters_by_one_included_tag(db_session: Session) -> None:
+    _tagged(db_session, "Berserk", "action")
+    _tagged(db_session, "Monster", "psychological")
+
+    found = _page(db_session, MangaFilters(include_tag_keys=("action",)))
+
+    assert [m.title for m in found] == ["Berserk"]
+
+
+def test_get_all_manga_matches_any_included_tag_by_default(
+    db_session: Session,
+) -> None:
+    _tagged(db_session, "Berserk", "action")
+    _tagged(db_session, "Monster", "psychological")
+    _tagged(db_session, "Nausicaa", "romance")
+
+    found = _page(
+        db_session, MangaFilters(include_tag_keys=("action", "psychological"))
+    )
+
+    assert [m.title for m in found] == ["Berserk", "Monster"]
+
+
+def test_get_all_manga_requires_every_tag_when_all_is_set(db_session: Session) -> None:
+    _tagged(db_session, "Both", "action", "seinen")
+    _tagged(db_session, "OnlyOne", "action")
+
+    found = _page(
+        db_session,
+        MangaFilters(include_tag_keys=("action", "seinen"), require_all_tags=True),
+    )
+
+    assert [m.title for m in found] == ["Both"]
+
+
+def test_get_all_manga_returns_a_multi_tagged_manga_once(db_session: Session) -> None:
+    """EXISTS must not multiply a manga by its matching tags, as a JOIN would."""
+    _tagged(db_session, "Berserk", "action", "seinen", "tragedy")
+
+    found = _page(db_session, MangaFilters(include_tag_keys=("action", "seinen")))
+
+    assert len(found) == 1
+
+
+def test_get_all_manga_drops_an_excluded_tag(db_session: Session) -> None:
+    _tagged(db_session, "Clean", "action")
+    _tagged(db_session, "Dirty", "action", "ecchi")
+
+    found = _page(
+        db_session,
+        MangaFilters(include_tag_keys=("action",), exclude_tag_keys=("ecchi",)),
+    )
+
+    assert [m.title for m in found] == ["Clean"]
+
+
+def test_get_all_manga_filters_by_published_range(db_session: Session) -> None:
+    _dated(db_session, "TooEarly", date(1989, 12, 31))
+    _dated(db_session, "InRange", date(1995, 6, 1))
+    _dated(db_session, "TooLate", date(2000, 1, 1))
+
+    found = _page(
+        db_session,
+        MangaFilters(published_from=date(1990, 1, 1), published_to=date(2000, 1, 1)),
+    )
+
+    assert [m.title for m in found] == ["InRange"]
+
+
+def test_get_all_manga_treats_published_to_as_exclusive(db_session: Session) -> None:
+    """A half-open range lets adjacent windows tile without overlapping."""
+    _dated(db_session, "OnTheBound", date(2000, 1, 1))
+
+    found = _page(db_session, MangaFilters(published_to=date(2000, 1, 1)))
+
+    assert found == []
 
 
 # --- count_manga ---
 
 
 def test_count_manga_counts_every_row_not_only_a_page(db_session: Session) -> None:
-    assert count_manga(db_session) == 0
+    assert count_manga(db_session, MangaFilters()) == 0
     for title in ("Dorohedoro", "Gantz", "Homunculus"):
         create_manga(db_session, title=title)
 
-    assert count_manga(db_session) == 3
+    assert count_manga(db_session, MangaFilters()) == 3
+
+
+def test_count_manga_applies_the_same_filters_as_the_page(db_session: Session) -> None:
+    """The invariant: `total` and `items` must never disagree about the set."""
+    _tagged(db_session, "Berserk", "action", "seinen")
+    _tagged(db_session, "Monster", "psychological")
+    _tagged(db_session, "Dirty", "action", "ecchi")
+    filters = MangaFilters(include_tag_keys=("action",), exclude_tag_keys=("ecchi",))
+
+    assert count_manga(db_session, filters) == len(_page(db_session, filters))
+
+
+def test_count_manga_counts_a_multi_tagged_manga_once(db_session: Session) -> None:
+    _tagged(db_session, "Berserk", "action", "seinen", "tragedy")
+
+    assert (
+        count_manga(db_session, MangaFilters(include_tag_keys=("action", "seinen")))
+        == 1
+    )
+
+
+def test_every_sort_field_maps_to_a_column() -> None:
+    """A sort value with no column silently falls into the relevance branch."""
+    assert {s for s in MangaSort} <= set(_SORT_COLUMNS)
 
 
 # --- get_manga_tag_links ---
