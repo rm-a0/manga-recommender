@@ -44,9 +44,7 @@ def get_all_tags(
 def count_tags(db: Session) -> int:
     """Return the number of tag rows."""
     count = db.scalar(select(func.count()).select_from(Tag))
-    if not count:
-        return 0
-    return count
+    return count or 0
 
 
 def normalize_tag_name(name: str) -> str:
@@ -94,9 +92,7 @@ def get_or_create_tag(
 ) -> Tag:
     """Return the existing tag with the given name, creating it if needed."""
     tag = get_tag_by_name(db, name)
-    if tag:
-        return tag
-    return create_tag(db, name=name, category=category)
+    return tag or create_tag(db, name=name, category=category)
 
 
 # --- Bulk operations ---

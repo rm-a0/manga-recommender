@@ -1,6 +1,13 @@
-"""Response models shared by more than one resource."""
+"""Request and response models shared by more than one resource."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class PageParams(BaseModel):
+    """Limit and offset for a paginated list endpoint."""
+
+    limit: int = Field(20, ge=1, le=100)
+    offset: int = Field(0, ge=0)
 
 
 class Page[T](BaseModel):

@@ -37,13 +37,7 @@ def get_or_create_source(
 ) -> Source:
     """Return the existing source with the given name, creating it if needed."""
     source = get_source_by_name(db, name)
-    if source:
-        return source
-    return create_source(
-        db,
-        name=name,
-        weight=weight,
-    )
+    return source or create_source(db, name=name, weight=weight)
 
 
 def get_source_id_by_name(db: Session, name: str) -> uuid.UUID | None:
