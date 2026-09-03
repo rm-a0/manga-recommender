@@ -75,12 +75,47 @@ def get_manga_by_author_id(
     ).all()
 
 
+def get_manga_by_tag_id(
+    db: Session,
+    tag_id: uuid.UUID,
+    *,
+    limit: int,
+    offset: int,
+) -> Sequence[Manga]:
+    """Return one page of the manga that carry one tag, ordered by title.
+
+    `Manga.id` breaks ties, so a manga cannot repeat across pages or fall
+    between them when two share a title.
+    """
+    return db.scalars(
+        select(Manga)
+        .join(manga_tags, Manga.id == manga_tags.c.manga_id)
+        .where(manga_tags.c.tag_id == tag_id)
+        .order_by(Manga.title, Manga.id)
+        .offset(offset)
+        .limit(limit)
+        .options(selectinload(Manga.authors))
+    ).all()
+
+
 def count_manga_by_author_id(db: Session, author_id: uuid.UUID) -> int:
     """Return the number of manga credited to one author."""
     count = db.scalar(
         select(func.count(Manga.id))
         .join(manga_authors, Manga.id == manga_authors.c.manga_id)
         .where(manga_authors.c.author_id == author_id)
+    )
+    if not count:
+        return 0
+    return count
+
+
+def count_manga_by_tag_id(db: Session, tag_id: uuid.UUID) -> int:
+    """Return the number of manga that carry one tag."""
+    count = db.scalar(
+        select(func.count(Manga.id))
+        .join(manga_tags, Manga.id == manga_tags.c.manga_id)
+        .where(manga_tags.c.tag_id == tag_id)
     )
     if not count:
         return 0

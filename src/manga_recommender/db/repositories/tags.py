@@ -20,6 +20,35 @@ class TagUpsertValues(TypedDict):
     category: str | None
 
 
+def get_tag_by_id(db: Session, tag_id: uuid.UUID) -> Tag | None:
+    """Return the tag with the given ID, or None if not found."""
+    return db.scalar(select(Tag).where(Tag.id == tag_id))
+
+
+def get_all_tags(
+    db: Session,
+    *,
+    limit: int,
+    offset: int,
+) -> Sequence[Tag]:
+    """Return one page of tags, ordered by name.
+
+    `Tag.id` breaks ties, so a tag cannot repeat across pages or fall
+    between them when two share a name.
+    """
+    return db.scalars(
+        select(Tag).order_by(Tag.name, Tag.id).offset(offset).limit(limit)
+    ).all()
+
+
+def count_tags(db: Session) -> int:
+    """Return the number of tag rows."""
+    count = db.scalar(select(func.count()).select_from(Tag))
+    if not count:
+        return 0
+    return count
+
+
 def normalize_tag_name(name: str) -> str:
     """Return the key that decides whether two spellings are the same tag.
 
