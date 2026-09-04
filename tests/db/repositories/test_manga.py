@@ -438,6 +438,99 @@ def test_get_all_manga_treats_published_to_as_exclusive(db_session: Session) -> 
     assert found == []
 
 
+def test_get_all_manga_filters_by_a_title_term(db_session: Session) -> None:
+    create_manga(db_session, title="Berserk")
+    create_manga(db_session, title="Monster")
+
+    found = _page(db_session, MangaFilters(title_terms=("berserk",)))
+
+    assert [m.title for m in found] == ["Berserk"]
+
+
+def test_get_all_manga_matches_a_title_term_anywhere_in_the_title(
+    db_session: Session,
+) -> None:
+    create_manga(db_session, title="Attack on Titan")
+
+    found = _page(db_session, MangaFilters(title_terms=("titan",)))
+
+    assert [m.title for m in found] == ["Attack on Titan"]
+
+
+def test_get_all_manga_requires_every_title_term(db_session: Session) -> None:
+    """Terms are ANDed, so a query narrows as the user types more words."""
+    create_manga(db_session, title="Attack on Titan")
+    create_manga(db_session, title="Titan Junior High")
+
+    found = _page(db_session, MangaFilters(title_terms=("attack", "titan")))
+
+    assert [m.title for m in found] == ["Attack on Titan"]
+
+
+def test_get_all_manga_matches_title_terms_out_of_order(db_session: Session) -> None:
+    create_manga(db_session, title="Attack on Titan")
+
+    found = _page(db_session, MangaFilters(title_terms=("titan", "attack")))
+
+    assert [m.title for m in found] == ["Attack on Titan"]
+
+
+def test_get_all_manga_reads_a_percent_in_a_term_as_text(db_session: Session) -> None:
+    """An unescaped `%` would be a wildcard and match every 100-something title."""
+    create_manga(db_session, title="100%")
+    create_manga(db_session, title="100 Ghost Stories")
+
+    found = _page(db_session, MangaFilters(title_terms=("100%",)))
+
+    assert [m.title for m in found] == ["100%"]
+
+
+def test_get_all_manga_reads_an_underscore_in_a_term_as_text(
+    db_session: Session,
+) -> None:
+    """An unescaped `_` would match any single character in that position."""
+    create_manga(db_session, title="Re_Zero")
+    create_manga(db_session, title="ReXZero")
+
+    found = _page(db_session, MangaFilters(title_terms=("re_zero",)))
+
+    assert [m.title for m in found] == ["Re_Zero"]
+
+
+def test_get_all_manga_reads_a_backslash_in_a_term_as_text(
+    db_session: Session,
+) -> None:
+    r"""The escape character itself needs escaping, or `\b` loses its backslash."""
+    create_manga(db_session, title=r"A\B")
+    create_manga(db_session, title="AB")
+
+    found = _page(db_session, MangaFilters(title_terms=(r"a\b",)))
+
+    assert [m.title for m in found] == [r"A\B"]
+
+
+def test_get_all_manga_returns_empty_when_no_title_matches(
+    db_session: Session,
+) -> None:
+    create_manga(db_session, title="Berserk")
+
+    assert _page(db_session, MangaFilters(title_terms=("nothing",))) == []
+
+
+def test_get_all_manga_combines_a_title_term_with_another_filter(
+    db_session: Session,
+) -> None:
+    _tagged(db_session, "Berserk Gaiden", "action")
+    _tagged(db_session, "Berserk Romance", "romance")
+
+    found = _page(
+        db_session,
+        MangaFilters(title_terms=("berserk",), include_tag_keys=("action",)),
+    )
+
+    assert [m.title for m in found] == ["Berserk Gaiden"]
+
+
 # --- count_manga ---
 
 
@@ -466,6 +559,16 @@ def test_count_manga_counts_a_multi_tagged_manga_once(db_session: Session) -> No
         count_manga(db_session, MangaFilters(include_tag_keys=("action", "seinen")))
         == 1
     )
+
+
+def test_count_manga_applies_the_title_filter(db_session: Session) -> None:
+    """`total` and `items` must agree about the set a search matched."""
+    create_manga(db_session, title="Berserk")
+    create_manga(db_session, title="Berserk Gaiden")
+    create_manga(db_session, title="Monster")
+    filters = MangaFilters(title_terms=("berserk",))
+
+    assert count_manga(db_session, filters) == len(_page(db_session, filters)) == 2
 
 
 def test_every_sort_field_maps_to_a_column() -> None:

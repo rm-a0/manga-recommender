@@ -71,6 +71,7 @@ class TagLink(NamedTuple):
 class MangaFilters:
     """The WHERE clause of a manga list query, as one value."""
 
+    title_terms: tuple[str, ...] = ()
     statuses: tuple[MangaStatus, ...] = ()
     include_tag_keys: tuple[str, ...] = ()
     require_all_tags: bool = False
@@ -119,6 +120,12 @@ def _order_by(
     return (primary, Manga.title.asc(), Manga.id.desc())
 
 
+def _title_pattern(term: str) -> str:
+    """Return the LIKE pattern that matches one search term anywhere in a title."""
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 def _filtered_manga(filters: MangaFilters) -> Select[tuple[Manga]]:
     """Return the manga query with every filter applied, unordered.
 
@@ -130,6 +137,8 @@ def _filtered_manga(filters: MangaFilters) -> Select[tuple[Manga]]:
         stmt = stmt.where(Manga.status.in_(filters.statuses))
     for clause in _tag_clauses(filters):
         stmt = stmt.where(clause)
+    for term in filters.title_terms:
+        stmt = stmt.where(Manga.title.ilike(_title_pattern(term), escape="\\"))
     if filters.published_from:
         stmt = stmt.where(Manga.published_date >= filters.published_from)
     if filters.published_to:

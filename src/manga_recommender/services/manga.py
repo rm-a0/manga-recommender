@@ -81,6 +81,16 @@ def _to_detail(manga: Manga, tag_links: Sequence[TagLink]) -> MangaDetail:
     )
 
 
+def _to_terms(query: str | None) -> list[str]:
+    """Split a search query into the words a title must all contain.
+
+    An empty or whitespace-only query gives no terms, so it filters nothing.
+    """
+    if not query:
+        return []
+    return query.split()
+
+
 def _to_filters(params: MangaListParams) -> MangaFilters:
     """Map request vocabulary to storage vocabulary.
 
@@ -88,6 +98,7 @@ def _to_filters(params: MangaListParams) -> MangaFilters:
     `normalized_name` rather than the spelling a source happened to write.
     """
     return MangaFilters(
+        title_terms=tuple(_to_terms(params.q)),
         statuses=tuple(params.status),
         include_tag_keys=tuple(t for t in params.include_tag),
         require_all_tags=params.tag_match is TagMatch.ALL,
