@@ -130,6 +130,50 @@ class TestListManga:
         assert first_ids.isdisjoint(second_ids)
         assert len(first_ids | second_ids) == 4
 
+    def test_searches_titles_with_q(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _seed_manga(db_session, title="Berserk", author=None)
+        _seed_manga(db_session, title="Monster", author=None)
+
+        body = client.get("/manga", params={"q": "berserk"}).json()
+
+        assert [item["title"] for item in body["items"]] == ["Berserk"]
+
+    def test_requires_every_word_of_q(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """The query splits on whitespace, so `attack titan` finds the gap title."""
+        _seed_manga(db_session, title="Attack on Titan", author=None)
+        _seed_manga(db_session, title="Titan Junior High", author=None)
+
+        body = client.get("/manga", params={"q": "attack titan"}).json()
+
+        assert [item["title"] for item in body["items"]] == ["Attack on Titan"]
+
+    def test_total_counts_only_the_search_matches(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        for title in ("Berserk", "Berserk Gaiden", "Monster"):
+            _seed_manga(db_session, title=title, author=None)
+
+        body = client.get("/manga", params={"q": "berserk", "limit": 1}).json()
+
+        assert len(body["items"]) == 1
+        assert body["total"] == 2
+
+    def test_ignores_a_whitespace_only_q(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _seed_manga(db_session, title="Berserk", author=None)
+
+        body = client.get("/manga", params={"q": "   "}).json()
+
+        assert body["total"] == 1
+
+    def test_rejects_a_q_below_the_minimum_length(self, client: TestClient) -> None:
+        assert client.get("/manga", params={"q": "a"}).status_code == 422
+
     def test_rejects_a_limit_above_the_maximum(self, client: TestClient) -> None:
         assert client.get("/manga", params={"limit": 101}).status_code == 422
 
