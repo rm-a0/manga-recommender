@@ -49,5 +49,5 @@ datasets/
 # Notebooks
 notebooks/
 
-# Agents
-.claude/
+# Agent worktrees
+.claude/worktrees/

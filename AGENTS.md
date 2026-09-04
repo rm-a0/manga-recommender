@@ -13,7 +13,7 @@ before touching anything, whether you're an AI agent or a human contributor.
 
 ### Hand-coded only — do not write or edit this for the user
 
-- `src/` application/backend code: FastAPI routers and endpoints, services, DB models,
+- `backend/` application code: FastAPI routers and endpoints, services, DB models,
   ingestion/pipeline logic, recommendation logic.
 - **Agent's role here: discussion partner, explainer, and reviewer only.** Explain
   concepts, review diffs, flag bugs and design issues, suggest best practices, verify
@@ -34,7 +34,7 @@ before touching anything, whether you're an AI agent or a human contributor.
   client-side state). This is an explicit exception because frontend isn't this
   project's learning focus.
 - **Not included in this exception**: the FastAPI routers/endpoints that serve the UI —
-  those are backend `src/` code and stay hand-coded per the rule above.
+  those are `backend/` code and stay hand-coded per the rule above.
 - "Best practices" means idiomatic, conventional code for whatever frontend framework
   is chosen (not yet decided as of this writing) — proper component structure,
   accessibility, no inline-everything, type safety if the stack uses it. If a shortcut
@@ -43,7 +43,7 @@ before touching anything, whether you're an AI agent or a human contributor.
 
 ### Docstrings and Comments — agent-written, using Simplified Technical English
 
-Unlike the rest of backend `src/` code, docstrings and comments themselves are fine for an agent to
+Unlike the rest of `backend/` code, docstrings and comments themselves are fine for an agent to
 write or generate directly, even inside otherwise hand-coded files — this is a narrow
 exception to the "hand-coded only" rule above, scoped to docstrings and comments only (not the
 surrounding code).
@@ -63,7 +63,7 @@ technical Python code:
 
 ### Tests — agent-codable, following this project's pytest conventions
 
-Unlike the rest of backend `src/` code, tests are fine for an agent to write or edit
+Unlike the rest of `backend/` code, tests are fine for an agent to write or edit
 directly — another narrow exception to the "hand-coded only" rule above, scoped to
 `tests/` only (never the implementation under test).
 
@@ -71,8 +71,8 @@ directly — another narrow exception to the "hand-coded only" rule above, scope
   `pytest-asyncio` with `asyncio_mode = "auto"`, both already configured in
   `pyproject.toml`.
 - Test through the same interfaces the app uses (services, extractors, models) — no
-  mocking around `src/` code just to make a test pass.
-- If a test surfaces a bug or design issue in `src/`, report it instead of adjusting
+  mocking around `backend/` code just to make a test pass.
+- If a test surfaces a bug or design issue in `backend/`, report it instead of adjusting
   the implementation to fit — implementation changes still go through the user, per
   the hand-coded-only rule above.
 - Fixtures, factories, and other test utilities under `tests/` are fair game for the
