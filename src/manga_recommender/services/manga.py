@@ -92,11 +92,7 @@ def _to_terms(query: str | None) -> list[str]:
 
 
 def _to_filters(params: MangaListParams) -> MangaFilters:
-    """Map request vocabulary to storage vocabulary.
-
-    Tag names become normalized keys, because the tag table matches on
-    `normalized_name` rather than the spelling a source happened to write.
-    """
+    """Map request vocabulary to storage vocabulary."""
     return MangaFilters(
         title_terms=tuple(_to_terms(params.q)),
         statuses=tuple(params.status),
