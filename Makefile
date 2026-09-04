@@ -29,7 +29,7 @@ format: ## Auto-format code
 	uv run ruff format .
 
 typecheck: ## Run mypy
-	uv run mypy src
+	uv run mypy backend
 
 # --- Database (Alembic) ---
 
