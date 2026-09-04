@@ -1,0 +1,65 @@
+{
+  "northStar": "A convention circle catalogue printed on dark stock. Stamp-sized cells in a coded hall grid; the reader's own entries ringed in biro. Nothing on it may imply a ranking the API cannot support.",
+  "ramps": {
+    "stock": ["#17211F", "#1E2B28", "#2B3B37"],
+    "paper": ["#E8E4D8", "#54615D", "#141A19"],
+    "spot": ["#D1402F", "#A8291B", "#EF7060"],
+    "pen": ["#3F6FD8"]
+  },
+  "rules": {
+    "hairline": "1px solid #2B3B37",
+    "hallRule": "2px solid #D1402F",
+    "mastheadRule": "4px solid #D1402F",
+    "searchTab": "4px solid #D1402F on the input's left edge"
+  },
+  "elevation": {
+    "none": "Printed matter carries no elevation. A cell is distinguished by being paper on stock; hover prints a 2px spot outline rather than raising anything."
+  },
+  "motion": {
+    "ease": "cubic-bezier(0.16, 1, 0.3, 1)",
+    "duration": "420ms",
+    "stagger": "16ms per cell, cycling every 30 cells",
+    "rule": "Cells set into the hall the way a catalogue is pasted up. Transform only — never opacity — so a stalled paint, a failed script or a screenshot mid-stagger all show the full hall. Disabled wholesale under prefers-reduced-motion."
+  },
+  "focus": {
+    "ring": "2px solid #EF7060",
+    "offset": "2px",
+    "rule": "Global :focus-visible. No component may set outline-none; Tailwind's utilities layer beats the base layer and silently removes the ring."
+  },
+  "browserSurfaces": {
+    "selection": "background #D1402F, color #FFFFFF",
+    "caret": "#D1402F",
+    "accent": "#D1402F",
+    "scrollbar": "thumb #2B3B37 on #1E2B28 track, 3px track-coloured border",
+    "underlineOffset": "0.18em",
+    "rule": "Every surface the browser would style by default is themed from the palette."
+  },
+  "penRing": {
+    "path": "M56 6C81 5 98 19 99 37c1 19-17 34-45 35C26 73 6 60 5 41 4 23 22 8 50 6c16-1 30 3 38 11",
+    "viewBox": "0 0 104 78",
+    "stroke": "2.6",
+    "preserveAspectRatio": "none",
+    "blend": "multiply",
+    "rule": "A drawn stroke that closes past its own start. Never a border-radius: that reads as a wobbly rectangle at any size. Marks only reader-chosen entries."
+  },
+  "grid": {
+    "template": "repeat(auto-fill, minmax(104px, 1fr))",
+    "gap": "8px",
+    "mobile": "3 fixed columns below 640px",
+    "cellAspect": "225/320",
+    "captionLines": 2
+  },
+  "breakpoints": { "sm": "640px", "container": "1080px" },
+  "constraints": {
+    "coverNative": "~225x320",
+    "coverShipped": 120,
+    "note": "At stamp scale the source covers are oversupplied with pixels rather than starved. This is why the world was chosen: the constraint that rules out editorial layouts is this format's advantage."
+  },
+  "truthRules": [
+    "Every listing is preceded by a heading naming the field that ordered it.",
+    "Table codes (A-01) are coordinates in the current listing, never identifiers and never ranks.",
+    "No client-side scoring, ranking or weighting. Recommendation logic lives in the backend.",
+    "Red marks what the catalogue did; blue marks what the reader did. Nothing is both.",
+    "Unbuilt routes are named in the back matter as inert text, never as a disabled control."
+  ]
+}
