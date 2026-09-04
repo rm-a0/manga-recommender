@@ -1,0 +1,156 @@
+@import 'tailwindcss';
+
+/*
+ * MangaRec — the convention catalogue.
+ *
+ * A Comiket circle catalogue printed on dark stock: thousands of stamp-sized
+ * cells packed into a coded hall grid, single ink plus one spot red, and the
+ * reader's own marks in blue biro.
+ *
+ * The world does two jobs the product needs. Stamp scale is where the source
+ * covers (~225x320) are sharp rather than starved. And "circled in pen" is a
+ * native state for the seed set: the titles you named are the ones you ringed.
+ */
+@theme {
+  /* Ground and furniture — the dark stock the catalogue is printed on. */
+  --color-ground: #17211f;
+  --color-panel: #1e2b28;
+  --color-line: #2b3b37;
+
+  /* Cell — the paper an entry is printed on. Every cover sits on this. */
+  --color-cell: #e8e4d8;
+  --color-cell-ink: #141a19;
+  --color-cell-sub: #54615d;
+
+  --color-text: #dfe6e2;
+  --color-dim: #8a9a95;
+
+  /*
+   * Spot red, three values. `spot` is the press ink: rules, chips, fills —
+   * it clears 3:1 as a fill but not 4.5:1 as small type on either ground.
+   * The two -on- values are the text variants and are the only reds allowed
+   * under 24px.
+   */
+  --color-spot: #d1402f;
+  --color-spot-on-cell: #a8291b;
+  --color-spot-on-ground: #ef7060;
+
+  /* The reader's pen. Marks only what the reader chose, never a system state. */
+  --color-pen: #3f6fd8;
+
+  --font-display: var(--font-anton), 'Arial Narrow', sans-serif;
+  --font-text: var(--font-zen), system-ui, sans-serif;
+  --font-code: var(--font-mono), ui-monospace, monospace;
+
+  --ease-press: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    font-size: 1rem;
+    background: var(--color-ground);
+    color: var(--color-text);
+    font-family: var(--font-text);
+    font-feature-settings: 'tnum' 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Controls do not inherit the page's face without being told to. */
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    letter-spacing: inherit;
+  }
+
+  /* Browser surfaces belong to the design, not to the browser. */
+  ::selection {
+    background: var(--color-spot);
+    color: #fff;
+  }
+
+  :root {
+    accent-color: var(--color-spot);
+    caret-color: var(--color-spot);
+    scrollbar-color: var(--color-line) var(--color-panel);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-spot-on-ground);
+    outline-offset: 2px;
+  }
+
+  a {
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: from-font;
+  }
+
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-panel);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+    border: 3px solid var(--color-panel);
+  }
+}
+
+/* A table code: A-01. Always mono, always tracked, never body-weight. */
+@utility code {
+  font-family: var(--font-code);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* The rule under a hall heading, printed in the spot ink. */
+@utility hall-rule {
+  border-bottom: 2px solid var(--color-spot);
+}
+
+/*
+ * The catalogue's masthead and any block printed on paper rather than stock.
+ */
+@utility on-cell {
+  background: var(--color-cell);
+  color: var(--color-cell-ink);
+}
+
+/*
+ * The one authored moment: cells set into the hall grid the way a catalogue is
+ * pasted up. Transform only — a cell is never invisible, so a stalled paint or
+ * a failed script still shows the full hall.
+ */
+@keyframes paste-in {
+  from {
+    transform: translateY(0.4rem);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.paste-in {
+  animation: paste-in 0.42s var(--ease-press) backwards;
+  animation-delay: calc(var(--cell-index, 0) * 16ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paste-in {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
