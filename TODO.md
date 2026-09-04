@@ -46,12 +46,23 @@ Planned work, not yet scheduled.
 
 ## API
 
-- Filtering, sorting and search on `GET /manga`: `q`, `status`, `tag`, `tag_match`,
-  a `published_date` range, and `sort`/`order`. Build the filter clause once and
-  give it to both the page query and the count, so `total` cannot disagree with
-  `items`. Filter tags with a correlated `EXISTS` rather than a join, which keeps
-  a manga from repeating once per matching tag. Search lands as `ILIKE` first,
-  then `pg_trgm` behind the same parameter.
+- Trigram search behind the existing `q`. Title search is `ILIKE '%term%'`, which
+  no btree index can serve, so every search is a sequential scan. `CREATE EXTENSION
+  pg_trgm` plus a GIN index on `title gin_trgm_ops` makes the same query use an
+  index — no API or query change. Only ranking needs new SQL: `similarity()` in the
+  ORDER BY, which is also what unlocks `MangaSort.RELEVANCE`.
+- Accent folding in search. `q=Kohei` does not match `Kōhei`. Needs `unaccent`
+  and a normalized title, either as a functional index or a `normalized_title`
+  column written at ingest — the same shape as the normalized score column below.
+- A `q` filter on `GET /authors`. An author picker needs name search, and the
+  table is large enough that the frontend cannot hold it. One `ILIKE` on
+  `Author.name`. `GET /tags` does not need one: the vocabulary is ~150 rows, so
+  the frontend fetches it once and filters locally.
+- Decide the fate of `GET /tags/{id}/manga` and `GET /authors/{id}/manga`.
+  `GET /manga?include_tag=...` already does the tag case with every filter and
+  sort, so the sub-route is a second, weaker parameter surface that will drift.
+  Either drop it, or keep it and never grow filters on it. Blocked on the
+  frontend: the sub-route takes a tag ID, the `/manga` filter takes a tag name.
 - Sorting by score. `raw_score` sits on `manga_external_ratings` against a
   per-source `raw_scale_max`, so ordering by it means normalizing and aggregating
   per row. Needs a normalized score column on `manga`, written at ingest —
