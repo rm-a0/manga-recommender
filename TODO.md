@@ -25,6 +25,16 @@ Planned work, not yet scheduled.
 - Add `role` to `manga_authors` once something needs Story separate from Art.
 - Revisit `delete_orphaned_manga`'s predicate if a source ever supplies
   descriptions without ratings.
+- Store English titles. `data/kaggle_mal_2026.csv` already carries `title_english`
+  and `title_japanese`, and `_to_record` reads neither, so search only matches the
+  romaji: `q=attack on titan` finds nothing, `q=shingeki no kyojin` finds it. One
+  column, one line in `kaggle_mal.py`, then re-run `ingest --source kaggle_mal`.
+  AniList needs `title { romaji english native }` plus `synonyms` in the query and
+  a full re-ingest, so it can follow later. Once `synonyms` lands the shape is
+  genuinely one-to-many and wants a `manga_titles` table, with search as an
+  `EXISTS` over it — the same shape as `_has_tag`. Deferred to the same PR as the
+  `published_date` narrowing below, to spend one migration and one re-ingest on
+  both. Not a storage question: ~30 bytes a row is ~6 MB at full catalogue size.
 - Narrow `manga.published_date` from `DateTime(timezone=True)` to `Date`. Neither
   source carries a time: Kaggle gives `YYYY-MM-DD` and AniList gives
   `{year, month, day}`, so both extractors build a midnight datetime that means

@@ -48,3 +48,6 @@ datasets/
 
 # Notebooks
 notebooks/
+
+# Agents
+.claude/
