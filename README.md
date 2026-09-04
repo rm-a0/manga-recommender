@@ -240,7 +240,7 @@ container app pulls anonymously, with no registry credentials configured.
 ```
 manga-recommender/
 │
-├── src/manga_recommender/
+├── backend/manga_recommender/
 │   ├── __main__.py             # `python -m manga_recommender` shim -> cli.main
 │   │
 │   ├── api/                    # HTTP layer - the only place FastAPI is imported
@@ -277,7 +277,7 @@ manga-recommender/
 │       └── runner.py            # seeds sources, batches extraction, calls loader
 │
 ├── alembic/                     # Migrations (`uv run alembic revision --autogenerate`)
-├── tests/                       # pytest, mirrors src/ layout
+├── tests/                       # pytest, mirrors backend/ layout
 │
 ├── .env.example
 ├── Dockerfile

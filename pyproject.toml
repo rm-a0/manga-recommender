@@ -75,6 +75,8 @@ build-backend = "hatchling.build"
 [tool.ruff]
 target-version = "py314"
 line-length = 88
+# isort first-party detection: the package lives in backend/, not the default src/
+src = [".", "backend"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "D"]
@@ -98,4 +100,4 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/manga_recommender"]
+packages = ["backend/manga_recommender"]
