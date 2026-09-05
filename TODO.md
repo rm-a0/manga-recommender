@@ -83,3 +83,39 @@ Planned work, not yet scheduled.
 ## Not built yet
 
 - The recommendation engine, including semantic search over descriptions.
+
+## Pipeline
+
+Stages run in order: `derive` -> `export` -> `embed` -> `index` -> `train`.
+
+- Rename `pipeline/runnery.py` to `runner.py`.
+- `derive`: post-ingestion in-DB work. Normalized score, canonical arbitration,
+  normalized title, tag display names, orphan prune (move it out of
+  `ingestion/runner.py`).
+- `export`: DB -> Parquet snapshot. Everything downstream reads the snapshot,
+  not the live database.
+- `embed`: Parquet -> `.npy`. No DB writes.
+- `index`: `.npy` -> `manga_embeddings`, then build HNSW.
+- `train`: needs user-item data first. Blocked.
+- Stages declare `depends_on`; a failed stage halts the run. Unlike sources,
+  which are independent and log-and-continue.
+
+## ML / NLP
+
+Checkpoints, shortest form. Expand when each is started.
+
+- Content embeddings. Description + tags + title -> `halfvec(384)`, HNSW.
+  Powers "more like this" and semantic search.
+- User-item dataset. Far future. No public manga user-rating dataset exists —
+  searched, found none. Must be crawled from Jikan `/users/{name}/mangalist`,
+  which needs a username source and a multi-day rate-limited run. It is a second
+  ingestion source, not a download. Everything below that depends on it stays
+  blocked; content-based recommendation does not.
+- Item factors, not a similarity matrix. Factorize offline, store item vectors
+  in `manga_embeddings.cf_vec`, query with the same HNSW. 160k x 160k is 102 GB.
+- Hybrid blend. Weighted sum of content and CF scores, one tunable weight.
+  Content-only until CF exists, so cold start already works.
+- Bayesian score shrinkage. `raw_score` on 12 votes must not outrank 40k votes.
+  Prior toward the global mean, weight by `votes_count`. Belongs in `derive`.
+- LLM query understanding. Free-text prompt -> filters plus an embedding.
+  Last, and only if plain vector search is not enough.

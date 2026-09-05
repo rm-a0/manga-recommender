@@ -8,6 +8,7 @@ from manga_recommender.db.base import Base
 from manga_recommender.db.models import (  # noqa: F401
     manga,
     manga_external_ratings,
+    manga_metrics,
     sources,
     tags,
     users,
