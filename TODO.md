@@ -53,6 +53,8 @@ Planned work, not yet scheduled.
   ("Kohei" beating "Kōhei", "CLAMP" flattened by an ALL-CAPS-first source). Needs
   richer rules, or `Source.weight` as the tiebreak. Needs a re-ingest either way:
   only the winning spelling is stored, so the alternatives are already gone.
+- Migrate DB from Supabase to Aiven, delete all alembic versions before seeding
+  and generate initial one from scratch.
 
 ## API
 
