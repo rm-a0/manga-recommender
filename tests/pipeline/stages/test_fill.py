@@ -11,7 +11,7 @@ from manga_recommender.db.repositories.manga_external_rating import (
     create_external_rating,
 )
 from manga_recommender.pipeline.stages.fill import (
-    _compute_bayesian_average,
+    _compute_bayesian_score,
     _compute_catalogue_mean,
     _compute_mean,
     compute_manga_metrics,
@@ -20,11 +20,9 @@ from manga_recommender.pipeline.stages.fill import (
 CATALOGUE_MEAN = 0.7
 
 
-def _aggregate_row(numerator: float, denominator: float) -> SimpleNamespace:
+def _aggregate_row(points: float, votes: float) -> SimpleNamespace:
     """Stand in for one row of `get_rating_aggregates`."""
-    return SimpleNamespace(
-        weighted_numerator=numerator, weighted_denominator=denominator
-    )
+    return SimpleNamespace(score_points=points, weighted_votes=votes)
 
 
 def _rate(
@@ -50,19 +48,19 @@ def _rate(
     return manga.id
 
 
-def test_bayesian_average_returns_the_catalogue_mean_without_votes() -> None:
-    assert _compute_bayesian_average(
-        weighted_numerator=0.0,
-        weighted_denominator=0.0,
+def test_bayesian_score_returns_the_catalogue_mean_without_votes() -> None:
+    assert _compute_bayesian_score(
+        score_points=0.0,
+        weighted_votes=0.0,
         catalogue_mean=CATALOGUE_MEAN,
         smoothing_votes=500.0,
     ) == pytest.approx(CATALOGUE_MEAN)
 
 
-def test_bayesian_average_returns_the_manga_mean_when_votes_dominate() -> None:
-    score = _compute_bayesian_average(
-        weighted_numerator=0.9 * 10_000_000,
-        weighted_denominator=10_000_000,
+def test_bayesian_score_returns_the_manga_mean_when_votes_dominate() -> None:
+    score = _compute_bayesian_score(
+        score_points=0.9 * 10_000_000,
+        weighted_votes=10_000_000,
         catalogue_mean=CATALOGUE_MEAN,
         smoothing_votes=500.0,
     )
@@ -70,12 +68,12 @@ def test_bayesian_average_returns_the_manga_mean_when_votes_dominate() -> None:
     assert score == pytest.approx(0.9, abs=1e-4)
 
 
-def test_bayesian_average_returns_the_midpoint_when_votes_equal_the_smoothing() -> None:
+def test_bayesian_score_returns_the_midpoint_when_votes_equal_the_smoothing() -> None:
     # The break-even point: the manga's own mean and the catalogue mean each
     # carry half the weight.
-    score = _compute_bayesian_average(
-        weighted_numerator=0.9 * 500.0,
-        weighted_denominator=500.0,
+    score = _compute_bayesian_score(
+        score_points=0.9 * 500.0,
+        weighted_votes=500.0,
         catalogue_mean=CATALOGUE_MEAN,
         smoothing_votes=500.0,
     )
@@ -83,16 +81,16 @@ def test_bayesian_average_returns_the_midpoint_when_votes_equal_the_smoothing() 
     assert score == pytest.approx((0.9 + CATALOGUE_MEAN) / 2)
 
 
-def test_compute_mean_divides_the_weighted_sums() -> None:
+def test_compute_mean_divides_points_by_votes() -> None:
     assert _compute_mean(170.0, 200.0) == pytest.approx(0.85)
 
 
-def test_catalogue_mean_pools_every_vote_instead_of_averaging_manga() -> None:
-    # One tiny high scorer and one huge low scorer. Averaging the two manga
-    # would give 0.5; pooling the votes gives a number near the popular one.
+def test_catalogue_mean_counts_each_manga_once_instead_of_each_vote() -> None:
+    # One tiny high scorer (0.9) and one huge low scorer (0.1). Each manga gets
+    # one say, so the answer is 0.5. Pooling the votes would give 109/1010.
     rows = [_aggregate_row(9.0, 10.0), _aggregate_row(100.0, 1000.0)]
 
-    assert _compute_catalogue_mean(rows) == pytest.approx(109.0 / 1010.0)
+    assert _compute_catalogue_mean(rows) == pytest.approx(0.5)
 
 
 def test_compute_manga_metrics_returns_nothing_when_no_manga_is_rated(
@@ -153,6 +151,7 @@ def test_compute_manga_metrics_ranks_a_lightly_rated_manga_below_a_popular_one(
 
     assert obscure["mean_score"] > popular["mean_score"]
     assert obscure["bayesian_score"] < popular["bayesian_score"]
-    # The obscure manga barely moves off the catalogue mean of ~0.671.
-    assert obscure["bayesian_score"] == pytest.approx(0.6769, abs=1e-3)
-    assert popular["bayesian_score"] == pytest.approx(0.8478, abs=1e-3)
+    # The catalogue mean is (0.95 + 0.85 + 0.60) / 3 = 0.80, and the obscure
+    # manga barely moves off it.
+    assert obscure["bayesian_score"] == pytest.approx(0.8029, abs=1e-3)
+    assert popular["bayesian_score"] == pytest.approx(0.8494, abs=1e-3)

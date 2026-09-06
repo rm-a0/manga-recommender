@@ -286,7 +286,7 @@ def test_get_rating_aggregates_sums_votes_across_sources(
 
     assert row is not None
     assert row.votes_count == 1250
-    assert row.sources_count == 2
+    assert row.source_count == 2
 
 
 def test_get_rating_aggregates_normalizes_each_source_to_its_own_scale(
@@ -309,8 +309,8 @@ def test_get_rating_aggregates_normalizes_each_source_to_its_own_scale(
     row = _aggregate_for(db_session, manga.id)
 
     assert row is not None
-    assert row.weighted_denominator == pytest.approx(200.0)
-    assert row.weighted_numerator == pytest.approx(170.0)
+    assert row.weighted_votes == pytest.approx(200.0)
+    assert row.score_points == pytest.approx(170.0)
 
 
 def test_get_rating_aggregates_scales_both_sums_by_the_source_weight(
@@ -331,10 +331,10 @@ def test_get_rating_aggregates_scales_both_sums_by_the_source_weight(
     row = _aggregate_for(db_session, manga.id)
 
     assert row is not None
-    assert row.weighted_denominator == pytest.approx(300.0)
-    assert row.weighted_numerator == pytest.approx(180.0)
+    assert row.weighted_votes == pytest.approx(300.0)
+    assert row.score_points == pytest.approx(180.0)
     # The weight cancels out of the ratio, so the mean is the raw score.
-    assert row.weighted_numerator / row.weighted_denominator == pytest.approx(0.6)
+    assert row.score_points / row.weighted_votes == pytest.approx(0.6)
 
 
 @pytest.mark.parametrize(
@@ -399,7 +399,7 @@ def test_get_rating_aggregates_keeps_the_usable_ratings_of_a_partly_rated_manga(
 
     assert row is not None
     assert row.votes_count == 100
-    assert row.sources_count == 1
+    assert row.source_count == 1
 
 
 def test_get_rating_aggregates_returns_nothing_when_no_rating_exists(
