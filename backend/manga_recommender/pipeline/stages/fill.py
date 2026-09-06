@@ -22,43 +22,46 @@ from manga_recommender.db.session import session_scope
 logger = structlog.get_logger(__name__)
 
 
-def _compute_bayesian_average(
-    weighted_numerator: float,
-    weighted_denominator: float,
+def _compute_bayesian_score(
+    score_points: float,
+    weighted_votes: float,
     catalogue_mean: float,
     smoothing_votes: float,
 ) -> float:
-    """Return the mean score pulled toward the catalogue mean.
+    """Return one manga's own mean score, pulled toward the catalogue mean.
 
     `smoothing_votes` acts as that many imaginary votes at the catalogue mean.
     A manga with few votes moves close to that mean. A manga with many votes
     keeps its own mean.
     """
-    return (weighted_numerator + catalogue_mean * smoothing_votes) / (
-        weighted_denominator + smoothing_votes
+    return (score_points + catalogue_mean * smoothing_votes) / (
+        weighted_votes + smoothing_votes
     )
 
 
-def _compute_mean(weighted_numerator: float, weighted_denominator: float) -> float:
-    """Return the weighted mean score for one set of rating sums."""
-    return weighted_numerator / weighted_denominator
+def _compute_mean(values_sum: float, values_count: float) -> float:
+    """Divide a sum by a count and return the mean."""
+    return values_sum / values_count
 
 
-def _compute_catalogue_mean(rows: Sequence[Row]) -> float:
+def _compute_catalogue_mean(aggregates: Sequence[Row]) -> float:
     """Return the mean score across every rated manga.
 
-    This is the value that `_compute_bayesian_average` shrinks toward. The
-    caller must not pass an empty sequence.
+    Each manga counts once, whatever its vote count. This is the value that
+    `_compute_bayesian_score` shrinks toward. The caller must not pass an
+    empty sequence.
     """
     return _compute_mean(
-        weighted_numerator=sum([row.weighted_numerator for row in rows]),
-        weighted_denominator=sum([row.weighted_denominator for row in rows]),
+        values_sum=sum(
+            _compute_mean(agg.score_points, agg.weighted_votes) for agg in aggregates
+        ),
+        values_count=len(aggregates),
     )
 
 
 def replace_manga_metrics(
     db: Session,
-    rows: Sequence[MetricValues],
+    metrics: Sequence[MetricValues],
     batch_size: int,
 ) -> None:
     """Replace every metric row with a recomputed set.
@@ -68,9 +71,9 @@ def replace_manga_metrics(
     """
     deleted_count = delete_all_manga_metrics(db)
     logger.info("metrics_deleted", count=deleted_count)
-    row_count = len(rows)
-    for i in range(0, row_count, batch_size):
-        batch = rows[i : i + batch_size]
+    metrics_count = len(metrics)
+    for i in range(0, metrics_count, batch_size):
+        batch = metrics[i : i + batch_size]
         start_time = time.monotonic()
         bulk_create_manga_metrics(db, batch)
         logger.info(
@@ -78,7 +81,7 @@ def replace_manga_metrics(
             count=len(batch),
             elapsed_s=round(time.monotonic() - start_time, 1),
         )
-    logger.info("metrics_created", count=row_count)
+    logger.info("metrics_created", count=metrics_count)
 
 
 def compute_manga_metrics(
@@ -91,26 +94,26 @@ def compute_manga_metrics(
     query. Every row carries the same `computed_at`, because one call is one
     recomputation.
     """
-    rows = get_rating_aggregates(db)
-    if not rows:
+    aggregates = get_rating_aggregates(db)
+    if not aggregates:
         return []
     timestamp = datetime.now(UTC)
-    catalogue_mean = _compute_catalogue_mean(rows)
+    catalogue_mean = _compute_catalogue_mean(aggregates)
     metrics = [
         MetricValues(
-            manga_id=row.manga_id,
-            bayesian_score=_compute_bayesian_average(
-                weighted_numerator=row.weighted_numerator,
-                weighted_denominator=row.weighted_denominator,
+            manga_id=agg.manga_id,
+            bayesian_score=_compute_bayesian_score(
+                score_points=agg.score_points,
+                weighted_votes=agg.weighted_votes,
                 catalogue_mean=catalogue_mean,
                 smoothing_votes=smoothing_votes,
             ),
-            mean_score=_compute_mean(row.weighted_numerator, row.weighted_denominator),
-            votes_count=row.votes_count,
-            source_count=row.sources_count,
+            mean_score=_compute_mean(agg.score_points, agg.weighted_votes),
+            votes_count=agg.votes_count,
+            source_count=agg.source_count,
             computed_at=timestamp,
         )
-        for row in rows
+        for agg in aggregates
     ]
     logger.info("metrics_computed", count=len(metrics), catalogue_mean=catalogue_mean)
     return metrics

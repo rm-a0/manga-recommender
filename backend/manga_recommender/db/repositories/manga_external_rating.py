@@ -159,9 +159,10 @@ def update_or_create_external_rating(
 def get_rating_aggregates(db: Session) -> Sequence[Row]:
     """Return the per-manga rating sums that the `fill` stage reduces to metrics.
 
-    Each row holds `manga_id`, `votes_count`, `weighted_denominator`,
-    `weighted_numerator` and `sources_count`. A manga with no usable rating
-    produces no group, and therefore no row.
+    Each row holds `manga_id`, `votes_count`, `weighted_votes`, `score_points`
+    and `source_count`. `score_points` is the sum of every rating's normalized
+    score times its weighted votes. A manga with no usable rating produces no
+    group, and therefore no row.
     """
     # Every filter guards a division. A null score, a zero scale, a zero vote
     # count or a zero weight either breaks the ratio or contributes nothing.
@@ -170,14 +171,14 @@ def get_rating_aggregates(db: Session) -> Sequence[Row]:
             MangaExternalRating.manga_id,
             func.sum(MangaExternalRating.votes_count).label("votes_count"),
             func.sum(Source.weight * MangaExternalRating.votes_count).label(
-                "weighted_denominator"
+                "weighted_votes"
             ),
             func.sum(
                 Source.weight
                 * MangaExternalRating.votes_count
                 * (MangaExternalRating.raw_score / MangaExternalRating.raw_scale_max)
-            ).label("weighted_numerator"),
-            func.count(distinct(MangaExternalRating.source_id)).label("sources_count"),
+            ).label("score_points"),
+            func.count(distinct(MangaExternalRating.source_id)).label("source_count"),
         )
         .where(
             Source.weight > 0,

@@ -125,7 +125,7 @@ class IngestionSettings(BaseSettings):
 class PipelineSettings(BaseSettings):
     """Pipeline settings."""
 
-    smoothing_votes: float = 200.0
+    smoothing_votes: float = 250.0
     batch_size: int = 5000
 
     model_config = SettingsConfigDict(
