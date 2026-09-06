@@ -1,5 +1,6 @@
 """Recompute the derived rating metrics for every manga."""
 
+import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
@@ -67,10 +68,17 @@ def replace_manga_metrics(
     """
     deleted_count = delete_all_manga_metrics(db)
     logger.info("metrics_deleted", count=deleted_count)
-    for i in range(0, len(rows), batch_size):
+    row_count = len(rows)
+    for i in range(0, row_count, batch_size):
         batch = rows[i : i + batch_size]
+        start_time = time.monotonic()
         bulk_create_manga_metrics(db, batch)
-    logger.info("metrics_created", count=len(rows))
+        logger.info(
+            "batch_created",
+            count=len(batch),
+            elapsed_s=round(time.monotonic() - start_time, 1),
+        )
+    logger.info("metrics_created", count=row_count)
 
 
 def compute_manga_metrics(
@@ -88,7 +96,7 @@ def compute_manga_metrics(
         return []
     timestamp = datetime.now(UTC)
     catalogue_mean = _compute_catalogue_mean(rows)
-    return [
+    metrics = [
         MetricValues(
             manga_id=row.manga_id,
             bayesian_score=_compute_bayesian_average(
@@ -104,6 +112,8 @@ def compute_manga_metrics(
         )
         for row in rows
     ]
+    logger.info("metrics_computed", count=len(metrics), catalogue_mean=catalogue_mean)
+    return metrics
 
 
 def run_fill() -> None:
