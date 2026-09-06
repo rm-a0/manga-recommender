@@ -6,6 +6,11 @@ configuration never matters.
 
 ## Run it
 
+`make ui` (from the repo root) serves the UI on `http://localhost:3000`. It installs
+the npm dependencies on the first run.
+
+### Against the local API
+
 The API and a seeded database must be up first — from the repo root:
 
 ```bash
@@ -14,16 +19,22 @@ DB_URL=postgresql://postgres:password@localhost:5433/mangarec \
   uv run python -m manga_recommender ingest --source kaggle_mal   # once, ~1 min
 DB_URL=postgresql://postgres:password@localhost:5433/mangarec \
   uv run python -m manga_recommender app                          # API on :8000
+
+make ui                                                           # UI on :3000
 ```
 
-Then here:
+### Against a deployed API
+
+Needs nothing running locally — pass the host and skip the three commands above:
 
 ```bash
-npm install
-npm run dev          # http://localhost:3000
+make ui api=https://your-deployed-api
 ```
 
-`API_BASE_URL` defaults to `http://localhost:8000`; set it to point elsewhere.
+`api=` sets `API_BASE_URL` for that run only. Left off, the UI reads `API_BASE_URL`
+from `frontend/.env.local` if that file exists, and otherwise defaults to
+`http://localhost:8000`. Put the deployed host in `.env.local` (gitignored) to make it
+the default and then just run `make ui`.
 
 ## Layout
 
