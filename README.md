@@ -51,6 +51,18 @@ uv run python -m manga_recommender app                        # serve the API
 
 Interactive docs are at `/docs` once the server is up.
 
+### The web UI
+
+The Next.js frontend lives in `frontend/` and reads the API over HTTP. `make ui` serves
+it on `http://localhost:3000`, installing its npm dependencies on the first run.
+
+```bash
+make ui                                   # against the local API on :8000
+make ui api=https://your-deployed-api     # against a deployed API, nothing local needed
+```
+
+See `frontend/README.md` for the rest.
+
 ## Database migrations
 
 Migrations use [Alembic](https://alembic.sqlalchemy.org/). Always run them against

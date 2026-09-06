@@ -7,6 +7,7 @@ COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compos
 .PHONY: help setup test lint format typecheck clean \
         migrate migration \
         serve ingest \
+        ui ui-setup \
         docker-build docker-run db-up stack down
 
 help: ## Show this help
@@ -46,6 +47,22 @@ serve: ## Run the API on the host
 
 ingest: ## Run the AniList ingestion pipeline (make ingest source=anilist, or all=1 for every source)
 	uv run python -m manga_recommender ingest $(if $(all),--all,--source $(source))
+
+# --- Frontend ---
+
+UI_DIR := frontend
+
+# Set only when `api=` is passed. An unset run leaves the variable alone so the UI
+# falls back to its own default (localhost:8000), or to a frontend/.env.local if
+# one exists - an always-exported value would silently override that file.
+UI_API := $(if $(api),API_BASE_URL=$(api))
+
+ui-setup: ## Install the UI's npm dependencies
+	npm --prefix $(UI_DIR) install
+
+ui: ## Run the UI on :3000 against the local API, or a deployed one: make ui api=https://host
+	@[ -d $(UI_DIR)/node_modules ] || $(MAKE) ui-setup
+	$(UI_API) npm --prefix $(UI_DIR) run dev
 
 # --- Docker ---
 
