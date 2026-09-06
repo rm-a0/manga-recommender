@@ -7,6 +7,7 @@ import structlog
 from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
+from manga_recommender.core.config import get_pipeline_settings
 from manga_recommender.db.repositories.manga_external_rating import (
     get_rating_aggregates,
 )
@@ -15,6 +16,7 @@ from manga_recommender.db.repositories.manga_metrics import (
     bulk_create_manga_metrics,
     delete_all_manga_metrics,
 )
+from manga_recommender.db.session import session_scope
 
 logger = structlog.get_logger(__name__)
 
@@ -69,11 +71,11 @@ def replace_manga_metrics(
         batch = rows[i : i + batch_size]
         bulk_create_manga_metrics(db, batch)
     logger.info("metrics_created", count=len(rows))
-    db.commit()
 
 
 def compute_manga_metrics(
-    db: Session, smoothing_votes: float
+    db: Session,
+    smoothing_votes: float,
 ) -> Sequence[MetricValues]:
     """Compute one metric row for every manga that has a usable rating.
 
@@ -102,3 +104,14 @@ def compute_manga_metrics(
         )
         for row in rows
     ]
+
+
+def run_fill() -> None:
+    """Recompute every metric row from the current external ratings."""
+    settings = get_pipeline_settings()
+    with session_scope() as session:
+        replace_manga_metrics(
+            session,
+            compute_manga_metrics(session, settings.smoothing_votes),
+            settings.batch_size,
+        )

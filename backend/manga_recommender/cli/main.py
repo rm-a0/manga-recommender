@@ -49,6 +49,29 @@ def ingest(
     run_ingestion(sources, batch_size=get_ingestion_settings().batch_size)
 
 
+@app.command(name="pipeline")
+def start_pipeline(
+    stage: Annotated[
+        list[str] | None,
+        typer.Option("--stage", help="Stage to run (repeatable)."),
+    ] = None,
+    all_stages: Annotated[
+        bool,
+        typer.Option("--all", help="Run every stage in the pipeline."),
+    ] = False,
+) -> None:
+    """Run the pipeline stages. Pick either --stage or --all."""
+    from manga_recommender.pipeline.registry import get_all_pipeline_stages
+    from manga_recommender.pipeline.runner import run_pipeline
+
+    if (stage and all_stages) or (not stage and not all_stages):
+        raise typer.BadParameter("Pass either --stage (one or more) or --all.")
+    stages = get_all_pipeline_stages() if all_stages else stage
+    if stages is None:
+        raise RuntimeError("No stages to run.")
+    run_pipeline(stages)
+
+
 @app.command(name="app")
 def start_app() -> None:
     """Start the FastAPI application with uvicorn."""
