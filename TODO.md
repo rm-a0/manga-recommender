@@ -88,19 +88,23 @@ Planned work, not yet scheduled.
 
 ## Pipeline
 
-Stages run in order: `derive` -> `export` -> `embed` -> `index` -> `train`.
+Stages run in order: `fill` -> `export` -> `embed` -> `index` -> `train`.
+Registry order is the run order, so `--stage` accepts any order.
 
-- Rename `pipeline/runnery.py` to `runner.py`.
-- `derive`: post-ingestion in-DB work. Normalized score, canonical arbitration,
-  normalized title, tag display names, orphan prune (move it out of
-  `ingestion/runner.py`).
+- `fill`: post-ingestion in-DB work. Bayesian metrics are done. Still to do:
+  canonical arbitration, normalized title, tag display names, orphan prune
+  (move it out of `ingestion/runner.py`).
 - `export`: DB -> Parquet snapshot. Everything downstream reads the snapshot,
   not the live database.
-- `embed`: Parquet -> `.npy`. No DB writes.
+- `embed`: Parquet -> `.npy`. No DB writes. Import `sentence_transformers`
+  inside the stage, so the registry can import every stage at module scope.
 - `index`: `.npy` -> `manga_embeddings`, then build HNSW.
 - `train`: needs user-item data first. Blocked.
-- Stages declare `depends_on`; a failed stage halts the run. Unlike sources,
-  which are independent and log-and-continue.
+- A failed stage halts the run. Unlike sources, which are independent and
+  log-and-continue. `depends_on` is not needed: the graph is a path, and list
+  order already encodes it.
+- Each stage checks its own input artifact instead. Staleness is a fact about
+  files, not about the graph.
 
 ## ML / NLP
 
