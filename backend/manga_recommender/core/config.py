@@ -122,6 +122,20 @@ class IngestionSettings(BaseSettings):
     )
 
 
+class PipelineSettings(BaseSettings):
+    """Pipeline settings."""
+
+    smoothing_votes: float = 250.0
+    batch_size: int = 5000
+
+    model_config = SettingsConfigDict(
+        env_prefix="PIPELINE_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 @functools.lru_cache
 def get_app_settings() -> AppSettings:
     """Return the cached AppSettings instance."""
@@ -162,3 +176,9 @@ def get_kaggle_mal_settings() -> KaggleMalSettings:
 def get_ingestion_settings() -> IngestionSettings:
     """Return the cached IngestionSettings instance."""
     return IngestionSettings()
+
+
+@functools.lru_cache
+def get_pipeline_settings() -> PipelineSettings:
+    """Return the cached PipelineSettings instance."""
+    return PipelineSettings()

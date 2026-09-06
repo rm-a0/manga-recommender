@@ -11,9 +11,6 @@ from manga_recommender.core.config import (
     get_ingestion_settings,
     get_logging_settings,
 )
-from manga_recommender.core.logging_config import configure_logging
-from manga_recommender.ingestion.registry import get_all_registered_sources
-from manga_recommender.ingestion.runner import run_ingestion
 
 app = typer.Typer(help="CLI for the manga recommender.")
 
@@ -21,6 +18,8 @@ app = typer.Typer(help="CLI for the manga recommender.")
 @app.callback()
 def main() -> None:
     """Configure logging before any Typer command runs."""
+    from manga_recommender.core.logging_config import configure_logging
+
     configure_logging(
         level=get_logging_settings().level,
         debug=get_app_settings().debug,
@@ -39,12 +38,38 @@ def ingest(
     ] = False,
 ) -> None:
     """Run the ingestion pipeline. Pick either --source or --all."""
+    from manga_recommender.ingestion.registry import get_all_registered_sources
+    from manga_recommender.ingestion.runner import run_ingestion
+
     if (source and all_sources) or (not source and not all_sources):
         raise typer.BadParameter("Pass either --source (one or more) or --all.")
     sources = get_all_registered_sources() if all_sources else source
     if sources is None:
         raise RuntimeError("No sources to ingest.")
     run_ingestion(sources, batch_size=get_ingestion_settings().batch_size)
+
+
+@app.command(name="pipeline")
+def start_pipeline(
+    stage: Annotated[
+        list[str] | None,
+        typer.Option("--stage", help="Stage to run (repeatable)."),
+    ] = None,
+    all_stages: Annotated[
+        bool,
+        typer.Option("--all", help="Run every stage in the pipeline."),
+    ] = False,
+) -> None:
+    """Run the pipeline stages. Pick either --stage or --all."""
+    from manga_recommender.pipeline.registry import get_all_pipeline_stages
+    from manga_recommender.pipeline.runner import run_pipeline
+
+    if (stage and all_stages) or (not stage and not all_stages):
+        raise typer.BadParameter("Pass either --stage (one or more) or --all.")
+    stages = get_all_pipeline_stages() if all_stages else stage
+    if stages is None:
+        raise RuntimeError("No stages to run.")
+    run_pipeline(stages)
 
 
 @app.command(name="app")

@@ -5,11 +5,12 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import TypedDict
 
-from sqlalchemy import func, select
+from sqlalchemy import Row, distinct, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
+from manga_recommender.db.models.sources import Source
 
 
 class RatingUpsertValues(TypedDict):
@@ -153,6 +154,41 @@ def update_or_create_external_rating(
         raw_score=raw_score,
         score_distribution=score_distribution,
     )
+
+
+def get_rating_aggregates(db: Session) -> Sequence[Row]:
+    """Return the per-manga rating sums that the `fill` stage reduces to metrics.
+
+    Each row holds `manga_id`, `votes_count`, `weighted_votes`, `score_points`
+    and `source_count`. `score_points` is the sum of every rating's normalized
+    score times its weighted votes. A manga with no usable rating produces no
+    group, and therefore no row.
+    """
+    # Every filter guards a division. A null score, a zero scale, a zero vote
+    # count or a zero weight either breaks the ratio or contributes nothing.
+    return db.execute(
+        select(
+            MangaExternalRating.manga_id,
+            func.sum(MangaExternalRating.votes_count).label("votes_count"),
+            func.sum(Source.weight * MangaExternalRating.votes_count).label(
+                "weighted_votes"
+            ),
+            func.sum(
+                Source.weight
+                * MangaExternalRating.votes_count
+                * (MangaExternalRating.raw_score / MangaExternalRating.raw_scale_max)
+            ).label("score_points"),
+            func.count(distinct(MangaExternalRating.source_id)).label("source_count"),
+        )
+        .where(
+            Source.weight > 0,
+            MangaExternalRating.raw_score.is_not(None),
+            MangaExternalRating.raw_scale_max > 0,
+            MangaExternalRating.votes_count > 0,
+        )
+        .join(Source, MangaExternalRating.source_id == Source.id)
+        .group_by(MangaExternalRating.manga_id)
+    ).all()
 
 
 # --- Bulk operations ---

@@ -25,6 +25,16 @@ Planned work, not yet scheduled.
 - Add `role` to `manga_authors` once something needs Story separate from Art.
 - Revisit `delete_orphaned_manga`'s predicate if a source ever supplies
   descriptions without ratings.
+- Store English titles. `data/kaggle_mal_2026.csv` already carries `title_english`
+  and `title_japanese`, and `_to_record` reads neither, so search only matches the
+  romaji: `q=attack on titan` finds nothing, `q=shingeki no kyojin` finds it. One
+  column, one line in `kaggle_mal.py`, then re-run `ingest --source kaggle_mal`.
+  AniList needs `title { romaji english native }` plus `synonyms` in the query and
+  a full re-ingest, so it can follow later. Once `synonyms` lands the shape is
+  genuinely one-to-many and wants a `manga_titles` table, with search as an
+  `EXISTS` over it — the same shape as `_has_tag`. Deferred to the same PR as the
+  `published_date` narrowing below, to spend one migration and one re-ingest on
+  both. Not a storage question: ~30 bytes a row is ~6 MB at full catalogue size.
 - Narrow `manga.published_date` from `DateTime(timezone=True)` to `Date`. Neither
   source carries a time: Kaggle gives `YYYY-MM-DD` and AniList gives
   `{year, month, day}`, so both extractors build a midnight datetime that means
@@ -43,6 +53,8 @@ Planned work, not yet scheduled.
   ("Kohei" beating "Kōhei", "CLAMP" flattened by an ALL-CAPS-first source). Needs
   richer rules, or `Source.weight` as the tiebreak. Needs a re-ingest either way:
   only the winning spelling is stored, so the alternatives are already gone.
+- Migrate DB from Supabase to Aiven, delete all alembic versions before seeding
+  and generate initial one from scratch.
 
 ## API
 
@@ -73,3 +85,43 @@ Planned work, not yet scheduled.
 ## Not built yet
 
 - The recommendation engine, including semantic search over descriptions.
+
+## Pipeline
+
+Stages run in order: `fill` -> `export` -> `embed` -> `index` -> `train`.
+Registry order is the run order, so `--stage` accepts any order.
+
+- `fill`: post-ingestion in-DB work. Bayesian metrics are done. Still to do:
+  canonical arbitration, normalized title, tag display names, orphan prune
+  (move it out of `ingestion/runner.py`).
+- `export`: DB -> Parquet snapshot. Everything downstream reads the snapshot,
+  not the live database.
+- `embed`: Parquet -> `.npy`. No DB writes. Import `sentence_transformers`
+  inside the stage, so the registry can import every stage at module scope.
+- `index`: `.npy` -> `manga_embeddings`, then build HNSW.
+- `train`: needs user-item data first. Blocked.
+- A failed stage halts the run. Unlike sources, which are independent and
+  log-and-continue. `depends_on` is not needed: the graph is a path, and list
+  order already encodes it.
+- Each stage checks its own input artifact instead. Staleness is a fact about
+  files, not about the graph.
+
+## ML / NLP
+
+Checkpoints, shortest form. Expand when each is started.
+
+- Content embeddings. Description + tags + title -> `halfvec(384)`, HNSW.
+  Powers "more like this" and semantic search.
+- User-item dataset. Far future. No public manga user-rating dataset exists —
+  searched, found none. Must be crawled from Jikan `/users/{name}/mangalist`,
+  which needs a username source and a multi-day rate-limited run. It is a second
+  ingestion source, not a download. Everything below that depends on it stays
+  blocked; content-based recommendation does not.
+- Item factors, not a similarity matrix. Factorize offline, store item vectors
+  in `manga_embeddings.cf_vec`, query with the same HNSW. 160k x 160k is 102 GB.
+- Hybrid blend. Weighted sum of content and CF scores, one tunable weight.
+  Content-only until CF exists, so cold start already works.
+- Bayesian score shrinkage. `raw_score` on 12 votes must not outrank 40k votes.
+  Prior toward the global mean, weight by `votes_count`. Belongs in `derive`.
+- LLM query understanding. Free-text prompt -> filters plus an embedding.
+  Last, and only if plain vector search is not enough.

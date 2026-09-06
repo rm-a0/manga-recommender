@@ -1,7 +1,8 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+import pytest
+from sqlalchemy import Row, select
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
@@ -12,6 +13,7 @@ from manga_recommender.db.repositories.manga_external_rating import (
     bulk_update_or_create_external_ratings,
     create_external_rating,
     get_external_ratings_by_manga_and_source,
+    get_rating_aggregates,
     update_external_rating,
     update_or_create_external_rating,
 )
@@ -246,3 +248,163 @@ def test_bulk_ratings_updates_existing_row_in_place(
     assert len(rows) == 1
     assert rows[0].id == original.id
     assert rows[0].raw_score == 8.5
+
+
+def _source(db_session: Session, name: str, weight: float = 1.0) -> Source:
+    """Create and flush one source with an explicit scoring weight."""
+    source = Source(name=name, weight=weight)
+    db_session.add(source)
+    db_session.flush()
+    return source
+
+
+def _aggregate_for(db_session: Session, manga_id: uuid.UUID) -> Row | None:
+    """Return the aggregate row for one manga, or None when it has no row."""
+    return next(
+        (row for row in get_rating_aggregates(db_session) if row.manga_id == manga_id),
+        None,
+    )
+
+
+def test_get_rating_aggregates_sums_votes_across_sources(
+    db_session: Session,
+) -> None:
+    manga = create_manga(db_session, title="Berserk")
+    for name, votes in (("mal", 1000), ("anilist", 250)):
+        create_external_rating(
+            db_session,
+            manga_id=manga.id,
+            source_id=_source(db_session, name).id,
+            external_id=f"{name}-1",
+            raw_score=8.0,
+            raw_scale_max=10.0,
+            votes_count=votes,
+            fetched_at=datetime.now(UTC),
+        )
+
+    row = _aggregate_for(db_session, manga.id)
+
+    assert row is not None
+    assert row.votes_count == 1250
+    assert row.source_count == 2
+
+
+def test_get_rating_aggregates_normalizes_each_source_to_its_own_scale(
+    db_session: Session,
+) -> None:
+    # 85/100 and 8.5/10 are the same score. Both must contribute 0.85.
+    manga = create_manga(db_session, title="Vinland Saga")
+    for name, raw_score, scale in (("mal", 8.5, 10.0), ("anilist", 85.0, 100.0)):
+        create_external_rating(
+            db_session,
+            manga_id=manga.id,
+            source_id=_source(db_session, name).id,
+            external_id=f"{name}-1",
+            raw_score=raw_score,
+            raw_scale_max=scale,
+            votes_count=100,
+            fetched_at=datetime.now(UTC),
+        )
+
+    row = _aggregate_for(db_session, manga.id)
+
+    assert row is not None
+    assert row.weighted_votes == pytest.approx(200.0)
+    assert row.score_points == pytest.approx(170.0)
+
+
+def test_get_rating_aggregates_scales_both_sums_by_the_source_weight(
+    db_session: Session,
+) -> None:
+    manga = create_manga(db_session, title="Monster")
+    create_external_rating(
+        db_session,
+        manga_id=manga.id,
+        source_id=_source(db_session, "mal", weight=3.0).id,
+        external_id="mal-1",
+        raw_score=6.0,
+        raw_scale_max=10.0,
+        votes_count=100,
+        fetched_at=datetime.now(UTC),
+    )
+
+    row = _aggregate_for(db_session, manga.id)
+
+    assert row is not None
+    assert row.weighted_votes == pytest.approx(300.0)
+    assert row.score_points == pytest.approx(180.0)
+    # The weight cancels out of the ratio, so the mean is the raw score.
+    assert row.score_points / row.weighted_votes == pytest.approx(0.6)
+
+
+@pytest.mark.parametrize(
+    ("raw_score", "raw_scale_max", "votes_count", "weight"),
+    [
+        (None, 10.0, 100, 1.0),
+        (8.0, None, 100, 1.0),
+        (8.0, 0.0, 100, 1.0),
+        (8.0, 10.0, None, 1.0),
+        (8.0, 10.0, 0, 1.0),
+        (8.0, 10.0, 100, 0.0),
+    ],
+)
+def test_get_rating_aggregates_omits_a_manga_whose_only_rating_is_unusable(
+    db_session: Session,
+    raw_score: float | None,
+    raw_scale_max: float | None,
+    votes_count: int | None,
+    weight: float,
+) -> None:
+    manga = create_manga(db_session, title="Unrated")
+    create_external_rating(
+        db_session,
+        manga_id=manga.id,
+        source_id=_source(db_session, "mal", weight=weight).id,
+        external_id="mal-1",
+        raw_score=raw_score,
+        raw_scale_max=raw_scale_max,
+        votes_count=votes_count,
+        fetched_at=datetime.now(UTC),
+    )
+
+    assert _aggregate_for(db_session, manga.id) is None
+
+
+def test_get_rating_aggregates_keeps_the_usable_ratings_of_a_partly_rated_manga(
+    db_session: Session,
+) -> None:
+    manga = create_manga(db_session, title="Pluto")
+    create_external_rating(
+        db_session,
+        manga_id=manga.id,
+        source_id=_source(db_session, "mal").id,
+        external_id="mal-1",
+        raw_score=8.0,
+        raw_scale_max=10.0,
+        votes_count=100,
+        fetched_at=datetime.now(UTC),
+    )
+    create_external_rating(
+        db_session,
+        manga_id=manga.id,
+        source_id=_source(db_session, "anilist").id,
+        external_id="anilist-1",
+        raw_score=None,
+        raw_scale_max=100.0,
+        votes_count=9999,
+        fetched_at=datetime.now(UTC),
+    )
+
+    row = _aggregate_for(db_session, manga.id)
+
+    assert row is not None
+    assert row.votes_count == 100
+    assert row.source_count == 1
+
+
+def test_get_rating_aggregates_returns_nothing_when_no_rating_exists(
+    db_session: Session,
+) -> None:
+    create_manga(db_session, title="Nobody rated me")
+
+    assert get_rating_aggregates(db_session) == []
