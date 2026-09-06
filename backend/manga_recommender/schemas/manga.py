@@ -23,8 +23,8 @@ class MangaSort(StrEnum):
 
     TITLE = "title"
     PUBLISHED_DATE = "published_date"
-    # POPULARITY = "popularity"
-    # RATING = "rating"
+    POPULARITY = "popularity"
+    RATING = "rating"
     # RELEVANCE = "relevance"
 
 
@@ -32,7 +32,7 @@ class MangaListParams(PageParams):
     """Filter, sort and page controls for the manga list endpoint.
 
     Every field is optional. A request with no query string returns the
-    first page, ordered by title.
+    first page, most popular first.
     """
 
     q: str | None = Field(None, min_length=2, max_length=100)
@@ -42,8 +42,8 @@ class MangaListParams(PageParams):
     tag_match: TagMatch = TagMatch.ANY
     published_from: date | None = None
     published_to: date | None = None
-    sort: MangaSort | None = None
-    order: SortOrder = SortOrder.ASC
+    sort: MangaSort | None = MangaSort.POPULARITY
+    order: SortOrder = SortOrder.DESC
 
 
 class MangaSummary(BaseModel):

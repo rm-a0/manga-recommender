@@ -116,7 +116,7 @@ def get_manga_page(db: Session, params: MangaListParams) -> Page[MangaSummary]:
             for m in get_all_manga(
                 db,
                 filters,
-                sort=params.sort or MangaSort.TITLE,
+                sort=params.sort or MangaSort.POPULARITY,
                 descending=params.order is SortOrder.DESC,
                 limit=params.limit,
                 offset=params.offset,
