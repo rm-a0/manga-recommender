@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { listAllTags, listManga } from '@/lib/api'
+import { countAuthors, listAllTags, listManga } from '@/lib/api'
 
 const NAV = [
   { href: '/', label: 'Discover' },
@@ -9,10 +9,14 @@ const NAV = [
 ]
 
 /** Read the counts the strip prints. Never let them take the page down. */
-async function counts(): Promise<{ titles: number; tags: number } | null> {
+async function counts(): Promise<{ titles: number; tags: number; authors: number } | null> {
   try {
-    const [page, tags] = await Promise.all([listManga({ limit: 1 }), listAllTags()])
-    return { titles: page.total, tags: tags.length }
+    const [page, tags, authors] = await Promise.all([
+      listManga({ limit: 1 }),
+      listAllTags(),
+      countAuthors(),
+    ])
+    return { titles: page.total, tags: tags.length, authors }
   } catch {
     // The strip is chrome. If the API is asleep the page still prints.
     return null
@@ -55,9 +59,9 @@ export async function Masthead() {
 
       <div className="flex flex-wrap border-b border-line bg-panel">
         {[
-          ['Hall', 'A–P'],
           ['Entries', stats ? stats.titles.toLocaleString('en') : '—'],
           ['Codes', stats ? String(stats.tags) : '—'],
+          ['Authors', stats ? stats.authors.toLocaleString('en') : '—'],
         ].map(([k, v]) => (
           <div key={k} className="code border-r border-line px-3.5 py-1.5 text-dim">
             {k} <b className="font-semibold text-cell">{v}</b>
