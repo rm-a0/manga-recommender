@@ -2,11 +2,15 @@
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from manga_recommender.db.base import Base
+
+if TYPE_CHECKING:
+    from manga_recommender.db.models.manga import Manga
 
 
 class MangaMetric(Base):
@@ -26,3 +30,4 @@ class MangaMetric(Base):
     votes_count: Mapped[int] = mapped_column()
     source_count: Mapped[int] = mapped_column()
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    manga: Mapped[Manga] = relationship(back_populates="metric")

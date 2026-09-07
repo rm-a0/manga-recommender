@@ -168,7 +168,7 @@ def get_manga_by_author_id(
         .order_by(Manga.title, Manga.id)
         .offset(offset)
         .limit(limit)
-        .options(selectinload(Manga.authors))
+        .options(selectinload(Manga.authors), selectinload(Manga.metric))
     ).all()
 
 
@@ -191,7 +191,7 @@ def get_manga_by_tag_id(
         .order_by(Manga.title, Manga.id)
         .offset(offset)
         .limit(limit)
-        .options(selectinload(Manga.authors))
+        .options(selectinload(Manga.authors), selectinload(Manga.metric))
     ).all()
 
 
@@ -240,7 +240,9 @@ def get_manga_by_id(
     rank and spoiler flag off the link row.
     """
     return db.scalar(
-        select(Manga).where(Manga.id == manga_id).options(selectinload(Manga.authors))
+        select(Manga)
+        .where(Manga.id == manga_id)
+        .options(selectinload(Manga.authors), selectinload(Manga.metric))
     )
 
 
@@ -263,7 +265,7 @@ def get_all_manga(
         .order_by(*_order_by(sort, descending))
         .offset(offset)
         .limit(limit)
-        .options(selectinload(Manga.authors))
+        .options(selectinload(Manga.authors), selectinload(Manga.metric))
     ).all()
 
 
