@@ -17,6 +17,7 @@ from sqlalchemy.orm import (
 from manga_recommender.db.models.authors import Author, manga_authors
 from manga_recommender.db.models.manga import Manga, MangaStatus
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
+from manga_recommender.db.models.manga_metrics import MangaMetric
 from manga_recommender.db.models.tags import Tag, manga_tags
 from manga_recommender.db.repositories.tags import normalize_tag_name
 
@@ -27,6 +28,8 @@ if TYPE_CHECKING:
 _SORT_COLUMNS: dict[str, InstrumentedAttribute[Any]] = {
     "title": Manga.title,
     "published_date": Manga.published_date,
+    "popularity": MangaMetric.votes_count,
+    "rating": MangaMetric.bayesian_score,
 }
 
 
@@ -165,7 +168,7 @@ def get_manga_by_author_id(
         .order_by(Manga.title, Manga.id)
         .offset(offset)
         .limit(limit)
-        .options(selectinload(Manga.authors))
+        .options(selectinload(Manga.authors), selectinload(Manga.metric))
     ).all()
 
 
@@ -188,7 +191,7 @@ def get_manga_by_tag_id(
         .order_by(Manga.title, Manga.id)
         .offset(offset)
         .limit(limit)
-        .options(selectinload(Manga.authors))
+        .options(selectinload(Manga.authors), selectinload(Manga.metric))
     ).all()
 
 
@@ -237,7 +240,9 @@ def get_manga_by_id(
     rank and spoiler flag off the link row.
     """
     return db.scalar(
-        select(Manga).where(Manga.id == manga_id).options(selectinload(Manga.authors))
+        select(Manga)
+        .where(Manga.id == manga_id)
+        .options(selectinload(Manga.authors), selectinload(Manga.metric))
     )
 
 
@@ -256,10 +261,11 @@ def get_all_manga(
     """
     return db.scalars(
         _filtered_manga(filters)
+        .outerjoin(MangaMetric, Manga.id == MangaMetric.manga_id)
         .order_by(*_order_by(sort, descending))
         .offset(offset)
         .limit(limit)
-        .options(selectinload(Manga.authors))
+        .options(selectinload(Manga.authors), selectinload(Manga.metric))
     ).all()
 
 

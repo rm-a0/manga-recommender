@@ -40,7 +40,7 @@ uv run python -m manga_recommender app                        # serve the API
 |---|---|
 | `GET /health` | Liveness. Touches no dependency |
 | `GET /ready` | Readiness. One entry per checked dependency |
-| `GET /manga` | One page of manga summaries (`limit`, `offset`) |
+| `GET /manga` | One page of manga summaries. Filters, sorts and pages — see below |
 | `GET /manga/{manga_id}` | One manga in full, or 404 |
 | `GET /authors` | One page of author summaries (`limit`, `offset`) |
 | `GET /authors/{author_id}` | One author in full, or 404 |
@@ -48,6 +48,25 @@ uv run python -m manga_recommender app                        # serve the API
 | `GET /tags` | One page of tag summaries (`limit`, `offset`) |
 | `GET /tags/{tag_id}` | One tag in full, or 404 |
 | `GET /tags/{tag_id}/manga` | One page of the manga carrying that tag (`limit`, `offset`) |
+
+`GET /manga` is the one endpoint with a query surface. Every parameter is optional,
+so a bare `GET /manga` returns the first page, most popular first.
+
+| Parameter | Meaning |
+|---|---|
+| `q` | Title search, 2-100 chars. A title must contain every word |
+| `status` | Repeatable: `ongoing`, `finished`, `cancelled`, `not_released_yet`, `hiatus` |
+| `include_tag`, `exclude_tag` | Repeatable tag names, up to 10 each |
+| `tag_match` | How `include_tag` combines: `any` (default) or `all` |
+| `published_from`, `published_to` | Publication date bounds |
+| `sort` | `popularity` (default), `rating`, `title`, `published_date` |
+| `order` | `desc` (default) or `asc` |
+| `limit`, `offset` | Page window. `limit` is 1-100, default 20 |
+
+Every manga summary and detail embeds `metrics`: the `bayesian_score` that
+`sort=rating` orders by, and the `votes_count` that `sort=popularity` orders by. A
+manga with no usable source rating has no metrics row, so the field is `null` and the
+manga sorts last whichever direction a metric sort runs.
 
 Interactive docs are at `/docs` once the server is up.
 
@@ -276,8 +295,9 @@ manga-recommender/
 │   │   │                          sources, manga_external_ratings, users)
 │   │   └── repositories/        # Data-access functions, one module per model
 │   │
-│   ├── schemas/                # Pydantic request/response models, one per resource
-│   │                              (common Page[T], probes, manga, authors, tags)
+│   ├── schemas/                # Pydantic request/response models, one per entity
+│   │                              (common Page[T], probes, manga, manga_metrics,
+│   │                               authors, tags)
 │   ├── services/               # Business logic - no HTTP, no SQL strings
 │   │
 │   └── ingestion/
@@ -311,6 +331,13 @@ item, `MangaDetail` for one resource, with `Page[T]` in `schemas/common.py` wrap
 any paginated list. A third form, `<Parent><Child>`, appears only where the link
 between two resources carries data of its own — `MangaTag` holds the `rank` and
 `is_spoiler` that describe the manga-tag link rather than the tag itself.
+
+**A schema lives in the module of the entity whose data it carries**, not the module
+of the endpoint that returns it. `MangaTag` and `MangaMetricSummary` are only ever
+embedded in a manga response, but they describe a tag and a metrics row, so they live
+in `tags.py` and `manga_metrics.py`. A module therefore needs no endpoint of its own
+to earn its place, and `manga.py` imports every other schema module while none import
+it.
 
 Two rules keep the schema modules importable in any order:
 

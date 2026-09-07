@@ -13,6 +13,7 @@ from manga_recommender.db.models.tags import Tag, manga_tags
 
 if TYPE_CHECKING:
     from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
+    from manga_recommender.db.models.manga_metrics import MangaMetric
 
 
 class MangaStatus(StrEnum):
@@ -42,9 +43,12 @@ class Manga(Base):
     authors: Mapped[list[Author]] = relationship(
         secondary=manga_authors, back_populates="manga"
     )
-    # passive_deletes lets the database's ON DELETE CASCADE remove the child
-    # rows. Without it, SQLAlchemy loads and deletes each one separately.
     external_ratings: Mapped[list[MangaExternalRating]] = relationship(
+        back_populates="manga",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    metric: Mapped[MangaMetric | None] = relationship(
         back_populates="manga",
         cascade="all, delete-orphan",
         passive_deletes=True,

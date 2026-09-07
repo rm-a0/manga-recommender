@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga import Manga
+from manga_recommender.db.models.manga_metrics import MangaMetric
 from manga_recommender.db.repositories.manga import (
     MangaFilters,
     TagLink,
@@ -25,15 +26,32 @@ from manga_recommender.schemas.manga import (
     MangaListParams,
     MangaSort,
     MangaSummary,
-    MangaTag,
     TagMatch,
 )
+from manga_recommender.schemas.manga_metrics import MangaMetricSummary
+from manga_recommender.schemas.tags import MangaTag
+
+
+def _to_metric_summary(metric: MangaMetric | None) -> MangaMetricSummary | None:
+    """Map a metrics row to the model embedded in a manga response.
+
+    Returns None for a manga that has no row, which the `fill` stage leaves out
+    entirely when no source rating is usable.
+    """
+    if metric is None:
+        return None
+    return MangaMetricSummary(
+        id=metric.id,
+        bayesian_score=metric.bayesian_score,
+        votes_count=metric.votes_count,
+    )
 
 
 def _to_summary(manga: Manga) -> MangaSummary:
     """Map a manga row to its list-response model.
 
-    Reads `manga.authors`, so the caller must load that relationship first.
+    Reads `manga.authors` and `manga.metric`, so the caller must load both
+    relationships first.
     """
     return MangaSummary(
         id=manga.id,
@@ -47,13 +65,15 @@ def _to_summary(manga: Manga) -> MangaSummary:
             )
             for a in manga.authors
         ],
+        metrics=_to_metric_summary(manga.metric),
     )
 
 
 def _to_detail(manga: Manga, tag_links: Sequence[TagLink]) -> MangaDetail:
     """Map a manga row to its single-resource response model.
 
-    Reads `manga.authors`, so the caller must load that relationship first.
+    Reads `manga.authors` and `manga.metric`, so the caller must load both
+    relationships first.
     """
     return MangaDetail(
         id=manga.id,
@@ -78,6 +98,7 @@ def _to_detail(manga: Manga, tag_links: Sequence[TagLink]) -> MangaDetail:
             )
             for tag_link in tag_links
         ],
+        metrics=_to_metric_summary(manga.metric),
     )
 
 
@@ -116,7 +137,7 @@ def get_manga_page(db: Session, params: MangaListParams) -> Page[MangaSummary]:
             for m in get_all_manga(
                 db,
                 filters,
-                sort=params.sort or MangaSort.TITLE,
+                sort=params.sort or MangaSort.POPULARITY,
                 descending=params.order is SortOrder.DESC,
                 limit=params.limit,
                 offset=params.offset,

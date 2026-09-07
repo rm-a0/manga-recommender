@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 from manga_recommender.db.models.manga import MangaStatus
 from manga_recommender.schemas.authors import AuthorSummary
 from manga_recommender.schemas.common import PageParams, SortOrder
+from manga_recommender.schemas.manga_metrics import MangaMetricSummary
+from manga_recommender.schemas.tags import MangaTag
 
 
 class TagMatch(StrEnum):
@@ -23,8 +25,8 @@ class MangaSort(StrEnum):
 
     TITLE = "title"
     PUBLISHED_DATE = "published_date"
-    # POPULARITY = "popularity"
-    # RATING = "rating"
+    POPULARITY = "popularity"
+    RATING = "rating"
     # RELEVANCE = "relevance"
 
 
@@ -32,7 +34,7 @@ class MangaListParams(PageParams):
     """Filter, sort and page controls for the manga list endpoint.
 
     Every field is optional. A request with no query string returns the
-    first page, ordered by title.
+    first page, most popular first.
     """
 
     q: str | None = Field(None, min_length=2, max_length=100)
@@ -42,8 +44,8 @@ class MangaListParams(PageParams):
     tag_match: TagMatch = TagMatch.ANY
     published_from: date | None = None
     published_to: date | None = None
-    sort: MangaSort | None = None
-    order: SortOrder = SortOrder.ASC
+    sort: MangaSort | None = MangaSort.POPULARITY
+    order: SortOrder = SortOrder.DESC
 
 
 class MangaSummary(BaseModel):
@@ -57,15 +59,7 @@ class MangaSummary(BaseModel):
     authors: list[AuthorSummary]
     status: MangaStatus | None
     image_url: str | None
-
-
-class MangaTag(BaseModel):
-    """A tag as it appears inside a manga response."""
-
-    id: uuid.UUID
-    name: str
-    is_spoiler: bool
-    rank: int | None
+    metrics: MangaMetricSummary | None
 
 
 class MangaDetail(BaseModel):
@@ -83,3 +77,4 @@ class MangaDetail(BaseModel):
     published_date: datetime | None
     description: str | None
     tags: list[MangaTag]
+    metrics: MangaMetricSummary | None

@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ from manga_recommender.db.repositories.manga import (
     bulk_add_tags_to_manga,
     create_manga,
 )
+from manga_recommender.db.repositories.manga_metrics import create_manga_metric
 from manga_recommender.db.repositories.tags import get_or_create_tag
 
 
@@ -56,6 +58,29 @@ def _tag_manga(
     )
 
 
+def _seed_metrics(
+    db: Session,
+    manga_id: uuid.UUID,
+    *,
+    bayesian_score: float = 8.5,
+    votes_count: int = 1200,
+) -> None:
+    """Give one manga a metrics row.
+
+    The remaining columns describe how the score was computed and never reach
+    the response, so they take fixed values.
+    """
+    create_manga_metric(
+        db,
+        manga_id=manga_id,
+        bayesian_score=bayesian_score,
+        mean_score=9.1,
+        votes_count=votes_count,
+        source_count=2,
+        computed_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
 class TestListManga:
     def test_returns_a_page_of_summaries(
         self, client: TestClient, db_session: Session
@@ -72,6 +97,38 @@ class TestListManga:
         assert body["items"][0]["title"] == "Berserk"
         assert body["items"][0]["status"] == "hiatus"
         assert [a["name"] for a in body["items"][0]["authors"]] == ["Kentaro Miura"]
+
+    def test_embeds_the_metrics_of_a_rated_manga(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        manga_id = _seed_manga(db_session)
+        _seed_metrics(db_session, manga_id, bayesian_score=8.5, votes_count=1200)
+
+        metrics = client.get("/manga").json()["items"][0]["metrics"]
+
+        assert metrics["bayesian_score"] == 8.5
+        assert metrics["votes_count"] == 1200
+
+    def test_omits_the_computation_columns_from_the_metrics(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """The row records how the score was reached; the response shows it."""
+        manga_id = _seed_manga(db_session)
+        _seed_metrics(db_session, manga_id)
+
+        metrics = client.get("/manga").json()["items"][0]["metrics"]
+
+        assert "mean_score" not in metrics
+        assert "source_count" not in metrics
+        assert "computed_at" not in metrics
+
+    def test_returns_null_metrics_for_an_unrated_manga(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """A manga with no usable source rating has no row, not a row of nulls."""
+        _seed_manga(db_session)
+
+        assert client.get("/manga").json()["items"][0]["metrics"] is None
 
     def test_omits_detail_only_fields(
         self, client: TestClient, db_session: Session
@@ -171,6 +228,66 @@ class TestListManga:
 
         assert body["total"] == 1
 
+    def _seed_rivals(self, db: Session) -> None:
+        """Seed two manga whose score, vote count and title all disagree.
+
+        Ordering by the wrong metric, or falling through to the title
+        tiebreaker, then cannot reproduce the expected order by accident.
+        """
+        _seed_metrics(
+            db, _seed_manga(db, title="Zeta"), bayesian_score=9.5, votes_count=10
+        )
+        _seed_metrics(
+            db, _seed_manga(db, title="Alpha"), bayesian_score=4.0, votes_count=9000
+        )
+
+    def test_defaults_to_most_popular_first(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """A request with no query string must return the most popular first."""
+        self._seed_rivals(db_session)
+
+        titles = [m["title"] for m in client.get("/manga").json()["items"]]
+
+        assert titles == ["Alpha", "Zeta"]
+
+    def test_sorts_by_popularity(self, client: TestClient, db_session: Session) -> None:
+        self._seed_rivals(db_session)
+
+        response = client.get("/manga", params={"sort": "popularity", "order": "asc"})
+
+        assert [m["title"] for m in response.json()["items"]] == ["Zeta", "Alpha"]
+
+    def test_sorts_by_rating(self, client: TestClient, db_session: Session) -> None:
+        self._seed_rivals(db_session)
+
+        response = client.get("/manga", params={"sort": "rating", "order": "desc"})
+
+        assert [m["title"] for m in response.json()["items"]] == ["Zeta", "Alpha"]
+
+    def test_lists_an_unrated_manga_last_whichever_way_a_metric_sort_runs(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """An unrated manga has no row to sort on, so it never leads a page."""
+        _seed_manga(db_session, title="Unrated")
+        _seed_metrics(
+            db_session, _seed_manga(db_session, title="Rated"), bayesian_score=8.0
+        )
+
+        for order in ("asc", "desc"):
+            response = client.get("/manga", params={"sort": "rating", "order": order})
+
+            assert [m["title"] for m in response.json()["items"]] == [
+                "Rated",
+                "Unrated",
+            ]
+
+    def test_rejects_an_unknown_sort_field(self, client: TestClient) -> None:
+        assert client.get("/manga", params={"sort": "vibes"}).status_code == 422
+
+    def test_rejects_an_unknown_order(self, client: TestClient) -> None:
+        assert client.get("/manga", params={"order": "sideways"}).status_code == 422
+
     def test_rejects_a_q_below_the_minimum_length(self, client: TestClient) -> None:
         assert client.get("/manga", params={"q": "a"}).status_code == 422
 
@@ -234,6 +351,24 @@ class TestGetManga:
         manga_id = _seed_manga(db_session)
 
         assert client.get(f"/manga/{manga_id}").json()["tags"] == []
+
+    def test_embeds_the_metrics_of_a_rated_manga(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        manga_id = _seed_manga(db_session)
+        _seed_metrics(db_session, manga_id, bayesian_score=7.25, votes_count=42)
+
+        metrics = client.get(f"/manga/{manga_id}").json()["metrics"]
+
+        assert metrics["bayesian_score"] == 7.25
+        assert metrics["votes_count"] == 42
+
+    def test_returns_null_metrics_for_an_unrated_manga(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        manga_id = _seed_manga(db_session)
+
+        assert client.get(f"/manga/{manga_id}").json()["metrics"] is None
 
     def test_returns_404_for_an_unknown_id(self, client: TestClient) -> None:
         response = client.get(f"/manga/{uuid.uuid4()}")

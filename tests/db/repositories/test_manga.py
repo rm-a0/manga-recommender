@@ -29,6 +29,7 @@ from manga_recommender.db.repositories.manga import (
     get_manga_tag_links,
     update_manga,
 )
+from manga_recommender.db.repositories.manga_metrics import create_manga_metric
 from manga_recommender.db.repositories.tags import get_or_create_tag
 from manga_recommender.schemas.manga import MangaSort
 
@@ -232,6 +233,17 @@ def test_get_manga_by_id_eager_loads_authors(db_session: Session) -> None:
     assert "authors" not in inspect(found).unloaded
 
 
+def test_get_manga_by_id_eager_loads_the_metric(db_session: Session) -> None:
+    """A lazy load here would cost one query per manga in a list response."""
+    manga_id = _with_metric(db_session, create_manga(db_session, title="Blame!").id)
+    db_session.expire_all()
+
+    found = get_manga_by_id(db_session, manga_id)
+
+    assert found is not None
+    assert "metric" not in inspect(found).unloaded
+
+
 # --- get_all_manga ---
 
 
@@ -271,6 +283,46 @@ def _tagged(db: Session, title: str, *tag_names: str) -> uuid.UUID:
     for name in tag_names:
         _link_tag(db, manga.id, name, rank=None)
     return manga.id
+
+
+def _rated(
+    db: Session,
+    title: str,
+    *,
+    bayesian_score: float | None = None,
+    votes_count: int | None = None,
+) -> uuid.UUID:
+    """Create one manga, giving it a metrics row only when a score is passed.
+
+    A manga with no usable source rating has no row at all, so passing neither
+    score nor vote count is how a test spells "unrated".
+    """
+    manga = create_manga(db, title=title)
+    if bayesian_score is not None or votes_count is not None:
+        create_manga_metric(
+            db,
+            manga_id=manga.id,
+            bayesian_score=bayesian_score if bayesian_score is not None else 5.0,
+            mean_score=5.0,
+            votes_count=votes_count if votes_count is not None else 100,
+            source_count=1,
+            computed_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    return manga.id
+
+
+def _with_metric(db: Session, manga_id: uuid.UUID) -> uuid.UUID:
+    """Give an existing manga a metrics row, and return its ID unchanged."""
+    create_manga_metric(
+        db,
+        manga_id=manga_id,
+        bayesian_score=8.0,
+        mean_score=8.0,
+        votes_count=100,
+        source_count=1,
+        computed_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    return manga_id
 
 
 def test_get_all_manga_orders_by_title(db_session: Session) -> None:
@@ -315,6 +367,16 @@ def test_get_all_manga_eager_loads_authors(db_session: Session) -> None:
     assert "authors" not in inspect(found[0]).unloaded
 
 
+def test_get_all_manga_eager_loads_the_metric(db_session: Session) -> None:
+    """A lazy load here would cost one query per manga in the page."""
+    _with_metric(db_session, create_manga(db_session, title="Pluto").id)
+    db_session.expire_all()
+
+    found = _page(db_session)
+
+    assert "metric" not in inspect(found[0]).unloaded
+
+
 def test_get_all_manga_sorts_by_title_descending(db_session: Session) -> None:
     for title in ("Akira", "Berserk", "Chainsaw Man"):
         create_manga(db_session, title=title)
@@ -346,6 +408,99 @@ def test_get_all_manga_sorts_an_undated_manga_last_descending(
     found = _page(db_session, sort=MangaSort.PUBLISHED_DATE, descending=True)
 
     assert [m.title for m in found] == ["Dated", "Undated"]
+
+
+def test_get_all_manga_sorts_by_popularity_descending(db_session: Session) -> None:
+    """Popularity orders by vote count.
+
+    The scores run the opposite way and the titles a third way, so ordering by
+    the wrong column - or falling through to the title tiebreaker - cannot
+    reproduce this order by accident.
+    """
+    _rated(db_session, "Zeta", votes_count=9000, bayesian_score=4.0)
+    _rated(db_session, "Mid", votes_count=500, bayesian_score=7.0)
+    _rated(db_session, "Alpha", votes_count=10, bayesian_score=9.5)
+
+    found = _page(db_session, sort=MangaSort.POPULARITY, descending=True)
+
+    assert [m.title for m in found] == ["Zeta", "Mid", "Alpha"]
+
+
+def test_get_all_manga_sorts_by_rating_descending(db_session: Session) -> None:
+    """Rating orders by the bayesian score.
+
+    The vote counts run the opposite way, so ordering by popularity instead
+    would reverse this list rather than reproduce it.
+    """
+    _rated(db_session, "Zeta", bayesian_score=9.5, votes_count=10)
+    _rated(db_session, "Mid", bayesian_score=7.0, votes_count=500)
+    _rated(db_session, "Alpha", bayesian_score=4.0, votes_count=9000)
+
+    found = _page(db_session, sort=MangaSort.RATING, descending=True)
+
+    assert [m.title for m in found] == ["Zeta", "Mid", "Alpha"]
+
+
+def test_get_all_manga_keeps_an_unrated_manga_when_sorting_by_rating(
+    db_session: Session,
+) -> None:
+    """The metrics join must be an OUTER join; an inner one would drop the row."""
+    _rated(db_session, "Unrated")
+    _rated(db_session, "Rated", bayesian_score=8.0)
+
+    found = _page(db_session, sort=MangaSort.RATING, descending=True)
+
+    assert {m.title for m in found} == {"Rated", "Unrated"}
+
+
+def test_get_all_manga_sorts_an_unrated_manga_last_ascending(
+    db_session: Session,
+) -> None:
+    """Postgres defaults ASC to NULLS LAST, but the rule must not be implicit."""
+    _rated(db_session, "Unrated")
+    _rated(db_session, "Rated", bayesian_score=8.0)
+
+    found = _page(db_session, sort=MangaSort.RATING)
+
+    assert [m.title for m in found] == ["Rated", "Unrated"]
+
+
+def test_get_all_manga_sorts_an_unrated_manga_last_descending(
+    db_session: Session,
+) -> None:
+    """Postgres defaults DESC to NULLS FIRST, which would float unrated rows up."""
+    _rated(db_session, "Unrated")
+    _rated(db_session, "Rated", bayesian_score=8.0)
+
+    found = _page(db_session, sort=MangaSort.RATING, descending=True)
+
+    assert [m.title for m in found] == ["Rated", "Unrated"]
+
+
+def test_get_all_manga_sorts_an_unrated_manga_last_by_popularity(
+    db_session: Session,
+) -> None:
+    _rated(db_session, "Unrated")
+    _rated(db_session, "Rated", votes_count=1)
+
+    found = _page(db_session, sort=MangaSort.POPULARITY, descending=True)
+
+    assert [m.title for m in found] == ["Rated", "Unrated"]
+
+
+def test_get_all_manga_pages_a_metric_sort_without_repeating(
+    db_session: Session,
+) -> None:
+    """Manga sharing a score must still page deterministically, via the tiebreaker."""
+    created = {_rated(db_session, t, votes_count=100) for t in "ABCD"}
+
+    first = _page(db_session, sort=MangaSort.POPULARITY, descending=True, limit=2)
+    second = _page(
+        db_session, sort=MangaSort.POPULARITY, descending=True, limit=2, offset=2
+    )
+
+    assert {m.id for m in first}.isdisjoint({m.id for m in second})
+    assert {m.id for m in first} | {m.id for m in second} == created
 
 
 # --- get_all_manga: filters ---
@@ -761,6 +916,19 @@ def test_get_manga_by_author_id_eager_loads_authors(db_session: Session) -> None
     assert "authors" not in inspect(found[0]).unloaded
 
 
+def test_get_manga_by_author_id_eager_loads_the_metric(db_session: Session) -> None:
+    """A lazy load here would cost one query per manga in the page."""
+    miura = get_or_create_author(db_session, name="Kentaro Miura")
+    _with_metric(
+        db_session, _seed_manga_with_authors(db_session, "Berserk", "Kentaro Miura")
+    )
+    db_session.expire_all()
+
+    found = get_manga_by_author_id(db_session, miura.id, limit=10, offset=0)
+
+    assert "metric" not in inspect(found[0]).unloaded
+
+
 # --- count_manga_by_author_id ---
 
 
@@ -901,6 +1069,19 @@ def test_get_manga_by_tag_id_eager_loads_authors(db_session: Session) -> None:
     found = get_manga_by_tag_id(db_session, action.id, limit=10, offset=0)
 
     assert "authors" not in inspect(found[0]).unloaded
+
+
+def test_get_manga_by_tag_id_eager_loads_the_metric(db_session: Session) -> None:
+    """A lazy load here would cost one query per manga in the page."""
+    action = get_or_create_tag(db_session, name="Action", category=None)
+    manga = create_manga(db_session, title="Berserk")
+    _link_tag(db_session, manga.id, "Action", rank=None)
+    _with_metric(db_session, manga.id)
+    db_session.expire_all()
+
+    found = get_manga_by_tag_id(db_session, action.id, limit=10, offset=0)
+
+    assert "metric" not in inspect(found[0]).unloaded
 
 
 # --- count_manga_by_tag_id ---
