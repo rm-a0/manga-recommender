@@ -58,19 +58,25 @@ primary flow, not a secondary feature.
 Working today, via the existing FastAPI JSON API:
 
 - `GET /manga` — paginated list. Filters: `q` (title, min 2 chars), `status[]`,
-  `include_tag[]` / `exclude_tag[]` (by name, max 10, `tag_match=any|all`),
-  `published_from` / `published_to`. Sort: `title` or `published_date`, `asc|desc`.
-  `limit` max 100, offset pagination, `total` returned.
+  `include_tag[]` / `exclude_tag[]` (by name, max 10 each, `tag_match=any|all`),
+  `published_from` / `published_to`. Sort: `title`, `published_date`, `popularity`
+  (vote count) or `rating` (weighted score), `asc|desc`, defaulting to `popularity`
+  descending. `limit` max 100, offset pagination, `total` returned. Every item embeds
+  `metrics`, or null.
 - `GET /manga/{id}` — adds `published_date`, `description`, and `tags` with `rank` and
-  `is_spoiler`.
+  `is_spoiler`. Also embeds `metrics`.
 - `GET /tags`, `GET /tags/{id}`, `GET /tags/{id}/manga`
 - `GET /authors`, `GET /authors/{id}`, `GET /authors/{id}/manga`
 - `GET /health`, `GET /ready`
 
 Not available, and must not be faked:
 
-- Any recommendation endpoint. No similarity, no ranking, no personalisation.
-- Sorting by score, popularity, or relevance — `MangaSort` has these commented out.
+- Any recommendation endpoint. No similarity, no personalisation, and no measure of how
+  well one title answers another. `MangaSort.RELEVANCE` is still commented out.
+- Any content rating on the data. Neither `manga` nor `tags` carries an `is_adult` flag,
+  so which codes are explicit is a list written down in the frontend
+  (`lib/explicit.ts`) rather than a fact the API states. That list is the interim; the
+  durable fix is a column at ingest.
 - A `q` filter on `/authors`. Author lookup by name is not possible.
 - English titles. Search matches romaji only, so `attack on titan` returns nothing
   while `shingeki no kyojin` works. Users must be told this rather than left guessing.
@@ -89,9 +95,21 @@ Constraints that shape the interface:
   debouncing rather than per-keystroke queries.
 - **Cold start.** The API scales to zero, so the first request after idle is slow.
   Shell and skeletons must paint before data arrives.
+- **Two thirds of the catalogue is unrated.** 30,513 of 82,629 titles carry a metrics
+  row; a title needs 100 ratings before one is computed. Anything printing a score has to
+  read as deliberate on the other 52,116, and an ordering that reads the metrics row
+  sorts them all to the end.
+- **Scores barely vary.** The rated third runs 3.4 to 9.5, but its middle half sits
+  between 6.79 and 7.07 and its 90th percentile is 7.39. A score can be printed as a
+  figure and sorted on; it cannot be drawn as a length where several are compared at
+  once, because half the catalogue would draw the same bar.
+- **A third of the catalogue is explicit.** Hentai and Erotica cover ~26,000 titles, and
+  they are withheld from listings and pickers by default. Ecchi is deliberately not
+  sealed: it is fanservice rather than explicit content, and 4,002 of its 4,080 titles
+  carry neither of the other two.
 - **Boundary.** AGENTS.md reserves recommendation logic for `backend/`. The frontend
-  composes existing endpoint calls and renders results in the order returned. It does
-  not score, rank, or weight anything client-side.
+  composes existing endpoint calls and renders results in the order returned. It asks the
+  API to order a listing; it does not score, rank, or weight anything client-side.
 
 ## Brand Commitments
 
@@ -118,8 +136,10 @@ explicitly not corny.
 
 1. **The recommender is the product.** The catalogue is how the reader specifies what
    they want, and where results land. It is not the destination.
-2. **Never claim a recommendation the engine did not make.** With no engine, the
-   interface says so plainly rather than dressing up a filtered query as insight.
+2. **Never claim a recommendation the engine did not make.** The catalogue's own score
+   may order a listing, and the heading says when it did. What no listing may suggest is
+   that it was ordered by how well a title answers what the reader ringed — that is the
+   engine's judgement, and the engine does not exist.
 3. **Design for the strategy list being long.** Every future strategy shares one input
    (a set of reference titles) and one output (a set of manga). Build that shape now so
    later strategies are additions, not redesigns.

@@ -1,10 +1,24 @@
 {
-  "northStar": "A convention circle catalogue printed on dark stock. Stamp-sized cells in a coded hall grid; the reader's own entries ringed in biro. Nothing on it may imply a ranking the API cannot support.",
+  "northStar": "A convention circle catalogue printed on dark stock. Stamp-sized cells in a coded hall grid; the reader's own entries ringed in biro. It may rank by the catalogue's own figures, and must never imply a ranking by how well a title matches what the reader ringed.",
   "ramps": {
-    "stock": ["#17211F", "#1E2B28", "#2B3B37"],
-    "paper": ["#E8E4D8", "#54615D", "#141A19"],
-    "spot": ["#D1402F", "#A8291B", "#EF7060"],
-    "pen": ["#3F6FD8"]
+    "stock": [
+      "#17211F",
+      "#1E2B28",
+      "#2B3B37"
+    ],
+    "paper": [
+      "#E8E4D8",
+      "#54615D",
+      "#141A19"
+    ],
+    "spot": [
+      "#D1402F",
+      "#A8291B",
+      "#EF7060"
+    ],
+    "pen": [
+      "#3F6FD8"
+    ]
   },
   "rules": {
     "hairline": "1px solid #2B3B37",
@@ -49,7 +63,10 @@
     "cellAspect": "225/320",
     "captionLines": 2
   },
-  "breakpoints": { "sm": "640px", "container": "1080px" },
+  "breakpoints": {
+    "sm": "640px",
+    "container": "1080px"
+  },
   "constraints": {
     "coverNative": "~225x320",
     "coverShipped": 120,
@@ -57,9 +74,11 @@
   },
   "truthRules": [
     "Every listing is preceded by a heading naming the field that ordered it.",
-    "Table codes (A-01) are coordinates in the current listing, never identifiers and never ranks.",
-    "No client-side scoring, ranking or weighting. Recommendation logic lives in the backend.",
+    "A figure on a cell is the catalogue's own weighted score, never a measure of how well a title matches the reader's marks.",
+    "A title with no metrics row prints 'Not rated' rather than a blank or a zero.",
+    "No client-side scoring, ranking or weighting. Ordering is asked of the API and rendered as returned; recommendation logic lives in the backend.",
     "Red marks what the catalogue did; blue marks what the reader did. Nothing is both.",
-    "Unbuilt routes are named in the back matter as inert text, never as a disabled control."
+    "Unbuilt routes are named in the back matter as inert text, never as a disabled control.",
+    "Explicit codes are withheld from every picker and every listing by default, and the interface says how many it is withholding."
   ]
 }
