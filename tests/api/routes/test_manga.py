@@ -228,6 +228,66 @@ class TestListManga:
 
         assert body["total"] == 1
 
+    def _seed_rivals(self, db: Session) -> None:
+        """Seed two manga whose score, vote count and title all disagree.
+
+        Ordering by the wrong metric, or falling through to the title
+        tiebreaker, then cannot reproduce the expected order by accident.
+        """
+        _seed_metrics(
+            db, _seed_manga(db, title="Zeta"), bayesian_score=9.5, votes_count=10
+        )
+        _seed_metrics(
+            db, _seed_manga(db, title="Alpha"), bayesian_score=4.0, votes_count=9000
+        )
+
+    def test_defaults_to_most_popular_first(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """A request with no query string must return the most popular first."""
+        self._seed_rivals(db_session)
+
+        titles = [m["title"] for m in client.get("/manga").json()["items"]]
+
+        assert titles == ["Alpha", "Zeta"]
+
+    def test_sorts_by_popularity(self, client: TestClient, db_session: Session) -> None:
+        self._seed_rivals(db_session)
+
+        response = client.get("/manga", params={"sort": "popularity", "order": "asc"})
+
+        assert [m["title"] for m in response.json()["items"]] == ["Zeta", "Alpha"]
+
+    def test_sorts_by_rating(self, client: TestClient, db_session: Session) -> None:
+        self._seed_rivals(db_session)
+
+        response = client.get("/manga", params={"sort": "rating", "order": "desc"})
+
+        assert [m["title"] for m in response.json()["items"]] == ["Zeta", "Alpha"]
+
+    def test_lists_an_unrated_manga_last_whichever_way_a_metric_sort_runs(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        """An unrated manga has no row to sort on, so it never leads a page."""
+        _seed_manga(db_session, title="Unrated")
+        _seed_metrics(
+            db_session, _seed_manga(db_session, title="Rated"), bayesian_score=8.0
+        )
+
+        for order in ("asc", "desc"):
+            response = client.get("/manga", params={"sort": "rating", "order": order})
+
+            assert [m["title"] for m in response.json()["items"]] == [
+                "Rated",
+                "Unrated",
+            ]
+
+    def test_rejects_an_unknown_sort_field(self, client: TestClient) -> None:
+        assert client.get("/manga", params={"sort": "vibes"}).status_code == 422
+
+    def test_rejects_an_unknown_order(self, client: TestClient) -> None:
+        assert client.get("/manga", params={"order": "sideways"}).status_code == 422
+
     def test_rejects_a_q_below_the_minimum_length(self, client: TestClient) -> None:
         assert client.get("/manga", params={"q": "a"}).status_code == 422
 
