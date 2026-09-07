@@ -81,6 +81,18 @@ Planned work, not yet scheduled.
   the same shape as the arbitration column the database section already wants.
 - An index on `manga.title`. Every page already pays a full sort for
   `ORDER BY title OFFSET n`.
+- Content rating on the data, replacing `frontend/lib/explicit.ts`. Neither
+  `manga` nor `tags` carries an `is_adult` flag, so which codes are explicit is
+  a list written down in the frontend. Both sources already state it: AniList
+  has `isAdult` on `Media` and `isAdultOnly` on `MediaTag`, MAL's explicit
+  genres are fixed IDs (Hentai 12, Erotica 49, Ecchi 9). Wants `tags.is_adult`
+  and `manga.is_adult` set at ingest, `is_adult` on `TagSummary`, and an
+  `include_adult: bool = False` on `MangaListParams` and the `/tags` pagination.
+  Three reasons it cannot stay in the frontend: `exclude_tag` caps at ten values
+  and AniList ships ~50 adult tags; tag-based exclusion misses a work the source
+  marked adult that carries no adult tag; and every other client of the API gets
+  no default at all. **Do this before AniList ingestion lands** — at that point
+  the frontend list stops being incomplete and starts being wrong.
 
 ## Not built yet
 

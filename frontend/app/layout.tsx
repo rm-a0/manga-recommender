@@ -49,8 +49,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             2026 dataset and AniList. Cover art and synopses belong to their publishers.
           </p>
           <p className="mt-2 max-w-[70ch]">
-            The recommendation engine is not built yet. Nothing here ranks or scores a
-            title, and no route claims a result it did not fetch.
+            A score is the catalogue&rsquo;s own weighted figure over the ratings its
+            sources recorded, and it orders listings when you ask it to. It is not a
+            recommendation: the engine that would judge a title against what you have read
+            is not built yet, and no route here claims a result it did not fetch.
           </p>
         </footer>
       </body>
