@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 
 import { Cover } from '@/components/Cover'
+import { ScoreRule } from '@/components/ScoreRule'
 import { HallGrid } from '@/components/HallGrid'
 import { SectionHead } from '@/components/SectionHead'
 import { getManga } from '@/lib/api'
@@ -46,10 +47,11 @@ async function AlsoCarrying({ id, title }: { id: string; title: string }) {
 
   return (
     <section className="mt-12">
-      <SectionHead title="Also coded this way" meta="listed A–Z, not ranked" />
+      <SectionHead title="Also coded this way" meta="best rated first" />
       <p className="border-b border-line py-3 max-w-[70ch] text-sm text-dim">
-        Every title below carries {activeTags.join(', ')} — tags recorded for {title}.
-        This is a catalogue filter, not a ranked recommendation.{' '}
+        Every title below carries {activeTags.join(', ')} — tags recorded for {title} —
+        and is listed by the catalogue&rsquo;s own score. Nothing is weighed against{' '}
+        {title} itself.{' '}
         <Link href={`/?seed=${id}`} className="text-text underline">
           Choose the tags yourself
         </Link>
@@ -93,6 +95,8 @@ export default async function MangaPage(props: PageProps<'/manga/[id]'>) {
             )}
           </p>
 
+          <ScoreRule metrics={manga.metrics} />
+
           <dl className="border-t border-line mt-4 flex flex-wrap gap-x-8 gap-y-2 pt-3 text-sm">
             {status && (
               <div>
@@ -119,7 +123,7 @@ export default async function MangaPage(props: PageProps<'/manga/[id]'>) {
                 {manga.tags.map((tag) => (
                   <li key={tag.id}>
                     <Link
-                      href={`/browse?include_tag=${encodeURIComponent(tag.name)}&tag_match=any&sort=published_date:desc`}
+                      href={`/browse?include_tag=${encodeURIComponent(tag.name)}`}
                       className="block border border-line px-2 py-0.5 text-sm no-underline transition-colors hover:bg-spot hover:text-white hover:border-line"
                     >
                       {tag.name}
