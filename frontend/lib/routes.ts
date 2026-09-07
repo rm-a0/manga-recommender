@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { getManga, listManga } from './api'
+import { isSealedTag } from './explicit'
+import { MAX_TAG_FILTERS } from './types'
 import type { MangaDetail, MangaSummary, TagMatch } from './types'
 
 /**
@@ -22,7 +24,7 @@ export const ROUTES: Route[] = [
     id: 'shared-tags',
     name: 'Shared tags',
     live: true,
-    description: 'Titles carrying the tags your selection carries.',
+    description: 'Titles carrying the tags your selection carries, best rated first.',
   },
   {
     id: 'history',
@@ -53,9 +55,6 @@ export const ROUTES: Route[] = [
 export const LIVE_ROUTE = ROUTES.find((route) => route.live)!
 export const PLANNED_ROUTES = ROUTES.filter((route) => !route.live)
 
-/** Cap matching the API's `include_tag` max_length. */
-const MAX_TAGS = 10
-
 /**
  * How many of a seed's tags are required by default.
  *
@@ -79,10 +78,14 @@ export interface RouteResult {
 /**
  * Resolve the shared-tags route.
  *
- * Asks the catalogue for titles carrying the requested tags and drops the seeds
- * themselves from the answer. It does no scoring: which tags matter is the
- * reader's choice, results arrive in the API's own order, and nothing is
- * reordered here. Ranking is recommendation logic and belongs in the backend.
+ * Asks the catalogue for titles carrying the requested tags, best rated first,
+ * and drops the seeds themselves from the answer.
+ *
+ * The ordering is the API's: this asks for `sort=rating` and renders the page it
+ * gets back. Nothing is scored, weighted or reordered here. Which codes matter
+ * is still the reader's choice, and how well a title matches them is not part of
+ * the ordering — that judgement needs a recommendation engine, which the backend
+ * does not have yet.
  */
 export async function resolveSharedTags(
   seedIds: string[],
@@ -90,7 +93,8 @@ export async function resolveSharedTags(
     tags,
     match = 'all',
     limit = 30,
-  }: { tags?: string[]; match?: TagMatch; limit?: number } = {},
+    showSealed = false,
+  }: { tags?: string[]; match?: TagMatch; limit?: number; showSealed?: boolean } = {},
 ): Promise<RouteResult> {
   const seeds = (await Promise.all(seedIds.map((id) => getManga(id)))).filter(
     (seed): seed is MangaDetail => seed !== null,
@@ -99,6 +103,7 @@ export async function resolveSharedTags(
   const availableTags: string[] = []
   for (const seed of seeds) {
     for (const tag of seed.tags) {
+      if (!showSealed && isSealedTag(tag.name)) continue
       if (!availableTags.includes(tag.name)) availableTags.push(tag.name)
     }
   }
@@ -106,20 +111,23 @@ export async function resolveSharedTags(
   const requested = tags?.filter((tag) => availableTags.includes(tag)) ?? []
   const activeTags = (
     requested.length > 0 ? requested : availableTags.slice(0, DEFAULT_TAG_COUNT)
-  ).slice(0, MAX_TAGS)
+  ).slice(0, MAX_TAG_FILTERS)
 
   if (activeTags.length === 0) {
     return { items: [], availableTags, activeTags, match, total: 0, seeds }
   }
 
   // Over-fetch by the seed count so removing the seeds still fills the page.
-  const page = await listManga({
-    include_tag: activeTags,
-    tag_match: match,
-    limit: Math.min(100, limit + seeds.length),
-    sort: 'title',
-    order: 'asc',
-  })
+  const page = await listManga(
+    {
+      include_tag: activeTags,
+      tag_match: match,
+      limit: Math.min(100, limit + seeds.length),
+      sort: 'rating',
+      order: 'desc',
+    },
+    { showSealed },
+  )
 
   const seedIdSet = new Set(seeds.map((seed) => seed.id))
   const items = page.items.filter((item) => !seedIdSet.has(item.id)).slice(0, limit)

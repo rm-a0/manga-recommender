@@ -1,4 +1,6 @@
-import type { MangaStatus, TagSummary } from '@/lib/types'
+import { CodeLedger } from '@/components/CodeLedger'
+import { OrderTabs } from '@/components/OrderTabs'
+import type { MangaStatus, TagMatch, TagSummary } from '@/lib/types'
 
 const STATUSES: { value: MangaStatus; label: string }[] = [
   { value: 'ongoing', label: 'Running' },
@@ -8,36 +10,35 @@ const STATUSES: { value: MangaStatus; label: string }[] = [
   { value: 'not_released_yet', label: 'Announced' },
 ]
 
-const SORTS = [
-  { value: 'published_date:desc', label: 'Newest first' },
-  { value: 'published_date:asc', label: 'Oldest first' },
-  { value: 'title:asc', label: 'Title A–Z' },
-  { value: 'title:desc', label: 'Title Z–A' },
-]
-
 export interface FilterState {
   q: string
   status: string[]
   includeTag: string[]
-  tagMatch: 'any' | 'all'
+  excludeTag: string[]
+  tagMatch: TagMatch
   sort: string
   order: string
-  allowAdult: boolean
+  showSealed: boolean
 }
 
-const FIELD =
-  'border border-line bg-panel px-2.5 py-2 text-base text-text placeholder:text-dim'
-
 /**
- * The hall's tools, as a plain GET form.
+ * The hall's tools, as a GET form.
  *
- * No client JavaScript: submitting writes the query string the page already
- * reads, so a filtered hall is shareable, survives the back button, and works
- * before hydration. The code vocabulary is fetched once by the page.
+ * Submitting writes the query string the page already reads, so a filtered hall
+ * is shareable and survives the back button. The two controls that change what
+ * the page is rather than narrowing it — the ordering and the seal — submit as
+ * soon as they change; everything else waits for the button.
  */
-export function FilterForm({ tags, state }: { tags: TagSummary[]; state: FilterState }) {
-  const selectedSort = `${state.sort}:${state.order}`
-  const activeTagCount = state.includeTag.length
+export function FilterForm({
+  tags,
+  state,
+  sealedCount,
+}: {
+  tags: TagSummary[]
+  state: FilterState
+  sealedCount: number
+}) {
+  const activeCodes = state.includeTag.length + state.excludeTag.length
 
   return (
     <form method="GET" action="/browse" className="mb-5">
@@ -52,33 +53,6 @@ export function FilterForm({ tags, state }: { tags: TagSummary[]; state: FilterS
           aria-label="Search the hall by title"
           className="min-w-[13rem] flex-1 border-0 bg-cell px-3 py-2 text-base text-cell-ink placeholder:text-cell-sub"
         />
-
-        {/* The stock select ships chrome that belongs to no design system. */}
-        <div className="relative">
-          <label htmlFor="sort" className="sr-only">
-            Order the hall
-          </label>
-          <select
-            id="sort"
-            name="sort"
-            defaultValue={selectedSort}
-            className={`${FIELD} appearance-none pr-8`}
-          >
-            {SORTS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <svg
-            viewBox="0 0 12 8"
-            aria-hidden="true"
-            className="pointer-events-none absolute right-2.5 top-1/2 h-2 w-3 -translate-y-1/2 text-dim"
-          >
-            <path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-          </svg>
-        </div>
-
         <button
           type="submit"
           className="bg-spot px-4 py-2 font-display text-base uppercase tracking-[0.04em] text-white transition-opacity hover:opacity-90"
@@ -87,7 +61,9 @@ export function FilterForm({ tags, state }: { tags: TagSummary[]; state: FilterS
         </button>
       </div>
 
-      <fieldset className="mt-3">
+      <OrderTabs selected={`${state.sort}:${state.order}`} />
+
+      <fieldset className="mt-3.5">
         <legend className="code text-dim">Status</legend>
         <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5">
           {STATUSES.map((option) => (
@@ -105,63 +81,28 @@ export function FilterForm({ tags, state }: { tags: TagSummary[]; state: FilterS
         </div>
       </fieldset>
 
-      <details className="mt-3" open={activeTagCount > 0}>
-        <summary className="code cursor-pointer text-dim">
-          Codes{activeTagCount > 0 ? ` · ${activeTagCount} required` : ` · ${tags.length} in use`}
+      <details className="mt-3.5" open={activeCodes > 0}>
+        <summary className="code cursor-pointer text-dim transition-colors hover:text-text">
+          Codes
+          {activeCodes > 0
+            ? ` · ${state.includeTag.length} required, ${state.excludeTag.length} barred`
+            : ` · ${tags.length} in use`}
         </summary>
 
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 text-sm">
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              name="tag_match"
-              value="any"
-              defaultChecked={state.tagMatch === 'any'}
-              className="size-4"
-            />
-            Any of them
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              name="tag_match"
-              value="all"
-              defaultChecked={state.tagMatch === 'all'}
-              className="size-4"
-            />
-            All of them
-          </label>
+        <div className="mt-2.5">
+          <p className="mb-2 max-w-[70ch] text-sm text-dim">
+            Select a code once to require it, again to bar it, a third time to clear it.
+          </p>
+          <CodeLedger
+            tags={tags}
+            include={state.includeTag}
+            exclude={state.excludeTag}
+            match={state.tagMatch}
+            showSealed={state.showSealed}
+            sealedCount={sealedCount}
+          />
         </div>
-
-        <div className="mt-2 grid max-h-56 grid-cols-2 gap-x-4 gap-y-1 overflow-y-auto border border-line p-2 sm:grid-cols-3 lg:grid-cols-4">
-          {tags.map((tag) => (
-            <label key={tag.id} className="flex items-center gap-1.5 text-base">
-              <input
-                type="checkbox"
-                name="include_tag"
-                value={tag.name}
-                defaultChecked={state.includeTag.includes(tag.name)}
-                className="size-4 shrink-0"
-              />
-              <span className="truncate">{tag.name}</span>
-            </label>
-          ))}
-        </div>
-        <p className="mt-1.5 text-xs text-dim">
-          The endpoint accepts ten codes at most; extras beyond that are dropped.
-        </p>
       </details>
-
-      <label className="mt-3 flex items-center gap-2 text-sm text-dim">
-        <input
-          type="checkbox"
-          name="adult"
-          value="1"
-          defaultChecked={state.allowAdult}
-          className="size-4"
-        />
-        Include entries coded Hentai or Erotica
-      </label>
     </form>
   )
 }
