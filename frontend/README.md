@@ -47,6 +47,9 @@ the default and then just run `make ui`.
 | `lib/types.ts` | Mirrors `backend/manga_recommender/schemas/*.py` — the backend is the authority |
 | `lib/routes.ts` | The reading routes. One is live; the rest are recorded, not faked |
 | `lib/covers.ts` | Cover URL upgrade. Delete it if a larger URL is ever stored at ingest |
+| `lib/ordering.ts` | The orderings the hall offers, and how a heading names each one |
+| `lib/score.ts` | Reads the metrics row out of ten, and sets vote counts |
+| `lib/explicit.ts` | Which codes are explicit. Delete it if the API ever says so itself |
 
 ## Design
 
@@ -55,12 +58,22 @@ truth. `.impeccable/surfaces/app.md` holds the direction contract.
 
 Two rules matter more than the rest:
 
-1. **Nothing may imply a ranking.** The API has no score, popularity or relevance
-   ordering. Every listing names the field that ordered it; table codes (`A-01`) are
-   coordinates in the current listing, never ranks.
+1. **A listing may rank, and must say what ranked it.** The API orders by the catalogue's
+   own weighted score and by vote count, so every listing names the field that ordered
+   it. What no listing may suggest is that it was ordered by how well a title answers
+   what the reader ringed — that needs the recommendation engine, which does not exist.
 2. **No recommendation logic here.** Per the repo's `AGENTS.md`, that belongs in
-   `backend/`. This app composes existing endpoint calls and renders what comes back, in
-   the order it comes back.
+   `backend/`. This app asks the API to order a listing and renders what comes back, in
+   the order it comes back. It scores and weighs nothing itself.
+
+### The explicit codes
+
+`lib/explicit.ts` is a stopgap. Neither `manga` nor `tags` carries a content rating, so
+which codes are explicit is written down in the frontend. Two lists, because they answer
+different questions: `SEALED_WORK_TAGS` feeds `exclude_tag`, which the API caps at ten
+values, and `SEALED_TAGS` hides codes from pickers, which has no cap. An `is_adult`
+column set at ingest and surfaced on the tag and manga models would replace the whole
+file with one boolean — worth doing before AniList ingestion grows the vocabulary.
 
 ## Checks
 
