@@ -46,6 +46,12 @@ typography:
     fontWeight: 600
     lineHeight: 1.3
     letterSpacing: "0.07em"
+  figure:
+    fontFamily: "Anton, Arial Narrow, sans-serif"
+    fontSize: "2.5rem"
+    fontWeight: 400
+    lineHeight: 1
+    letterSpacing: "normal"
   cell-title:
     fontFamily: "Zen Kaku Gothic New, system-ui, sans-serif"
     fontSize: "0.9rem"
@@ -96,6 +102,16 @@ components:
     textColor: "{colors.dim}"
     rounded: "{rounded.none}"
     padding: "4px 8px"
+  order-tab-on:
+    backgroundColor: "{colors.cell}"
+    textColor: "{colors.cell-ink}"
+    rounded: "{rounded.none}"
+    padding: "6px 12px"
+  order-tab-off:
+    backgroundColor: "transparent"
+    textColor: "{colors.dim}"
+    rounded: "{rounded.none}"
+    padding: "6px 12px"
   chip-ringed:
     backgroundColor: "transparent"
     textColor: "{colors.text}"
@@ -116,9 +132,13 @@ covers (~225×320) are *oversupplied* with pixels rather than starved — the co
 rules out every editorial layout becomes this format's advantage. And "circled in pen" is a
 native state for the seed set: the titles you name are the ones you ring.
 
-The governing constraint is honesty. The API has no score, popularity or relevance
-ordering, so nothing here may imply a ranking. Every listing states the field that ordered
-it; table codes are coordinates, never ranks.
+The governing constraint is honesty, and what it forbids narrowed when the catalogue
+gained real figures. A weighted score and a vote count now exist for 30,513 of the 82,629
+titles, and the API orders on either, so a listing may rank — it must simply say what
+ranked it. What is still forbidden is implying a *recommendation*: nothing here measures
+how well a title answers what the reader ringed, because the engine that would is not
+built. Every listing states the field that ordered it, and a figure printed on a cell is
+the catalogue's own score, never a match.
 
 ## Colors
 
@@ -172,12 +192,13 @@ machine-readable label, always tracked at 0.07em and uppercase.
 | Hall heading | Anton | 1.25–1.5rem | over the spot rule |
 | Body | Zen Kaku Gothic New | 1rem | measure capped at 70ch |
 | Cell caption | Zen Kaku Gothic New 500 | 0.9rem | exactly two lines |
-| Code / count | IBM Plex Mono 600 | 0.78rem | uppercase, 0.07em |
+| Figure / count | IBM Plex Mono 600 | 0.78rem | uppercase, 0.07em |
+| Score | Anton | 2.5rem | vivid spot, detail page only |
 
 ### Named Rules
 
-- **Every code is mono.** A table code, an entry count, a page number and a field label all
-  belong to the same machine voice. Body type never sets them.
+- **Every figure is mono.** A score, a vote count, an entry count, a page number and a
+  field label all belong to the same machine voice. Body type never sets them.
 - **Tabular figures are global**, so counts and codes align down a column.
 - **Cell captions occupy exactly two lines.** `line-clamp-2` caps a long title and a
   min-height holds a short one, so every cell in a row is the same height. Never put a
@@ -216,9 +237,57 @@ radius, which reads as a wobbly rectangle at any size.
 
 ### The cell
 
-The system's atom. Paper ground, cover at `aspect-[225/320]`, table code in mono red,
-caption fixed at two lines. Hover prints a 2px spot outline. A cover-less entry gets its
-title set in the cover's place, never a placeholder graphic.
+The system's atom. Paper ground, cover at `aspect-[225/320]`, the figures line, the cell
+rule, caption fixed at two lines. Hover prints a 2px spot outline. A cover-less entry gets its title set
+in the cover's place, never a placeholder graphic.
+
+### The figures line
+
+Under the cover: the weighted score in mono red, a dotted leader, then how many readers
+scored it, in muted ink — the way a contents page ties an entry to its page number. Two
+thirds of the catalogue carries no metrics row, so the unrated case prints `Not rated` in
+`cell-sub` and holds the same height. It replaced the table code, which was a coordinate
+invented to fill a row that had nothing real to print on it.
+
+### The cell rule
+
+A 2px spot rule under the figures, closing them off from the title. It is the same object
+as the rule under a hall heading, at cell scale, so a cell reads as a miniature of the page
+it sits on: machine voice, rule, content.
+
+**It measures nothing, and it is drawn on every cell.** A mark present on a third of the
+hall and absent on the rest reads as a badge some titles won; drawn everywhere, it is
+furniture and the hall stays even.
+
+The reason it cannot be a measure is the distribution. Half the catalogue scores between
+6.79 and 7.07 — 2.8% of a bar's width, about 3px on a cell, and invisible in a grid — while
+`6.8` and `7.1` are two glyphs apart and read instantly. **At cell scale the digits encode
+the score and the rule finishes the cell.** Each does the job the other is bad at.
+
+### The score rule
+
+The detail page only. Ten segments, one per point, the last filling by the fraction it
+earned, 8px on `panel`, under the score in vivid `spot` Anton at 2.5rem — the only place in
+the system vivid red sets type, and it clears 24px doing it.
+
+Segments earn their place here and nowhere else. On one title there is nothing to compare
+against, so the rule's job is to say what the score is *out of*, which a countable scale
+does and a bare figure does not.
+
+### The order strip
+
+The hall's ordering, as index tabs on a hairline baseline. The chosen ordering is printed
+on paper with a 3px spot bar over its top edge; the rest are `dim` on the stock. Radios
+inside the filter form, so the choice submits with everything else and lands in the URL.
+Never a select: a popup is the one app widget on a page of printed matter.
+
+### The code ledger
+
+One tri-state box per code — empty, a white tick on spot red, or a red cross struck into
+the ink — and the code's own name struck through when it is barred. One column of three
+states rather than two columns of two, because a code cannot be required and barred at
+once and a control that permits both has to invent a winner. Drawn, not a native checkbox,
+which holds two states only.
 
 ### The pen ring
 
@@ -254,6 +323,9 @@ API is unreachable.
 ### Do:
 
 - State the ordering field in the heading of every listing.
+- Print `Not rated` where a figure is missing. Two thirds of the hall has no score, and a
+  blank row reads as a defect.
+- Draw the cell rule on every cell, rated or not. It is furniture, not a verdict.
 - Ring with the pen only what the reader chose.
 - Put multi-value state in the URL so it is shareable and survives the back button.
 - Let the covers be the colour; keep the interface to stock, paper, red and blue.
@@ -261,8 +333,13 @@ API is unreachable.
 
 ### Don't:
 
-- Imply a ranking, score or quality judgement. The API cannot support one.
-- Set type in vivid `spot` or `pen` below 24px.
+- Imply that a listing is ordered by how well it matches what the reader ringed. The
+  catalogue's own score is the only ranking there is, and the heading always says so.
+- Set type in vivid `spot` or `pen` below 24px. The score rule's 2.5rem figure is the one
+  place vivid red sets type at all.
+- Encode a score as a length anywhere a reader compares several at once. Half the
+  catalogue lands inside 0.28 points; a bar of it is noise wearing the costume of data.
+  Print the figure instead.
 - Add a radius, a shadow, or a second border to declare depth.
 - Draw the pen ring with `border-radius`.
 - Ship a control with browser-default chrome.
