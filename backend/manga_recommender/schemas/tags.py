@@ -24,3 +24,12 @@ class TagDetail(BaseModel):
     name: str
     category: str | None
     manga_count: int
+
+
+class MangaTag(BaseModel):
+    """A tag as it appears inside a manga response."""
+
+    id: uuid.UUID
+    name: str
+    is_spoiler: bool
+    rank: int | None

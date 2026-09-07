@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 from manga_recommender.db.models.manga import MangaStatus
 from manga_recommender.schemas.authors import AuthorSummary
 from manga_recommender.schemas.common import PageParams, SortOrder
+from manga_recommender.schemas.manga_metrics import MangaMetricSummary
+from manga_recommender.schemas.tags import MangaTag
 
 
 class TagMatch(StrEnum):
@@ -57,15 +59,7 @@ class MangaSummary(BaseModel):
     authors: list[AuthorSummary]
     status: MangaStatus | None
     image_url: str | None
-
-
-class MangaTag(BaseModel):
-    """A tag as it appears inside a manga response."""
-
-    id: uuid.UUID
-    name: str
-    is_spoiler: bool
-    rank: int | None
+    metrics: MangaMetricSummary | None
 
 
 class MangaDetail(BaseModel):
@@ -83,3 +77,4 @@ class MangaDetail(BaseModel):
     published_date: datetime | None
     description: str | None
     tags: list[MangaTag]
+    metrics: MangaMetricSummary | None
