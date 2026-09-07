@@ -233,6 +233,17 @@ def test_get_manga_by_id_eager_loads_authors(db_session: Session) -> None:
     assert "authors" not in inspect(found).unloaded
 
 
+def test_get_manga_by_id_eager_loads_the_metric(db_session: Session) -> None:
+    """A lazy load here would cost one query per manga in a list response."""
+    manga_id = _with_metric(db_session, create_manga(db_session, title="Blame!").id)
+    db_session.expire_all()
+
+    found = get_manga_by_id(db_session, manga_id)
+
+    assert found is not None
+    assert "metric" not in inspect(found).unloaded
+
+
 # --- get_all_manga ---
 
 
@@ -300,6 +311,20 @@ def _rated(
     return manga.id
 
 
+def _with_metric(db: Session, manga_id: uuid.UUID) -> uuid.UUID:
+    """Give an existing manga a metrics row, and return its ID unchanged."""
+    create_manga_metric(
+        db,
+        manga_id=manga_id,
+        bayesian_score=8.0,
+        mean_score=8.0,
+        votes_count=100,
+        source_count=1,
+        computed_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    return manga_id
+
+
 def test_get_all_manga_orders_by_title(db_session: Session) -> None:
     for title in ("Chainsaw Man", "Akira", "Berserk"):
         create_manga(db_session, title=title)
@@ -340,6 +365,16 @@ def test_get_all_manga_eager_loads_authors(db_session: Session) -> None:
     found = _page(db_session)
 
     assert "authors" not in inspect(found[0]).unloaded
+
+
+def test_get_all_manga_eager_loads_the_metric(db_session: Session) -> None:
+    """A lazy load here would cost one query per manga in the page."""
+    _with_metric(db_session, create_manga(db_session, title="Pluto").id)
+    db_session.expire_all()
+
+    found = _page(db_session)
+
+    assert "metric" not in inspect(found[0]).unloaded
 
 
 def test_get_all_manga_sorts_by_title_descending(db_session: Session) -> None:
@@ -881,6 +916,19 @@ def test_get_manga_by_author_id_eager_loads_authors(db_session: Session) -> None
     assert "authors" not in inspect(found[0]).unloaded
 
 
+def test_get_manga_by_author_id_eager_loads_the_metric(db_session: Session) -> None:
+    """A lazy load here would cost one query per manga in the page."""
+    miura = get_or_create_author(db_session, name="Kentaro Miura")
+    _with_metric(
+        db_session, _seed_manga_with_authors(db_session, "Berserk", "Kentaro Miura")
+    )
+    db_session.expire_all()
+
+    found = get_manga_by_author_id(db_session, miura.id, limit=10, offset=0)
+
+    assert "metric" not in inspect(found[0]).unloaded
+
+
 # --- count_manga_by_author_id ---
 
 
@@ -1021,6 +1069,19 @@ def test_get_manga_by_tag_id_eager_loads_authors(db_session: Session) -> None:
     found = get_manga_by_tag_id(db_session, action.id, limit=10, offset=0)
 
     assert "authors" not in inspect(found[0]).unloaded
+
+
+def test_get_manga_by_tag_id_eager_loads_the_metric(db_session: Session) -> None:
+    """A lazy load here would cost one query per manga in the page."""
+    action = get_or_create_tag(db_session, name="Action", category=None)
+    manga = create_manga(db_session, title="Berserk")
+    _link_tag(db_session, manga.id, "Action", rank=None)
+    _with_metric(db_session, manga.id)
+    db_session.expire_all()
+
+    found = get_manga_by_tag_id(db_session, action.id, limit=10, offset=0)
+
+    assert "metric" not in inspect(found[0]).unloaded
 
 
 # --- count_manga_by_tag_id ---
