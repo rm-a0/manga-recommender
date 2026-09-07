@@ -6,10 +6,18 @@
  * is the authority.
  */
 
+/**
+ * How many values `include_tag` and `exclude_tag` each accept.
+ *
+ * Mirrors `Field(max_length=10)` on `MangaListParams`. The API rejects an
+ * eleventh with a 422, so anything building either list caps itself here.
+ */
+export const MAX_TAG_FILTERS = 10
+
 export type MangaStatus = 'ongoing' | 'finished' | 'hiatus' | 'cancelled' | 'not_released_yet'
 
 export type SortOrder = 'asc' | 'desc'
-export type MangaSort = 'title' | 'published_date'
+export type MangaSort = 'title' | 'published_date' | 'popularity' | 'rating'
 export type TagMatch = 'any' | 'all'
 
 export interface Page<T> {
@@ -43,12 +51,27 @@ export interface MangaTag extends TagSummary {
   rank: number | null
 }
 
+/**
+ * The rating figures derived from a title's external ratings.
+ *
+ * `bayesian_score` is a 0-1 fraction, weighted towards the catalogue mean so a
+ * title with few votes cannot outrank a well-read one on a handful of scores.
+ * A title with no usable source rating has no row at all, so this is null on
+ * roughly two thirds of the catalogue.
+ */
+export interface MangaMetrics {
+  id: string
+  bayesian_score: number
+  votes_count: number
+}
+
 export interface MangaSummary {
   id: string
   title: string
   authors: AuthorSummary[]
   status: MangaStatus | null
   image_url: string | null
+  metrics: MangaMetrics | null
 }
 
 export interface MangaDetail extends MangaSummary {
