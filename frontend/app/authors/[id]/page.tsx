@@ -38,7 +38,7 @@ export default async function AuthorPage(props: PageProps<'/authors/[id]'>) {
         <SectionHead title="Credits" meta="catalogue order" />
         {page.items.length > 0 ? (
           <>
-            <HallGrid items={page.items} offset={offset} />
+            <HallGrid items={page.items} />
             <Pagination
               total={page.total}
               limit={PAGE_SIZE}

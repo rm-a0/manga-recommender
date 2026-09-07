@@ -2,6 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 
 import { largeCover } from '@/lib/covers'
+import { formatScore, formatVotes, formatVotesShort, scoreOutOfTen } from '@/lib/score'
 import type { MangaSummary } from '@/lib/types'
 import { PenMark } from './PenMark'
 
@@ -28,6 +29,7 @@ export function HallSkeleton({ cells = 14 }: { cells?: number }) {
         <li key={index} className="bg-cell p-2 pb-2.5">
           <span className="block aspect-[225/320] w-full bg-[#d9d4c5]" />
           <span className="mt-2 block h-3 w-1/3 bg-[#d9d4c5]" />
+          <span className="mt-1.5 block h-0.5 w-full bg-[#d9d4c5]" />
           <span className="mt-1.5 block h-[2.5em] w-full bg-[#d9d4c5]" />
         </li>
       ))}
@@ -36,13 +38,61 @@ export function HallSkeleton({ cells = 14 }: { cells?: number }) {
 }
 
 /**
- * A table code for an entry's position in the hall: A-01, B-04.
+ * The figures under a cover: the weighted score, then how many readers scored it.
  *
- * Derived from the entry's index in the current listing, so it is a coordinate
- * in what you are looking at — never an identifier and never a rank.
+ * Both are real fields off the metrics row, tied by a dotted leader the way a
+ * contents page ties an entry to its page number.
+ *
+ * The figures are printed, never drawn as a measure. Half the catalogue scores
+ * between 6.79 and 7.07, which is 2.8% of a bar's width and invisible in a grid,
+ * while `6.8` and `7.1` are two glyphs apart. The digits carry the difference
+ * here; the spot rule under them is furniture.
  */
-export function hallCode(index: number): string {
-  return `${String.fromCharCode(65 + (Math.floor(index / 5) % 26))}-${(index % 5) + 1}`
+/**
+ * The rule that closes a cell's figures, in the press ink.
+ *
+ * The same object as the rule under a hall heading, at cell scale: the page's
+ * own move, so a cell reads as a miniature of the page it sits on. It measures
+ * nothing and is drawn on every cell, rated or not — which is what keeps the
+ * hall even and stops the mark reading as a badge some titles won.
+ */
+function CellRule() {
+  return <span aria-hidden="true" className="mt-1.5 block h-0.5 bg-spot" />
+}
+
+function Figures({ manga }: { manga: MangaSummary }) {
+  const score = scoreOutOfTen(manga.metrics)
+
+  if (!manga.metrics || score === null) {
+    return (
+      <>
+        <span className="code mt-2 block text-cell-sub">Not rated</span>
+        <CellRule />
+      </>
+    )
+  }
+
+  return (
+    <>
+      <span className="code mt-2 flex items-baseline gap-1.5">
+        <span aria-hidden="true" className="text-spot-on-cell">
+          {formatScore(score)}
+        </span>
+        <span
+          aria-hidden="true"
+          className="-translate-y-[0.18em] flex-1 border-b border-dotted border-cell-sub/55"
+        />
+        <span aria-hidden="true" className="text-cell-sub">
+          {formatVotesShort(manga.metrics.votes_count)}
+        </span>
+        <span className="sr-only">
+          Weighted score {formatScore(score)} out of 10, from{' '}
+          {formatVotes(manga.metrics.votes_count)} ratings.
+        </span>
+      </span>
+      <CellRule />
+    </>
+  )
 }
 
 function Cell({
@@ -80,7 +130,7 @@ function Cell({
           {ringed && <PenMark label="You named this title" />}
         </span>
 
-        <span className="code mt-2 block text-spot-on-cell">{hallCode(index)}</span>
+        <Figures manga={manga} />
 
         {/*
           Exactly two lines, always. `line-clamp-2` caps a long title; the
@@ -89,7 +139,7 @@ function Cell({
           `display: -webkit-box` that line-clamp needs, and the clamp then
           silently stops working.
         */}
-        <span className="mt-0.5 line-clamp-2 min-h-[2.5em] text-[0.9rem] font-medium leading-[1.25] text-cell-ink group-hover:underline">
+        <span className="mt-1.5 line-clamp-2 min-h-[2.5em] text-[0.9rem] font-medium leading-[1.25] text-cell-ink group-hover:underline">
           {manga.title}
         </span>
       </Link>
@@ -98,18 +148,16 @@ function Cell({
 }
 
 /**
- * The hall listing: every entry as a cell with its table code.
+ * The hall listing: every entry as a cell with its figures.
  *
  * Entries the reader named are ringed in pen. Cell order is the order the API
- * returned; the codes are coordinates in that listing, not a ranking.
+ * returned, under the ordering the listing's own heading names.
  */
 export function HallGrid({
   items,
-  offset = 0,
   ringedIds = [],
 }: {
   items: MangaSummary[]
-  offset?: number
   ringedIds?: string[]
 }) {
   const ringed = new Set(ringedIds)
@@ -117,12 +165,7 @@ export function HallGrid({
   return (
     <ul className={HALL_GRID}>
       {items.map((manga, index) => (
-        <Cell
-          key={manga.id}
-          manga={manga}
-          index={offset + index}
-          ringed={ringed.has(manga.id)}
-        />
+        <Cell key={manga.id} manga={manga} index={index} ringed={ringed.has(manga.id)} />
       ))}
     </ul>
   )
