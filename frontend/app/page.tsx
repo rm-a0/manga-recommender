@@ -14,23 +14,24 @@ function asArray(value: string | string[] | undefined): string[] {
   return Array.isArray(value) ? value : [value]
 }
 
-/** The hall's newest entries, shown before the reader has ringed anything. */
+/** The hall's best-read entries, shown before the reader has ringed anything. */
 async function InTheHall() {
-  const page = await listManga({ limit: 14, sort: 'published_date', order: 'desc' })
+  const page = await listManga({ limit: 14, sort: 'popularity', order: 'desc' })
 
   return (
     <>
       <SectionHead
         title="Hall listing"
-        meta={`${page.total.toLocaleString('en')} entries · newest first`}
+        meta={`${page.total.toLocaleString('en')} entries · most read first`}
       />
       <HallGrid items={page.items} />
-      <p className="mt-5 text-base text-dim">
-        This is the hall, not a recommendation.{' '}
+      <p className="mt-5 max-w-[70ch] text-base text-dim">
+        The most-read titles in the hall — a starting point to ring from, not a
+        recommendation.{' '}
         <Link href="/browse" className="text-text underline">
           Open the full catalogue
         </Link>{' '}
-        to filter and order it.
+        to filter and order it yourself.
       </p>
     </>
   )
@@ -78,7 +79,7 @@ async function RouteResults({
         title="Shared codes"
         meta={
           result.items.length > 0
-            ? `${result.items.length} shown · A–Z, not ranked`
+            ? `${result.items.length} shown · best rated first`
             : 'no matches'
         }
       />
@@ -95,8 +96,10 @@ async function RouteResults({
         <>
           <HallGrid items={result.items} />
           <p className="mt-5 max-w-[70ch] text-base text-dim">
-            Listed alphabetically. Nothing here is scored or ordered by how well it
-            matches — you chose the codes, the hall returned what carries them.
+            You chose the codes; the hall returned what carries them, best rated first.
+            The score is the catalogue&rsquo;s own figure for a title, not a measure of
+            how well it answers your marks — nothing here is weighed against what you
+            ringed.
           </p>
         </>
       ) : (

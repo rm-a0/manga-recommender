@@ -1,7 +1,9 @@
 import 'server-only'
 
+import { SEALED_WORK_TAGS, unsealed } from './explicit'
 import type {
   AuthorDetail,
+  AuthorSummary,
   MangaDetail,
   MangaListParams,
   MangaSummary,
@@ -10,9 +12,6 @@ import type {
 } from './types'
 
 const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:8000'
-
-/** Tags excluded from every catalogue query unless the reader opts back in. */
-export const ADULT_TAGS = ['Hentai', 'Erotica'] as const
 
 export class ApiError extends Error {
   constructor(
@@ -52,14 +51,20 @@ async function get<T>(path: string): Promise<T> {
   return (await response.json()) as T
 }
 
-/** Return one page of manga. `allowAdult` opts out of the default tag exclusion. */
+/**
+ * Return one page of manga.
+ *
+ * The sealed codes are excluded unless `showSealed` says otherwise. The API caps
+ * `exclude_tag` at ten values, so a caller barring codes of its own has to leave
+ * room for the seal's three.
+ */
 export function listManga(
   params: MangaListParams = {},
-  { allowAdult = false }: { allowAdult?: boolean } = {},
+  { showSealed = false }: { showSealed?: boolean } = {},
 ): Promise<Page<MangaSummary>> {
   const exclude = [...(params.exclude_tag ?? [])]
-  if (!allowAdult) {
-    for (const tag of ADULT_TAGS) if (!exclude.includes(tag)) exclude.push(tag)
+  if (!showSealed) {
+    for (const tag of SEALED_WORK_TAGS) if (!exclude.includes(tag)) exclude.push(tag)
   }
   return get(`/manga${toQuery({ ...params, exclude_tag: exclude })}`)
 }
@@ -75,14 +80,30 @@ export async function getManga(id: string): Promise<MangaDetail | null> {
 }
 
 /**
- * Return the whole tag vocabulary in one call.
+ * Return the tag vocabulary in one call.
  *
  * The vocabulary is ~79 rows and the endpoint caps `limit` at 100, so one page
  * holds all of it. Filtering happens in the browser rather than per keystroke.
+ *
+ * Sealed codes are dropped unless `showSealed` says otherwise, so a picker built
+ * on this never lists a code the reader asked not to see.
  */
-export async function listAllTags(): Promise<TagSummary[]> {
+export async function listAllTags(
+  { showSealed = false }: { showSealed?: boolean } = {},
+): Promise<TagSummary[]> {
   const page = await get<Page<TagSummary>>(`/tags${toQuery({ limit: 100 })}`)
-  return page.items
+  return unsealed(page.items, showSealed)
+}
+
+/**
+ * Return how many authors the catalogue credits.
+ *
+ * Asks for a single row and reads `total` off the page, because the count is
+ * the only part wanted and the endpoint has no cheaper way to give it.
+ */
+export async function countAuthors(): Promise<number> {
+  const page = await get<Page<AuthorSummary>>(`/authors${toQuery({ limit: 1 })}`)
+  return page.total
 }
 
 /** Return one author in full, or null when the ID matches nothing. */
