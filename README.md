@@ -276,8 +276,9 @@ manga-recommender/
 │   │   │                          sources, manga_external_ratings, users)
 │   │   └── repositories/        # Data-access functions, one module per model
 │   │
-│   ├── schemas/                # Pydantic request/response models, one per resource
-│   │                              (common Page[T], probes, manga, authors, tags)
+│   ├── schemas/                # Pydantic request/response models, one per entity
+│   │                              (common Page[T], probes, manga, manga_metrics,
+│   │                               authors, tags)
 │   ├── services/               # Business logic - no HTTP, no SQL strings
 │   │
 │   └── ingestion/
@@ -311,6 +312,13 @@ item, `MangaDetail` for one resource, with `Page[T]` in `schemas/common.py` wrap
 any paginated list. A third form, `<Parent><Child>`, appears only where the link
 between two resources carries data of its own — `MangaTag` holds the `rank` and
 `is_spoiler` that describe the manga-tag link rather than the tag itself.
+
+**A schema lives in the module of the entity whose data it carries**, not the module
+of the endpoint that returns it. `MangaTag` and `MangaMetricSummary` are only ever
+embedded in a manga response, but they describe a tag and a metrics row, so they live
+in `tags.py` and `manga_metrics.py`. A module therefore needs no endpoint of its own
+to earn its place, and `manga.py` imports every other schema module while none import
+it.
 
 Two rules keep the schema modules importable in any order:
 

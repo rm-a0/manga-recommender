@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from manga_recommender.db.repositories.manga import (
     assign_authors_to_manga,
     create_manga,
 )
+from manga_recommender.db.repositories.manga_metrics import create_manga_metric
 
 
 def _seed_author(db: Session, name: str) -> uuid.UUID:
@@ -31,6 +33,19 @@ def _seed_manga(
             db, manga, [get_or_create_author(db, name=name) for name in authors]
         )
     return manga.id
+
+
+def _seed_metrics(db: Session, manga_id: uuid.UUID) -> None:
+    """Give one manga a metrics row, so the embedded summary is not null."""
+    create_manga_metric(
+        db,
+        manga_id=manga_id,
+        bayesian_score=8.5,
+        mean_score=9.1,
+        votes_count=1200,
+        source_count=2,
+        computed_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
 
 
 class TestListAuthors:
@@ -318,3 +333,15 @@ class TestListAuthorManga:
 
     def test_returns_422_for_a_malformed_id(self, client: TestClient) -> None:
         assert client.get("/authors/not-a-uuid/manga").status_code == 422
+
+    def test_embeds_the_metrics_of_each_manga(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        author_id = _seed_author(db_session, "Kentaro Miura")
+        manga_id = _seed_manga(db_session, title="Berserk", authors=("Kentaro Miura",))
+        _seed_metrics(db_session, manga_id)
+
+        item = client.get(f"/authors/{author_id}/manga").json()["items"][0]
+
+        assert item["metrics"]["bayesian_score"] == 8.5
+        assert item["metrics"]["votes_count"] == 1200
