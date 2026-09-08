@@ -10,6 +10,16 @@ Planned work, not yet scheduled.
 - Bound the 429 retry depth. It resets `attempt` to 1 and recurses.
 - Backpressure on the fetch side. `_stream` schedules every chunk at once, and
   only the consumer is throttled.
+- Clean descriptions at ingest. Three fixes, measured on the 82,629-row Kaggle
+  seed. 34,599 descriptions (59% of the 58,229 that have one) end in a
+  `(Source: ...)` trailer — a constant string across most of the corpus, which
+  adds a shared component to every embedding and shifts the whole vector space.
+  65 rows are literally `None.`, `N/A` or `-`, so `description IS NOT NULL` does
+  not mean what it says; normalize them to NULL. AniList descriptions carry HTML
+  (`<br>`, `<i>`, `<b>`) and are not truncated, where Kaggle caps at 1000
+  characters (1,778 rows sit exactly at the cap). Strip the markup, and note that
+  a MiniLM-class model reads only ~512 tokens, so text past roughly 2000
+  characters is discarded whatever we store.
 - Fetch AniList's `english`, `native` and `synonyms` titles, plus structured
   `name { first last native }` for staff. Both need a re-ingest.
 
@@ -25,6 +35,20 @@ Planned work, not yet scheduled.
 - Add `role` to `manga_authors` once something needs Story separate from Art.
 - Revisit `delete_orphaned_manga`'s predicate if a source ever supplies
   descriptions without ratings.
+- Explicit content flag on `manga`. The catalogue carries adult titles and nothing
+  marks them, so every listing and every recommendation can return one. Needs a
+  column on `manga`, both extractors writing it, and a decision on the API surface:
+  a default-off `include_explicit` query parameter is the smallest shape, but the
+  filter has to reach the recommendation routes too, not only `GET /manga` — a
+  vector search that ignores it leaks exactly what the flag exists to hide. Source
+  signal differs: AniList gives a boolean `isAdult`, Kaggle MAL gives the `Hentai`
+  and `Erotica` genres, so `_to_record` derives the same flag two ways. Plan is not
+  settled; decide the API shape before the column lands.
+- Type column on `manga` — manga, manhwa, manhua, novel, one-shot, doujinshi.
+  Both sources carry it (`format` on AniList, `type` on Kaggle MAL) and neither is
+  read. An enum like `manga_status`, so it needs a migration and a re-ingest.
+  Earns a repeatable `type` filter on `GET /manga`, and a reader asking for manhwa
+  is a common enough ask that a tag cannot serve it.
 - Store English titles. `data/kaggle_mal_2026.csv` already carries `title_english`
   and `title_japanese`, and `_to_record` reads neither, so search only matches the
   romaji: `q=attack on titan` finds nothing, `q=shingeki no kyojin` finds it. One
@@ -34,7 +58,12 @@ Planned work, not yet scheduled.
   genuinely one-to-many and wants a `manga_titles` table, with search as an
   `EXISTS` over it — the same shape as `_has_tag`. Deferred to the same PR as the
   `published_date` narrowing below, to spend one migration and one re-ingest on
-  both. Not a storage question: ~30 bytes a row is ~6 MB at full catalogue size.
+  both. Not a storage question: ~30 bytes a row is ~6 MB at full catalogue size. Japanese
+  titles are the same column question and stay open: both sources supply one
+  (`title_japanese`, AniList `native`), and the argument for storing it is display
+  on the detail page, not search — a reader typing kana is rare and the trigram
+  index below does not help across scripts. Decide store-and-display versus
+  store-and-search when `manga_titles` is designed.
 - Narrow `manga.published_date` from `DateTime(timezone=True)` to `Date`. Neither
   source carries a time: Kaggle gives `YYYY-MM-DD` and AniList gives
   `{year, month, day}`, so both extractors build a midnight datetime that means
@@ -79,6 +108,11 @@ Planned work, not yet scheduled.
   per-source `raw_scale_max`, so ordering by it means normalizing and aggregating
   per row. Needs a normalized score column on `manga`, written at ingest —
   the same shape as the arbitration column the database section already wants.
+- A manga with no embedding needs its own answer on the recommendation routes.
+  Roughly 37% of the catalogue is outside the `export` gate, so "more like this"
+  on one of those is not an empty result — it is "no usable synopsis, here is
+  shared tags instead". Decide the response shape before the semantic route
+  ships, so the frontend can render a fallback rather than an apology.
 - An index on `manga.title`. Every page already pays a full sort for
   `ORDER BY title OFFSET n`.
 
@@ -95,7 +129,24 @@ Registry order is the run order, so `--stage` accepts any order.
   canonical arbitration, normalized title, tag display names, orphan prune
   (move it out of `ingestion/runner.py`).
 - `export`: DB -> Parquet snapshot. Everything downstream reads the snapshot,
-  not the live database.
+  not the live database. Read-only against the database: it writes no rows.
+  Owns row selection and field shape; it does not compose model input text.
+  Emits structured columns (id, title, description, tags as `list<string>`), so
+  changing the embedding template is an `embed` re-run with no DB round trip.
+  Gate: only manga whose description is at least 100 characters after trimming.
+  That is 52,236 of 82,629 rows (63%) on the Kaggle seed. No title-plus-tags
+  fallback for the rest — the tag vocabulary is closed (79 tags), so those rows
+  would produce near-identical vectors with cosine near 1, which returns
+  arbitrary neighbours and degrades the HNSW graph for the good rows as well.
+  The short tail is mostly tables of contents listing included one-shots, plus
+  literal `None.`; it is not thin synopsis text. Cost is roughly 6,000 genuine
+  one-line synopses excluded, accepted because length cannot separate them from
+  the list-shaped noise. The rows left out are exactly what the live shared-tags
+  route already serves. Adding rows back later is an `embed` + `index` re-run
+  with no schema change; removing them after readers have seen results is not.
+  Write artifacts to `data/artifacts/`, not `data/` itself — `data/` holds the
+  44 MB hand-downloaded Kaggle CSV, and generated files must stay separately
+  disposable. All of `data/` is already gitignored.
 - `embed`: Parquet -> `.npy`. No DB writes. Import `sentence_transformers`
   inside the stage, so the registry can import every stage at module scope.
 - `index`: `.npy` -> `manga_embeddings`, then build HNSW.
@@ -125,3 +176,6 @@ Checkpoints, shortest form. Expand when each is started.
   Prior toward the global mean, weight by `votes_count`. Belongs in `derive`.
 - LLM query understanding. Free-text prompt -> filters plus an embedding.
   Last, and only if plain vector search is not enough.
+
+## Code quality
+- Why no tenacity for retry mechanism in ingestion
