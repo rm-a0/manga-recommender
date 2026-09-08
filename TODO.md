@@ -109,8 +109,10 @@ Planned work, not yet scheduled.
   per row. Needs a normalized score column on `manga`, written at ingest —
   the same shape as the arbitration column the database section already wants.
 - A manga with no embedding needs its own answer on the recommendation routes.
-  Roughly 37% of the catalogue is outside the `export` gate, so "more like this"
-  on one of those is not an empty result — it is "no usable synopsis, here is
+  A large minority of the catalogue is outside the `export` gate — the 37% figure
+  came from the Kaggle seed and no longer holds, so re-derive it from
+  `count(*) FROM manga` against 93,514 exported. "More like this" on an
+  unexported manga is not an empty result — it is "no usable synopsis, here is
   shared tags instead". Decide the response shape before the semantic route
   ships, so the frontend can render a fallback rather than an apology.
 - An index on `manga.title`. Every page already pays a full sort for
@@ -128,22 +130,28 @@ Registry order is the run order, so `--stage` accepts any order.
 - `fill`: post-ingestion in-DB work. Bayesian metrics are done. Still to do:
   canonical arbitration, normalized title, tag display names, orphan prune
   (move it out of `ingestion/runner.py`).
-- `export`: DB -> Parquet snapshot. Everything downstream reads the snapshot,
-  not the live database. Read-only against the database: it writes no rows.
+- `export`: DB -> Parquet snapshot. Built. Everything downstream reads the
+  snapshot, not the live database. Read-only: it writes no rows.
   Owns row selection and field shape; it does not compose model input text.
   Emits structured columns (id, title, description, tags as `list<string>`), so
   changing the embedding template is an `embed` re-run with no DB round trip.
   Gate: only manga whose description is at least 100 characters after trimming.
-  That is 52,236 of 82,629 rows (63%) on the Kaggle seed. No title-plus-tags
-  fallback for the rest — the tag vocabulary is closed (79 tags), so those rows
-  would produce near-identical vectors with cosine near 1, which returns
-  arbitrary neighbours and degrades the HNSW graph for the good rows as well.
+  That was 52,236 of the 82,629 rows in the Kaggle seed (63%). The catalogue has
+  grown since, and the first full run on 2026-09-08 exported 93,514 rows — the
+  count confirmed against both the database and the written snapshot, every id
+  distinct. Re-measure the excluded tail before quoting a percentage against it.
+  No title-plus-tags fallback for the rest — the tag vocabulary is closed
+  (79 tags), so those rows would produce near-identical vectors with cosine near
+  1, which returns arbitrary neighbours and degrades the HNSW graph for the good
+  rows as well.
   The short tail is mostly tables of contents listing included one-shots, plus
-  literal `None.`; it is not thin synopsis text. Cost is roughly 6,000 genuine
-  one-line synopses excluded, accepted because length cannot separate them from
-  the list-shaped noise. The rows left out are exactly what the live shared-tags
-  route already serves. Adding rows back later is an `embed` + `index` re-run
-  with no schema change; removing them after readers have seen results is not.
+  literal `None.`; it is not thin synopsis text. Cost was roughly 6,000 genuine
+  one-line synopses excluded on the Kaggle seed, accepted because length cannot
+  separate them from the list-shaped noise; the figure is stale for the larger
+  catalogue and was never re-derived. The rows left out are exactly what the
+  live shared-tags route already serves. Adding rows back later is an `embed` +
+  `index` re-run with no schema change; removing them after readers have seen
+  results is not.
   Write artifacts to `data/artifacts/`, not `data/` itself — `data/` holds the
   44 MB hand-downloaded Kaggle CSV, and generated files must stay separately
   disposable. All of `data/` is already gitignored.

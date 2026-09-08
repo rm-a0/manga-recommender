@@ -27,6 +27,7 @@ from manga_recommender.db.repositories.manga import (
     get_manga_by_source_external_id,
     get_manga_by_tag_id,
     get_manga_tag_links,
+    stream_exportable_manga,
     update_manga,
 )
 from manga_recommender.db.repositories.manga_metrics import create_manga_metric
@@ -1120,3 +1121,104 @@ def test_count_manga_by_tag_id_returns_zero_for_an_unknown_tag(
     db_session: Session,
 ) -> None:
     assert count_manga_by_tag_id(db_session, uuid.uuid4()) == 0
+
+
+# --- stream_exportable_manga ---
+
+MINIMUM_DESCRIPTION = "x" * 100
+
+
+def _stream_titles(db: Session, batch_size: int = 100) -> list[str]:
+    """Return the title of every row the export stream yields."""
+    return [
+        row.title for batch in stream_exportable_manga(db, batch_size) for row in batch
+    ]
+
+
+def test_stream_exportable_manga_includes_a_description_of_exactly_the_minimum(
+    db_session: Session,
+) -> None:
+    # The gate is inclusive at 100 characters. One character less is excluded
+    # by the test below, so the two together pin the boundary.
+    create_manga(db_session, title="Berserk", description=MINIMUM_DESCRIPTION)
+
+    assert _stream_titles(db_session) == ["Berserk"]
+
+
+def test_stream_exportable_manga_excludes_a_description_below_the_minimum(
+    db_session: Session,
+) -> None:
+    create_manga(db_session, title="Berserk", description="x" * 99)
+
+    assert _stream_titles(db_session) == []
+
+
+def test_stream_exportable_manga_measures_the_description_after_trimming(
+    db_session: Session,
+) -> None:
+    # 100 characters of padding around 50 of text. Without the trim this row
+    # clears the gate on whitespace alone.
+    create_manga(
+        db_session, title="Berserk", description=f"{' ' * 50}{'x' * 50}{' ' * 50}"
+    )
+
+    assert _stream_titles(db_session) == []
+
+
+def test_stream_exportable_manga_excludes_a_manga_without_a_description(
+    db_session: Session,
+) -> None:
+    # NULL fails the length comparison, so the gate needs no IS NOT NULL.
+    create_manga(db_session, title="Berserk")
+
+    assert _stream_titles(db_session) == []
+
+
+def test_stream_exportable_manga_returns_the_id_as_a_string(
+    db_session: Session,
+) -> None:
+    # Parquet stores the id as a string. pyarrow rejects a uuid.UUID object,
+    # so the cast has to happen in SQL.
+    manga = create_manga(db_session, title="Berserk", description=MINIMUM_DESCRIPTION)
+
+    (row,) = next(iter(stream_exportable_manga(db_session, 100)))
+
+    assert row.id == str(manga.id)
+
+
+def test_stream_exportable_manga_orders_tags_by_rank_with_unranked_last(
+    db_session: Session,
+) -> None:
+    # A NULL rank means the source asserts the tag but gives it no weight, so
+    # it sorts below every ranked tag rather than above them.
+    manga = create_manga(db_session, title="Berserk", description=MINIMUM_DESCRIPTION)
+    _link_tag(db_session, manga.id, "Action", rank=3)
+    _link_tag(db_session, manga.id, "Drama", rank=9)
+    _link_tag(db_session, manga.id, "Romance", rank=None)
+
+    (row,) = next(iter(stream_exportable_manga(db_session, 100)))
+
+    assert row.tags == ["Drama", "Action", "Romance"]
+
+
+def test_stream_exportable_manga_returns_none_for_a_manga_without_tags(
+    db_session: Session,
+) -> None:
+    # array_agg over zero rows returns NULL, not an empty array. Callers that
+    # expect a list have to handle it.
+    create_manga(db_session, title="Berserk", description=MINIMUM_DESCRIPTION)
+
+    (row,) = next(iter(stream_exportable_manga(db_session, 100)))
+
+    assert row.tags is None
+
+
+def test_stream_exportable_manga_splits_the_rows_into_batches(
+    db_session: Session,
+) -> None:
+    for i in range(5):
+        create_manga(db_session, title=f"Manga {i}", description=MINIMUM_DESCRIPTION)
+
+    batches = list(stream_exportable_manga(db_session, 2))
+
+    assert [len(batch) for batch in batches] == [2, 2, 1]
