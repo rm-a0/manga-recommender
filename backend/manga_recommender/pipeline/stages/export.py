@@ -25,7 +25,12 @@ SCHEMA = pa.schema(
 )
 
 
-def create_manga_parquet(db: Session, path: Path, batch_size: int) -> None:
+def create_manga_parquet(
+    db: Session,
+    path: Path,
+    batch_size: int,
+    description_length: int,
+) -> None:
     """Write the export snapshot to `path`, one row group per streamed batch.
 
     Each `write_batch` call starts a new row group, so `batch_size` also sets
@@ -37,7 +42,7 @@ def create_manga_parquet(db: Session, path: Path, batch_size: int) -> None:
     try:
         with pq.ParquetWriter(tmp_path, SCHEMA) as writer:
             exported_count = 0
-            for rows in stream_exportable_manga(db, batch_size):
+            for rows in stream_exportable_manga(db, batch_size, description_length):
                 start_time = time.monotonic()
                 record_batch = pa.RecordBatch.from_arrays(
                     list(zip(*rows, strict=True)), schema=SCHEMA
@@ -63,4 +68,9 @@ def run_export() -> None:
     """Read the qualifying manga and write the Parquet snapshot."""
     settings = get_pipeline_settings()
     with session_scope() as session:
-        create_manga_parquet(session, Path(settings.parquet_path), settings.batch_size)
+        create_manga_parquet(
+            session,
+            Path(settings.parquet_path),
+            settings.batch_size,
+            settings.min_description_length,
+        )

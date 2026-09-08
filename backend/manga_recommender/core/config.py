@@ -127,6 +127,7 @@ class PipelineSettings(BaseSettings):
 
     smoothing_votes: float = 250.0
     batch_size: int = 5000
+    min_description_length: int = 100
     parquet_path: str = "data/artifacts/manga.parquet"
 
     model_config = SettingsConfigDict(

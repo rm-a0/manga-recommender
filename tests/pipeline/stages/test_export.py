@@ -16,6 +16,7 @@ from manga_recommender.db.repositories.tags import get_or_create_tag
 from manga_recommender.pipeline.stages import export
 from manga_recommender.pipeline.stages.export import SCHEMA, create_manga_parquet
 
+MINIMUM_LENGTH = 100
 QUALIFYING_DESCRIPTION = "x" * 150
 
 
@@ -45,7 +46,7 @@ def test_create_manga_parquet_writes_the_declared_schema(
     _seed(db_session, "Berserk", description=QUALIFYING_DESCRIPTION)
     path = tmp_path / "manga.parquet"
 
-    create_manga_parquet(db_session, path, 100)
+    create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)
 
     assert pq.read_table(path).schema == SCHEMA
 
@@ -58,7 +59,7 @@ def test_create_manga_parquet_writes_only_the_qualifying_rows(
     _seed(db_session, "No description", description=None)
     path = tmp_path / "manga.parquet"
 
-    create_manga_parquet(db_session, path, 100)
+    create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)
 
     assert [row["title"] for row in _read(path)] == ["Long enough"]
 
@@ -71,7 +72,7 @@ def test_create_manga_parquet_carries_the_row_fields_through(
     _link_tag(db_session, manga_id, "Drama", rank=9)
     path = tmp_path / "manga.parquet"
 
-    create_manga_parquet(db_session, path, 100)
+    create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)
 
     (row,) = _read(path)
     assert row["id"] == str(manga_id)
@@ -88,7 +89,7 @@ def test_create_manga_parquet_writes_no_tags_as_null(
     _seed(db_session, "Berserk", description=QUALIFYING_DESCRIPTION)
     path = tmp_path / "manga.parquet"
 
-    create_manga_parquet(db_session, path, 100)
+    create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)
 
     (row,) = _read(path)
     assert row["tags"] is None
@@ -103,7 +104,7 @@ def test_create_manga_parquet_starts_a_row_group_for_each_batch(
         _seed(db_session, f"Manga {i}", description=QUALIFYING_DESCRIPTION)
     path = tmp_path / "manga.parquet"
 
-    create_manga_parquet(db_session, path, 2)
+    create_manga_parquet(db_session, path, 2, MINIMUM_LENGTH)
 
     assert pq.ParquetFile(path).num_row_groups == 3
 
@@ -114,7 +115,7 @@ def test_create_manga_parquet_creates_the_parent_directory(
     _seed(db_session, "Berserk", description=QUALIFYING_DESCRIPTION)
     path = tmp_path / "artifacts" / "nested" / "manga.parquet"
 
-    create_manga_parquet(db_session, path, 100)
+    create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)
 
     assert path.exists()
 
@@ -127,7 +128,7 @@ def test_create_manga_parquet_writes_an_empty_snapshot_when_nothing_qualifies(
     _seed(db_session, "Too short", description="x" * 99)
     path = tmp_path / "manga.parquet"
 
-    create_manga_parquet(db_session, path, 100)
+    create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)
 
     table = pq.read_table(path)
     assert table.num_rows == 0
@@ -140,7 +141,7 @@ def test_create_manga_parquet_leaves_no_temporary_file(
     _seed(db_session, "Berserk", description=QUALIFYING_DESCRIPTION)
     path = tmp_path / "manga.parquet"
 
-    create_manga_parquet(db_session, path, 100)
+    create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)
 
     assert [p.name for p in tmp_path.iterdir()] == ["manga.parquet"]
 
@@ -152,17 +153,32 @@ def test_create_manga_parquet_keeps_the_previous_snapshot_when_the_stream_fails(
     # cannot tell a truncated file from a complete one.
     _seed(db_session, "Berserk", description=QUALIFYING_DESCRIPTION)
     path = tmp_path / "manga.parquet"
-    create_manga_parquet(db_session, path, 100)
+    create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)
     original = path.read_bytes()
 
-    def _failing_stream(db: Session, batch_size: int) -> Iterator[Sequence[Row]]:
+    def _failing_stream(
+        db: Session, batch_size: int, description_length: int
+    ) -> Iterator[Sequence[Row]]:
         yield from ()
         raise RuntimeError("connection lost")
 
     monkeypatch.setattr(export, "stream_exportable_manga", _failing_stream)
 
     with pytest.raises(RuntimeError, match="connection lost"):
-        create_manga_parquet(db_session, path, 100)
+        create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)
 
     assert path.read_bytes() == original
     assert [p.name for p in tmp_path.iterdir()] == ["manga.parquet"]
+
+
+def test_create_manga_parquet_applies_the_given_minimum_length(
+    db_session: Session, tmp_path: Path
+) -> None:
+    # The stage owns no threshold of its own. It writes whatever the caller's
+    # minimum admits.
+    _seed(db_session, "Fifty", description="x" * 50)
+    path = tmp_path / "manga.parquet"
+
+    create_manga_parquet(db_session, path, 100, 50)
+
+    assert [row["title"] for row in _read(path)] == ["Fifty"]

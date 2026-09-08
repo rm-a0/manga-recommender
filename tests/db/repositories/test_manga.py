@@ -1125,13 +1125,18 @@ def test_count_manga_by_tag_id_returns_zero_for_an_unknown_tag(
 
 # --- stream_exportable_manga ---
 
-MINIMUM_DESCRIPTION = "x" * 100
+MINIMUM_LENGTH = 100
+MINIMUM_DESCRIPTION = "x" * MINIMUM_LENGTH
 
 
-def _stream_titles(db: Session, batch_size: int = 100) -> list[str]:
+def _stream_titles(
+    db: Session, *, minimum: int = MINIMUM_LENGTH, batch_size: int = 100
+) -> list[str]:
     """Return the title of every row the export stream yields."""
     return [
-        row.title for batch in stream_exportable_manga(db, batch_size) for row in batch
+        row.title
+        for batch in stream_exportable_manga(db, batch_size, minimum)
+        for row in batch
     ]
 
 
@@ -1181,7 +1186,7 @@ def test_stream_exportable_manga_returns_the_id_as_a_string(
     # so the cast has to happen in SQL.
     manga = create_manga(db_session, title="Berserk", description=MINIMUM_DESCRIPTION)
 
-    (row,) = next(iter(stream_exportable_manga(db_session, 100)))
+    (row,) = next(iter(stream_exportable_manga(db_session, 100, MINIMUM_LENGTH)))
 
     assert row.id == str(manga.id)
 
@@ -1196,7 +1201,7 @@ def test_stream_exportable_manga_orders_tags_by_rank_with_unranked_last(
     _link_tag(db_session, manga.id, "Drama", rank=9)
     _link_tag(db_session, manga.id, "Romance", rank=None)
 
-    (row,) = next(iter(stream_exportable_manga(db_session, 100)))
+    (row,) = next(iter(stream_exportable_manga(db_session, 100, MINIMUM_LENGTH)))
 
     assert row.tags == ["Drama", "Action", "Romance"]
 
@@ -1208,7 +1213,7 @@ def test_stream_exportable_manga_returns_none_for_a_manga_without_tags(
     # expect a list have to handle it.
     create_manga(db_session, title="Berserk", description=MINIMUM_DESCRIPTION)
 
-    (row,) = next(iter(stream_exportable_manga(db_session, 100)))
+    (row,) = next(iter(stream_exportable_manga(db_session, 100, MINIMUM_LENGTH)))
 
     assert row.tags is None
 
@@ -1219,6 +1224,17 @@ def test_stream_exportable_manga_splits_the_rows_into_batches(
     for i in range(5):
         create_manga(db_session, title=f"Manga {i}", description=MINIMUM_DESCRIPTION)
 
-    batches = list(stream_exportable_manga(db_session, 2))
+    batches = list(stream_exportable_manga(db_session, 2, MINIMUM_LENGTH))
 
     assert [len(batch) for batch in batches] == [2, 2, 1]
+
+
+def test_stream_exportable_manga_applies_the_given_minimum_length(
+    db_session: Session,
+) -> None:
+    # The same row is excluded at 100 and included at 50, so the threshold
+    # reaches the query rather than being fixed in it.
+    create_manga(db_session, title="Berserk", description="x" * 50)
+
+    assert _stream_titles(db_session, minimum=100) == []
+    assert _stream_titles(db_session, minimum=50) == ["Berserk"]
