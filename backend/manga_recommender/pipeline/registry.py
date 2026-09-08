@@ -2,9 +2,13 @@
 
 from collections.abc import Callable, Sequence
 
+from manga_recommender.pipeline.stages.export import run_export
 from manga_recommender.pipeline.stages.fill import run_fill
 
-_STAGE_MAP: dict[str, Callable[[], None]] = {"fill": run_fill}
+_STAGE_MAP: dict[str, Callable[[], None]] = {
+    "fill": run_fill,
+    "export": run_export,
+}
 
 
 def get_all_pipeline_stages() -> list[str]:

@@ -1,13 +1,30 @@
 """Data-access functions for the Manga model."""
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
 
-from sqlalchemy import ColumnElement, Select, delete, exists, func, or_, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import (
+    ColumnElement,
+    Row,
+    ScalarSelect,
+    Select,
+    String,
+    cast,
+    delete,
+    exists,
+    func,
+    or_,
+    select,
+)
+from sqlalchemy.dialects.postgresql import (
+    aggregate_order_by,
+)
+from sqlalchemy.dialects.postgresql import (
+    insert as pg_insert,
+)
 from sqlalchemy.orm import (
     InstrumentedAttribute,
     Session,
@@ -452,6 +469,43 @@ def add_authors_to_manga(db: Session, manga: Manga, authors: list[Author]) -> Ma
             manga.authors.append(author)
     db.flush()
     return manga
+
+
+def _tag_agg_subquery() -> ScalarSelect[Any]:
+    """Return a correlated subquery with one manga's tag names, highest rank first.
+
+    A manga with no tags gives NULL, not an empty array.
+    """
+    return (
+        select(
+            func.array_agg(
+                aggregate_order_by(Tag.name, manga_tags.c.rank.desc().nullslast())
+            )
+        )
+        .select_from(manga_tags)
+        .join(Tag, Tag.id == manga_tags.c.tag_id)
+        .where(Manga.id == manga_tags.c.manga_id)
+        .scalar_subquery()
+    )
+
+
+def stream_exportable_manga(db: Session, batch_size: int) -> Iterator[Sequence[Row]]:
+    """Yield batches of the manga rows that qualify for the export snapshot.
+
+    A row qualifies when its description holds 100 characters or more after
+    trimming. The test also drops a NULL description.
+    """
+    stmt = (
+        select(
+            cast(Manga.id, String).label("id"),
+            Manga.title,
+            Manga.description,
+            _tag_agg_subquery().label("tags"),
+        )
+        .where(func.length(func.trim(Manga.description)) >= 100)
+        .execution_options(yield_per=batch_size)
+    )
+    yield from db.execute(stmt).partitions(batch_size)
 
 
 # --- Bulk operations ---
