@@ -489,11 +489,15 @@ def _tag_agg_subquery() -> ScalarSelect[Any]:
     )
 
 
-def stream_exportable_manga(db: Session, batch_size: int) -> Iterator[Sequence[Row]]:
+def stream_exportable_manga(
+    db: Session,
+    batch_size: int,
+    description_length: int,
+) -> Iterator[Sequence[Row]]:
     """Yield batches of the manga rows that qualify for the export snapshot.
 
-    A row qualifies when its description holds 100 characters or more after
-    trimming. The test also drops a NULL description.
+    A row qualifies when its trimmed description holds at least
+    `description_length` characters. The test also drops a NULL description.
     """
     stmt = (
         select(
@@ -502,7 +506,7 @@ def stream_exportable_manga(db: Session, batch_size: int) -> Iterator[Sequence[R
             Manga.description,
             _tag_agg_subquery().label("tags"),
         )
-        .where(func.length(func.trim(Manga.description)) >= 100)
+        .where(func.length(func.trim(Manga.description)) >= description_length)
         .execution_options(yield_per=batch_size)
     )
     yield from db.execute(stmt).partitions(batch_size)
