@@ -53,7 +53,7 @@ def create_manga_parquet(db: Session, path: Path, batch_size: int) -> None:
         logger.info(
             "export_completed",
             path=str(path),
-            rows=exported_count,
+            count=exported_count,
         )
     finally:
         tmp_path.unlink(missing_ok=True)
