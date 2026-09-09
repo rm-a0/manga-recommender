@@ -28,7 +28,7 @@ SCHEMA = pa.schema(
 def create_manga_parquet(
     db: Session,
     path: Path,
-    batch_size: int,
+    db_batch_size: int,
     description_length: int,
 ) -> None:
     """Write the export snapshot to `path`, one row group per streamed batch.
@@ -38,11 +38,11 @@ def create_manga_parquet(
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = Path(f"{path}_tmp")
-    logger.info("export_started", path=str(path), batch_size=batch_size)
+    logger.info("export_started", path=str(path), batch_size=db_batch_size)
     try:
         with pq.ParquetWriter(tmp_path, SCHEMA) as writer:
             exported_count = 0
-            for rows in stream_exportable_manga(db, batch_size, description_length):
+            for rows in stream_exportable_manga(db, db_batch_size, description_length):
                 start_time = time.monotonic()
                 record_batch = pa.RecordBatch.from_arrays(
                     list(zip(*rows, strict=True)), schema=SCHEMA
@@ -71,6 +71,6 @@ def run_export() -> None:
         create_manga_parquet(
             session,
             Path(settings.parquet_path),
-            settings.batch_size,
+            settings.db_batch_size,
             settings.min_description_length,
         )
