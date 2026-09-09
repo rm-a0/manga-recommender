@@ -126,5 +126,5 @@ def run_fill() -> None:
         replace_manga_metrics(
             session,
             compute_manga_metrics(session, settings.smoothing_votes),
-            settings.batch_size,
+            settings.db_batch_size,
         )

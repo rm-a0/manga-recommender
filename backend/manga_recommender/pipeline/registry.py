@@ -2,9 +2,9 @@
 
 from collections.abc import Callable, Sequence
 
+from manga_recommender.pipeline.stages.embed import run_embed
 from manga_recommender.pipeline.stages.export import run_export
 from manga_recommender.pipeline.stages.fill import run_fill
-from manga_recommender.pipeline.stages.embed import run_embed
 
 _STAGE_MAP: dict[str, Callable[[], None]] = {
     "fill": run_fill,
