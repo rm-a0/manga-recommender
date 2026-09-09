@@ -126,9 +126,13 @@ class PipelineSettings(BaseSettings):
     """Pipeline settings."""
 
     smoothing_votes: float = 250.0
-    batch_size: int = 5000
+    db_batch_size: int = 5000
+    parquet_batch_size: int = 5000
     min_description_length: int = 100
     parquet_path: str = "data/artifacts/manga.parquet"
+    embeddings_path: str = "data/artifacts/embeddings.npz"
+    model_name: str = "BAAI/bge-small-en-v1.5"
+    device: str | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="PIPELINE_",
