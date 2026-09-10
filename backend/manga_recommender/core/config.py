@@ -128,6 +128,7 @@ class PipelineSettings(BaseSettings):
     smoothing_votes: float = 250.0
     db_batch_size: int = 5000
     parquet_batch_size: int = 5000
+    encode_batch_size: int = 256
     min_description_length: int = 100
     parquet_path: str = "data/artifacts/manga.parquet"
     embeddings_path: str = "data/artifacts/embeddings.npz"
