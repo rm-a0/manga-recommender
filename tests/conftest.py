@@ -26,7 +26,7 @@ def _test_database() -> Generator[None]:
     `lru_cache`d `get_database_settings()`/`get_engine()`. Requires Docker to
     be running locally.
     """
-    with PostgresContainer("postgres:16") as postgres:
+    with PostgresContainer("pgvector/pgvector:pg16") as postgres:
         os.environ["DB_URL"] = postgres.get_connection_url()
         command.upgrade(Config(str(REPO_ROOT / "alembic.ini")), "head")
         yield
