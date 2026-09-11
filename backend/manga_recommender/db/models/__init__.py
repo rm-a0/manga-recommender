@@ -2,6 +2,7 @@
 
 from manga_recommender.db.models.authors import Author
 from manga_recommender.db.models.manga import Manga
+from manga_recommender.db.models.manga_embeddings import MangaEmbedding
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
 from manga_recommender.db.models.manga_metrics import MangaMetric
 from manga_recommender.db.models.sources import Source
@@ -16,4 +17,5 @@ __all__ = [
     "Source",
     "Tag",
     "User",
+    "MangaEmbedding",
 ]
