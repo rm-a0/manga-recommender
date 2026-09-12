@@ -10,16 +10,20 @@ Planned work, not yet scheduled.
 - Bound the 429 retry depth. It resets `attempt` to 1 and recurses.
 - Backpressure on the fetch side. `_stream` schedules every chunk at once, and
   only the consumer is throttled.
-- Clean descriptions at ingest. Three fixes, measured on the 82,629-row Kaggle
-  seed. 34,599 descriptions (59% of the 58,229 that have one) end in a
-  `(Source: ...)` trailer — a constant string across most of the corpus, which
-  adds a shared component to every embedding and shifts the whole vector space.
-  65 rows are literally `None.`, `N/A` or `-`, so `description IS NOT NULL` does
-  not mean what it says; normalize them to NULL. AniList descriptions carry HTML
-  (`<br>`, `<i>`, `<b>`) and are not truncated, where Kaggle caps at 1000
-  characters (1,778 rows sit exactly at the cap). Strip the markup, and note that
-  a MiniLM-class model reads only ~512 tokens, so text past roughly 2000
-  characters is discarded whatever we store.
+- Clean descriptions at ingest. Landed 2026-09-12 as `_clean_description` in
+  each extractor. Kaggle MAL: unescape twice, drop every `[Written by ...]`
+  credit and `(Source ...)` attribution (the separator is written as ":", ";",
+  "-" or a space, and the 1000-character cap can cut the closing bracket), cut a
+  trailing `Included one-shots` list, then tidy the whitespace and read a
+  placeholder as NULL. Measured over 58,401 synopses: no trailer, credit,
+  entity or list survives, 474 rows become NULL (433 of them held only a
+  one-shot list), and 52,027 still clear the 100-character export gate.
+  AniList: `<br>` becomes a line break before the other tags go, and the
+  unescape runs after that, so an escaped bracket cannot turn into a tag.
+  Spoiler markers go, the text inside stays. Paragraph breaks survive on both
+  sides, because the detail page shows this text.
+  Needs a re-ingest to reach the stored rows, then `export` and `embed` again.
+  Every cleaned row changes its text hash, so the embed stage re-encodes it.
 - Fetch AniList's `english` title, plus structured
   `name { first last native }` for staff. Both need a re-ingest. `native` and
   `synonyms` are not stored (see English titles under Database).
@@ -43,13 +47,27 @@ Planned work, not yet scheduled.
   filter has to reach the recommendation routes too, not only `GET /manga` — a
   vector search that ignores it leaks exactly what the flag exists to hide. Source
   signal differs: AniList gives a boolean `isAdult`, Kaggle MAL gives the `Hentai`
-  and `Erotica` genres, so `_to_record` derives the same flag two ways. Plan is not
-  settled; decide the API shape before the column lands.
+  and `Erotica` genres, so `_to_record` derives the same flag two ways.
+  Landed 2026-09-12 as a flag on `tags`, not on `manga`: AniList sets `isAdult`
+  per tag, Kaggle marks the `Hentai` and `Erotica` genres, and the tag upsert
+  keeps the union, so source order cannot lose the flag. Still open: a manga is
+  explicit when any of its tags is, and nothing computes that yet.
+  `MangaSummary` carries no tags, so a listing cannot hide an adult title, and
+  the client must not be the one to decide. Needs a derived `is_explicit` on
+  `MangaSummary` and `MangaDetail`, plus a default-off `include_explicit` that
+  filters in SQL (`NOT EXISTS` over the explicit tags) on `GET /manga` and on
+  every recommendation route.
 - Type column on `manga` — manga, manhwa, manhua, novel, one-shot, doujinshi.
   Both sources carry it (`format` on AniList, `type` on Kaggle MAL) and neither is
   read. An enum like `manga_status`, so it needs a migration and a re-ingest.
   Earns a repeatable `type` filter on `GET /manga`, and a reader asking for manhwa
   is a common enough ask that a tag cannot serve it.
+  Landed 2026-09-12: `manga.type`, both extractors, and `MangaFilters.types`.
+  `Novel` folds into `light_novel` on purpose, and AniList needs
+  `countryOfOrigin` as well as `format` to tell a manhwa from a manga. Still
+  open: no request reaches the filter. `MangaListParams` has no `type` field and
+  `_to_filters` never fills `types`, so the filter is unreachable. `MangaSummary`
+  also omits `type`, so a list cannot show the badge it would filter on.
 - Store English titles. `data/kaggle_mal_2026.csv` already carries `title_english`
   and `title_japanese`, and `_to_record` reads neither, so search only matches the
   romaji: `q=attack on titan` finds nothing, `q=shingeki no kyojin` finds it. One
@@ -209,3 +227,7 @@ Checkpoints, shortest form. Expand when each is started.
 
 ## Code quality
 - Why no tenacity for retry mechanism in ingestion
+- `get_or_create_tag` ignores `category` and `is_explicit` for a stored tag,
+  while `bulk_get_or_create_tags` merges both. Only ingestion uses the bulk
+  path, so nothing is wrong today. Make the two agree before a second caller
+  arrives.

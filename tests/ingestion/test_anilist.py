@@ -139,6 +139,20 @@ def test_extract_score_distribution_returns_none_when_no_distribution():
     assert extractor._extract_score_distribution(media) is None
 
 
+def test_to_record_cleans_and_tidies_the_description():
+    """The extractor removes the markup, and the record tidies the rest."""
+    extractor = _extractor()
+    media = _media(description="A story.<br><br><br><br>(Source: Tappytoon)")
+
+    assert extractor._to_record(media).description == "A story."
+
+
+def test_to_record_reads_a_markup_only_description_as_none():
+    extractor = _extractor()
+
+    assert extractor._to_record(_media(description="<br>")).description is None
+
+
 def test_extract_description_strips_html_tags():
     extractor = _extractor()
     media = _media(description="<p>A story about <b>things</b>.</p>")
@@ -151,6 +165,41 @@ def test_extract_description_returns_none_when_missing():
     media = _media(description=None)
 
     assert extractor._extract_description(media) is None
+
+
+def test_clean_description_turns_a_break_into_a_line_break():
+    """Deleting <br> would glue the words on either side together."""
+    extractor = _extractor()
+
+    cleaned = extractor._clean_description("End of line.<br><br>Note: extras.")
+
+    assert cleaned == "End of line.\n\nNote: extras."
+
+
+def test_clean_description_unescapes_after_stripping_tags():
+    """An escaped bracket must survive, not become a tag the strip removes."""
+    extractor = _extractor()
+
+    cleaned = extractor._clean_description("The spy &lt;Twilight&gt; works alone.")
+
+    assert cleaned == "The spy <Twilight> works alone."
+
+
+def test_clean_description_removes_a_source_trailer():
+    extractor = _extractor()
+
+    cleaned = extractor._clean_description("A story.<br><br>(Source: Tappytoon)")
+
+    assert cleaned == "A story.\n\n"
+
+
+def test_clean_description_keeps_the_text_inside_spoiler_marks():
+    """The markers hide the text on AniList. The plot itself is still useful."""
+    extractor = _extractor()
+
+    cleaned = extractor._clean_description("He wins. ~!She leaves.!~")
+
+    assert cleaned == "He wins. She leaves."
 
 
 def test_extract_published_date_uses_full_start_date():

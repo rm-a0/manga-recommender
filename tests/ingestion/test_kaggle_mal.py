@@ -113,6 +113,99 @@ def test_extract_status_returns_none_when_status_missing():
     assert extractor._extract_status({}) is None
 
 
+# --- _clean_description ---
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("A story. (Source: Tapas)", "A story. "),
+        ("A story. (Source : ANN)", "A story. "),
+        ("A story. (Source MU, edited)", "A story. "),
+        ("A story. (Source-M-U)", "A story. "),
+        ("A story. (Source", "A story. "),
+        ("Mid (Source: MU) sentence.", "Mid  sentence."),
+    ],
+)
+def test_clean_description_removes_a_source_trailer(raw: str, expected: str) -> None:
+    """Contributors write the separator several ways, and the cap can cut it."""
+    extractor = _extractor()
+
+    assert extractor._clean_description(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "A story. [Written by MAL Rewrite]",
+        "A story. [Written by Denji]",
+        "A story. [Written by MA",
+    ],
+)
+def test_clean_description_removes_a_credit_line(raw: str) -> None:
+    extractor = _extractor()
+
+    assert extractor._clean_description(raw) == "A story. "
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "A story. Included one-shots: Volume 14: The Prototype",
+        "A story. Included one-shot Volume 1: Call",
+        "A story. included one-shots Wildman Blues",
+    ],
+)
+def test_clean_description_cuts_a_one_shot_list(raw: str) -> None:
+    """The list names the volumes a release collects. It describes no story."""
+    extractor = _extractor()
+
+    assert extractor._clean_description(raw) == "A story. "
+
+
+def test_clean_description_unescapes_entities():
+    extractor = _extractor()
+
+    assert extractor._clean_description("Cats &amp; Dogs") == "Cats & Dogs"
+
+
+def test_clean_description_unescapes_a_double_escaped_entity():
+    """A few rows went through an escaper twice."""
+    extractor = _extractor()
+
+    assert extractor._clean_description("Cats &amp;amp; Dogs") == "Cats & Dogs"
+
+
+def test_clean_description_keeps_a_plain_synopsis_unchanged():
+    extractor = _extractor()
+    raw = "A neurosurgeon hunts the monster he once saved."
+
+    assert extractor._clean_description(raw) == raw
+
+
+def test_extract_description_returns_none_for_an_empty_synopsis():
+    extractor = _extractor()
+
+    assert extractor._extract_description(_row(synopsis="")) is None
+
+
+def test_to_record_cleans_and_tidies_the_synopsis():
+    """The extractor removes the source noise, and the record tidies the rest."""
+    extractor = _extractor()
+
+    record = extractor._to_record(_row(synopsis="A  story. (Source: Tapas)"))
+
+    assert record.description == "A story."
+
+
+def test_to_record_reads_a_lone_one_shot_list_as_no_description():
+    extractor = _extractor()
+
+    record = extractor._to_record(_row(synopsis="Included one-shots: Volume 1"))
+
+    assert record.description is None
+
+
 # --- _extract_type ---
 
 
