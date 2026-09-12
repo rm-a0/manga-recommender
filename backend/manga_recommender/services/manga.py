@@ -56,6 +56,7 @@ def _to_summary(manga: Manga) -> MangaSummary:
     return MangaSummary(
         id=manga.id,
         title=manga.title,
+        title_english=manga.title_english,
         status=manga.status,
         image_url=manga.image_url,
         authors=[
@@ -78,6 +79,8 @@ def _to_detail(manga: Manga, tag_links: Sequence[TagLink]) -> MangaDetail:
     return MangaDetail(
         id=manga.id,
         title=manga.title,
+        title_english=manga.title_english,
+        type=manga.type,
         authors=[
             AuthorSummary(
                 id=a.id,

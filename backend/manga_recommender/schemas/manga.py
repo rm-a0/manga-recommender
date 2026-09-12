@@ -1,12 +1,12 @@
 """Request and response models for the manga resource."""
 
 import uuid
-from datetime import date, datetime
+from datetime import date
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from manga_recommender.db.models.manga import MangaStatus
+from manga_recommender.db.models.manga import MangaStatus, MangaType
 from manga_recommender.schemas.authors import AuthorSummary
 from manga_recommender.schemas.common import PageParams, SortOrder
 from manga_recommender.schemas.manga_metrics import MangaMetricSummary
@@ -56,6 +56,7 @@ class MangaSummary(BaseModel):
 
     id: uuid.UUID
     title: str
+    title_english: str | None
     authors: list[AuthorSummary]
     status: MangaStatus | None
     image_url: str | None
@@ -71,10 +72,12 @@ class MangaDetail(BaseModel):
 
     id: uuid.UUID
     title: str
+    title_english: str | None
+    type: MangaType | None
     authors: list[AuthorSummary]
     status: MangaStatus | None
     image_url: str | None
-    published_date: datetime | None
+    published_date: date | None
     description: str | None
     tags: list[MangaTag]
     metrics: MangaMetricSummary | None

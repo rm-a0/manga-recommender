@@ -17,7 +17,7 @@ from manga_recommender.schemas.tags import TagDetail, TagSummary
 
 def _to_summary(tag: Tag) -> TagSummary:
     """Map a tag row to its list-response model."""
-    return TagSummary(id=tag.id, name=tag.name)
+    return TagSummary(id=tag.id, name=tag.name, is_explicit=tag.is_explicit)
 
 
 def _to_detail(tag: Tag, manga_count: int) -> TagDetail:
@@ -27,6 +27,7 @@ def _to_detail(tag: Tag, manga_count: int) -> TagDetail:
         name=tag.name,
         category=tag.category,
         manga_count=manga_count,
+        is_explicit=tag.is_explicit,
     )
 
 
