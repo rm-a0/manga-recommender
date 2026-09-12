@@ -1,6 +1,7 @@
 """Extractor that pulls manga data from the AniList GraphQL API."""
 
 import asyncio
+import html
 import re
 from calendar import monthrange
 from collections.abc import AsyncIterator, Iterator
@@ -75,6 +76,12 @@ class AnilistExtractor(BaseExtractor):
         "CANCELLED": MangaStatus.CANCELLED,
         "HIATUS": MangaStatus.HIATUS,
     }
+    BREAK_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+    HTML_TAG_RE = re.compile(r"<[^>]+>")
+    DESCRIPTION_NOISE = (
+        re.compile(r"~!|!~"),
+        re.compile(r"\(Source[^)]*\)"),
+    )
     FORMAT_MAP = {
         "NOVEL": MangaType.LIGHT_NOVEL,
         "ONE_SHOT": MangaType.ONE_SHOT,
@@ -139,12 +146,22 @@ class AnilistExtractor(BaseExtractor):
             return None
         return sum(item["amount"] for item in score_distribution)
 
+    def _clean_description(self, raw: str) -> str:
+        """Return the description without markup, spoiler marks or attribution.
+
+        A <br> becomes a line break, so the words around it stay apart. The
+        unescape runs after the strip, so an escaped bracket stays text.
+        """
+        text = self.BREAK_RE.sub("\n", raw)
+        text = html.unescape(self.HTML_TAG_RE.sub("", text))
+        for pattern in self.DESCRIPTION_NOISE:
+            text = pattern.sub("", text)
+        return text
+
     def _extract_description(self, media: dict) -> str | None:
-        """Return the manga description with HTML tags stripped."""
-        description = media.get("description")
-        if description is None:
-            return None
-        return re.sub(r"<[^>]+>", "", description)
+        """Return the manga description, cleaned, or None if absent."""
+        raw = media.get("description")
+        return self._clean_description(raw) if raw else None
 
     def _extract_published_date(self, media: dict) -> datetime | None:
         """Return the manga's published date as a datetime object.

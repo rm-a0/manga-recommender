@@ -1,6 +1,8 @@
 """Extractor that pulls manga data from the Kaggle MAL dataset."""
 
 import csv
+import html
+import re
 from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime
 
@@ -42,6 +44,11 @@ class KaggleMalExtractor(BaseExtractor):
         ("demographics", "Demographic"),
     )
     EXPLICIT_TAGS: list[str] = ["Hentai", "Erotica"]
+    DESCRIPTION_NOISE = (
+        re.compile(r"\[Written\b[^\]]*(?:\]|$)"),
+        re.compile(r"\(Source\s*[-–—:;]?\s*(?:[^)]*\)|[^)]*$)"),
+        re.compile(r"\bIncluded one-shots?\b:?.*", re.IGNORECASE | re.DOTALL),
+    )
 
     def __init__(self):
         """Initialize the Kaggle MAL extractor."""
@@ -95,9 +102,21 @@ class KaggleMalExtractor(BaseExtractor):
         """Parse a float, returning None for an empty string."""
         return float(value) if value else None
 
+    def _clean_description(self, raw: str) -> str:
+        """Return the synopsis without its credit, attribution or one-shot list.
+
+        The dataset caps a synopsis at 1000 characters, which can cut a trailer
+        before its closing bracket. Some rows are escaped twice.
+        """
+        text = html.unescape(html.unescape(raw))
+        for pattern in self.DESCRIPTION_NOISE:
+            text = pattern.sub("", text)
+        return text
+
     def _extract_description(self, row: dict[str, str]) -> str | None:
-        """Return the row's synopsis, or None if absent."""
-        return row.get("synopsis") or None
+        """Return the row's cleaned synopsis, or None if absent."""
+        raw = row.get("synopsis")
+        return self._clean_description(raw) if raw else None
 
     def _extract_type(self, row: dict[str, str]) -> MangaType | None:
         """Map the row's type string to a MangaType, or None if unmapped.

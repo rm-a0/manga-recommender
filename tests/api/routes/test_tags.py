@@ -78,7 +78,9 @@ class TestListTags:
         assert body["total"] == 1
         assert body["limit"] == 20
         assert body["offset"] == 0
-        assert body["items"] == [{"id": str(tag_id), "name": "Psychological"}]
+        assert body["items"] == [
+            {"id": str(tag_id), "name": "Psychological", "is_explicit": False}
+        ]
 
     def test_omits_detail_only_fields(
         self, client: TestClient, db_session: Session
