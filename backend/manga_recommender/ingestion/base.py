@@ -5,11 +5,11 @@ import queue
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic.dataclasses import dataclass
 
-from manga_recommender.db.models.manga import MangaStatus
+from manga_recommender.db.models.manga import MangaStatus, MangaType
 
 _SENTINEL = object()
 
@@ -22,6 +22,7 @@ class NormalizedTag:
     category: str | None
     rank: int | None
     is_spoiler: bool
+    is_explicit: bool
 
 
 @dataclass
@@ -31,11 +32,13 @@ class NormalizedMangaRecord:
     external_id: str
     mal_id: int | None
     title: str
+    title_english: str | None
+    type: MangaType | None
     authors: list[str]
     status: MangaStatus | None
     description: str | None
     tags: list[NormalizedTag] | None
-    published_date: datetime | None
+    published_date: date | None
     raw_score: float | None
     raw_scale_max: float | None
     votes_count: int | None

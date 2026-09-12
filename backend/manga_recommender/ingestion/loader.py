@@ -47,7 +47,10 @@ def _sync_tags_for_manga(
         # A cached name skips the upsert, so a tag keeps the category it was
         # first seen with. AniList sends some names as both a genre and a tag,
         # so which category sticks depends on which media comes first.
-        values = [TagUpsertValues(name=t.name, category=t.category) for t in uncached]
+        values = [
+            TagUpsertValues(name=t.name, category=t.category, is_explicit=t.is_explicit)
+            for t in uncached
+        ]
         tag_cache.update(bulk_get_or_create_tags(db, values))
 
     # A tag can resolve to no id, when its name normalizes to an empty key.
@@ -136,6 +139,8 @@ def load_batch(
                 MangaUpsertValues(
                     mal_id=r.mal_id,
                     title=r.title,
+                    type=r.type,
+                    title_english=r.title_english,
                     published_date=r.published_date,
                     description=r.description,
                     image_url=r.image_url,
