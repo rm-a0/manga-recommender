@@ -533,7 +533,7 @@ def stream_exportable_manga(
     stmt = (
         select(
             cast(Manga.id, String).label("id"),
-            func.coalesce(Manga.title_english, Manga.title),
+            func.coalesce(Manga.title_english, Manga.title).label("title"),
             Manga.description,
             _tag_agg_subquery().label("tags"),
         )
