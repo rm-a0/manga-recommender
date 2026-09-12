@@ -10,23 +10,7 @@ Planned work, not yet scheduled.
 - Bound the 429 retry depth. It resets `attempt` to 1 and recurses.
 - Backpressure on the fetch side. `_stream` schedules every chunk at once, and
   only the consumer is throttled.
-- Clean descriptions at ingest. Landed 2026-09-12 as `_clean_description` in
-  each extractor. Kaggle MAL: unescape twice, drop every `[Written by ...]`
-  credit and `(Source ...)` attribution (the separator is written as ":", ";",
-  "-" or a space, and the 1000-character cap can cut the closing bracket), cut a
-  trailing `Included one-shots` list, then tidy the whitespace and read a
-  placeholder as NULL. Measured over 58,401 synopses: no trailer, credit,
-  entity or list survives, 474 rows become NULL (433 of them held only a
-  one-shot list), and 52,027 still clear the 100-character export gate.
-  AniList: `<br>` becomes a line break before the other tags go, and the
-  unescape runs after that, so an escaped bracket cannot turn into a tag.
-  Spoiler markers go, the text inside stays. Paragraph breaks survive on both
-  sides, because the detail page shows this text.
-  Needs a re-ingest to reach the stored rows, then `export` and `embed` again.
-  Every cleaned row changes its text hash, so the embed stage re-encodes it.
-- Fetch AniList's `english` title, plus structured
-  `name { first last native }` for staff. Both need a re-ingest. `native` and
-  `synonyms` are not stored (see English titles under Database).
+- Update author name cleanup and formating
 
 ## Database
 
@@ -57,39 +41,6 @@ Planned work, not yet scheduled.
   `MangaSummary` and `MangaDetail`, plus a default-off `include_explicit` that
   filters in SQL (`NOT EXISTS` over the explicit tags) on `GET /manga` and on
   every recommendation route.
-- Type column on `manga` — manga, manhwa, manhua, novel, one-shot, doujinshi.
-  Both sources carry it (`format` on AniList, `type` on Kaggle MAL) and neither is
-  read. An enum like `manga_status`, so it needs a migration and a re-ingest.
-  Earns a repeatable `type` filter on `GET /manga`, and a reader asking for manhwa
-  is a common enough ask that a tag cannot serve it.
-  Landed 2026-09-12: `manga.type`, both extractors, and `MangaFilters.types`.
-  `Novel` folds into `light_novel` on purpose, and AniList needs
-  `countryOfOrigin` as well as `format` to tell a manhwa from a manga. Still
-  open: no request reaches the filter. `MangaListParams` has no `type` field and
-  `_to_filters` never fills `types`, so the filter is unreachable. `MangaSummary`
-  also omits `type`, so a list cannot show the badge it would filter on.
-- Store English titles. `data/kaggle_mal_2026.csv` already carries `title_english`
-  and `title_japanese`, and `_to_record` reads neither, so search only matches the
-  romaji: `q=attack on titan` finds nothing, `q=shingeki no kyojin` finds it. One
-  column, one line in `kaggle_mal.py`, then re-run `ingest --source kaggle_mal`.
-  AniList needs `title { romaji english }` in the query and a full re-ingest.
-  Deferred to the same PR as the `published_date` narrowing below, to spend one
-  migration and one re-ingest on both. Not a storage question: ~30 bytes a row is
-  ~6 MB at full catalogue size.
-  Decided 2026-09-11: store only the English title, as one column. No Japanese
-  titles: a reader rarely types kana, and the trigram index does not help across
-  scripts, so the column would serve display only. No `synonyms` and no
-  `manga_titles` table: a one-to-many table and an `EXISTS` on every search cost
-  too much for alternate spellings. The English title covers the main search
-  gap, and trigram search covers near-miss spellings.
-- Narrow `manga.published_date` from `DateTime(timezone=True)` to `Date`. Neither
-  source carries a time: Kaggle gives `YYYY-MM-DD` and AniList gives
-  `{year, month, day}`, so both extractors build a midnight datetime that means
-  nothing. Saves 4 bytes a row, drops the timezone question, and lets the API's
-  `published_from`/`published_to` filters compare date to date instead of a naive
-  datetime against a tz-aware column. `ALTER COLUMN ... TYPE date` casts in place,
-  so no re-ingest. Touches the model, `MangaUpsertValues`, `MangaDetail`, both
-  extractors and `ingestion/base.py`, plus ~25 test references.
 - Canonical display names for tags. `normalize_tag_name` folds case, accents and
   punctuation, so the stored `name` is whichever spelling a source wrote first
   ("Sci-Fi" vs "Sci Fi"). Needs a display map keyed on `normalized_name`, applied
