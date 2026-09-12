@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Sequence
 from typing import TypedDict
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ class TagUpsertValues(TypedDict):
 
     name: str
     category: str | None
+    is_explicit: bool
 
 
 def get_tag_by_id(db: Session, tag_id: uuid.UUID) -> Tag | None:
@@ -64,12 +65,14 @@ def create_tag(
     *,
     name: str,
     category: str | None,
+    is_explicit: bool,
 ) -> Tag:
     """Create and persist a new tag."""
     db_tag = Tag(
         name=name,
         normalized_name=normalize_tag_name(name),
         category=category,
+        is_explicit=is_explicit,
     )
     db.add(db_tag)
     db.flush()
@@ -89,10 +92,15 @@ def get_or_create_tag(
     *,
     name: str,
     category: str | None,
+    is_explicit: bool,
 ) -> Tag:
-    """Return the existing tag with the given name, creating it if needed."""
+    """Return the existing tag with the given name, creating it if needed.
+
+    `category` and `is_explicit` apply to a new row only. An existing row is
+    returned unchanged.
+    """
     tag = get_tag_by_name(db, name)
-    return tag or create_tag(db, name=name, category=category)
+    return tag or create_tag(db, name=name, category=category, is_explicit=is_explicit)
 
 
 # --- Bulk operations ---
@@ -106,6 +114,10 @@ def bulk_get_or_create_tags(
 
     Names that normalize to the same key share one row, and the first spelling
     wins. A name that normalizes to nothing is left out of the result.
+
+    An existing row keeps its category unless it holds NULL. `is_explicit` is
+    the union instead: one source that marks the tag adult keeps it adult, even
+    when a later source does not.
     """
     # A repeated normalized name in one INSERT raises CardinalityViolation.
     by_key: dict[str, TagUpsertValues] = {}
@@ -118,6 +130,7 @@ def bulk_get_or_create_tags(
             "name": t["name"],
             "normalized_name": key,
             "category": t["category"],
+            "is_explicit": t["is_explicit"],
         }
         for key, t in by_key.items()
     ]
@@ -130,6 +143,7 @@ def bulk_get_or_create_tags(
         index_elements=["normalized_name"],
         set_={
             "category": func.coalesce(insert_stmt.excluded.category, Tag.category),
+            "is_explicit": or_(insert_stmt.excluded.is_explicit, Tag.is_explicit),
         },
     ).returning(Tag.normalized_name, Tag.id)
     ids_by_key = {key: tag_id for key, tag_id in db.execute(stmt)}

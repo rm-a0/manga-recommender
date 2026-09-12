@@ -10,18 +10,7 @@ Planned work, not yet scheduled.
 - Bound the 429 retry depth. It resets `attempt` to 1 and recurses.
 - Backpressure on the fetch side. `_stream` schedules every chunk at once, and
   only the consumer is throttled.
-- Clean descriptions at ingest. Three fixes, measured on the 82,629-row Kaggle
-  seed. 34,599 descriptions (59% of the 58,229 that have one) end in a
-  `(Source: ...)` trailer — a constant string across most of the corpus, which
-  adds a shared component to every embedding and shifts the whole vector space.
-  65 rows are literally `None.`, `N/A` or `-`, so `description IS NOT NULL` does
-  not mean what it says; normalize them to NULL. AniList descriptions carry HTML
-  (`<br>`, `<i>`, `<b>`) and are not truncated, where Kaggle caps at 1000
-  characters (1,778 rows sit exactly at the cap). Strip the markup, and note that
-  a MiniLM-class model reads only ~512 tokens, so text past roughly 2000
-  characters is discarded whatever we store.
-- Fetch AniList's `english`, `native` and `synonyms` titles, plus structured
-  `name { first last native }` for staff. Both need a re-ingest.
+- Update author name cleanup and formating
 
 ## Database
 
@@ -42,36 +31,16 @@ Planned work, not yet scheduled.
   filter has to reach the recommendation routes too, not only `GET /manga` — a
   vector search that ignores it leaks exactly what the flag exists to hide. Source
   signal differs: AniList gives a boolean `isAdult`, Kaggle MAL gives the `Hentai`
-  and `Erotica` genres, so `_to_record` derives the same flag two ways. Plan is not
-  settled; decide the API shape before the column lands.
-- Type column on `manga` — manga, manhwa, manhua, novel, one-shot, doujinshi.
-  Both sources carry it (`format` on AniList, `type` on Kaggle MAL) and neither is
-  read. An enum like `manga_status`, so it needs a migration and a re-ingest.
-  Earns a repeatable `type` filter on `GET /manga`, and a reader asking for manhwa
-  is a common enough ask that a tag cannot serve it.
-- Store English titles. `data/kaggle_mal_2026.csv` already carries `title_english`
-  and `title_japanese`, and `_to_record` reads neither, so search only matches the
-  romaji: `q=attack on titan` finds nothing, `q=shingeki no kyojin` finds it. One
-  column, one line in `kaggle_mal.py`, then re-run `ingest --source kaggle_mal`.
-  AniList needs `title { romaji english native }` plus `synonyms` in the query and
-  a full re-ingest, so it can follow later. Once `synonyms` lands the shape is
-  genuinely one-to-many and wants a `manga_titles` table, with search as an
-  `EXISTS` over it — the same shape as `_has_tag`. Deferred to the same PR as the
-  `published_date` narrowing below, to spend one migration and one re-ingest on
-  both. Not a storage question: ~30 bytes a row is ~6 MB at full catalogue size. Japanese
-  titles are the same column question and stay open: both sources supply one
-  (`title_japanese`, AniList `native`), and the argument for storing it is display
-  on the detail page, not search — a reader typing kana is rare and the trigram
-  index below does not help across scripts. Decide store-and-display versus
-  store-and-search when `manga_titles` is designed.
-- Narrow `manga.published_date` from `DateTime(timezone=True)` to `Date`. Neither
-  source carries a time: Kaggle gives `YYYY-MM-DD` and AniList gives
-  `{year, month, day}`, so both extractors build a midnight datetime that means
-  nothing. Saves 4 bytes a row, drops the timezone question, and lets the API's
-  `published_from`/`published_to` filters compare date to date instead of a naive
-  datetime against a tz-aware column. `ALTER COLUMN ... TYPE date` casts in place,
-  so no re-ingest. Touches the model, `MangaUpsertValues`, `MangaDetail`, both
-  extractors and `ingestion/base.py`, plus ~25 test references.
+  and `Erotica` genres, so `_to_record` derives the same flag two ways.
+  Landed 2026-09-12 as a flag on `tags`, not on `manga`: AniList sets `isAdult`
+  per tag, Kaggle marks the `Hentai` and `Erotica` genres, and the tag upsert
+  keeps the union, so source order cannot lose the flag. Still open: a manga is
+  explicit when any of its tags is, and nothing computes that yet.
+  `MangaSummary` carries no tags, so a listing cannot hide an adult title, and
+  the client must not be the one to decide. Needs a derived `is_explicit` on
+  `MangaSummary` and `MangaDetail`, plus a default-off `include_explicit` that
+  filters in SQL (`NOT EXISTS` over the explicit tags) on `GET /manga` and on
+  every recommendation route.
 - Canonical display names for tags. `normalize_tag_name` folds case, accents and
   punctuation, so the stored `name` is whichever spelling a source wrote first
   ("Sci-Fi" vs "Sci Fi"). Needs a display map keyed on `normalized_name`, applied
@@ -155,9 +124,31 @@ Registry order is the run order, so `--stage` accepts any order.
   Write artifacts to `data/artifacts/`, not `data/` itself — `data/` holds the
   44 MB hand-downloaded Kaggle CSV, and generated files must stay separately
   disposable. All of `data/` is already gitignored.
-- `embed`: Parquet -> `.npy`. No DB writes. Import `sentence_transformers`
+- `embed`: Parquet -> `.npz`. No DB writes. Import `sentence_transformers`
   inside the stage, so the registry can import every stage at module scope.
-- `index`: `.npy` -> `manga_embeddings`, then build HNSW.
+  Built.
+  Change the text template from `title desc tags` to `desc tags`, and drop the
+  title. Measured on 2,000 sampled rows with bge-small (2026-09-11). The model
+  weights the start of the text: the same field moves the vector 2.7x more at
+  the start than at the end for the title (1 - cos 0.059 vs 0.022), and 1.6x
+  more for tags (0.060 vs 0.037). Two random manga already sit at cos 0.594, so
+  a 0.06 shift is ~15% of the usable range. Romaji titles carry no meaning for
+  an English model, only spelling overlap, so title-first gives franchise and
+  lookalike neighbours (One Piece -> "CHIN PIECE", 0.815). Neighbours that share
+  a title word: 4.3% with the title first, 2.0% without it, and higher on the
+  full catalogue, where franchises are dense. Truncation does not decide the
+  order: 99.5% of rows fit in 512 tokens (median 130, p99 407), and the tail of
+  the other 472 is mostly chapter lists. The order changes results a lot (top-10
+  overlap with the current template: 37% for `desc tags`), but no measurement
+  says which is better yet. Before locking the template, score each variant by
+  recall@10 against MAL user recommendations (Jikan
+  `/manga/{id}/recommendations`) on a few hundred seeds. Tags stay in the text
+  for free-text semantic search. A re-rank of the top 100-200 by
+  `cos + λ·tag_overlap` can come later, but it only reorders vector candidates.
+  Revisit the title once English titles are stored.
+- `index`: `.npz` -> `manga_embeddings`, then build HNSW. Load the rows before
+  the HNSW index exists, as pgvector recommends: drop the index, bulk insert,
+  create it again.
 - `train`: needs user-item data first. Blocked.
 - A failed stage halts the run. Unlike sources, which are independent and
   log-and-continue. `depends_on` is not needed: the graph is a path, and list
@@ -169,7 +160,7 @@ Registry order is the run order, so `--stage` accepts any order.
 
 Checkpoints, shortest form. Expand when each is started.
 
-- Content embeddings. Description + tags + title -> `halfvec(384)`, HNSW.
+- Content embeddings. Description + tags -> `halfvec(384)`, HNSW. See `embed`.
   Powers "more like this" and semantic search.
 - User-item dataset. Far future. No public manga user-rating dataset exists —
   searched, found none. Must be crawled from Jikan `/users/{name}/mangalist`,
@@ -187,3 +178,7 @@ Checkpoints, shortest form. Expand when each is started.
 
 ## Code quality
 - Why no tenacity for retry mechanism in ingestion
+- `get_or_create_tag` ignores `category` and `is_explicit` for a stored tag,
+  while `bulk_get_or_create_tags` merges both. Only ingestion uses the bulk
+  path, so nothing is wrong today. Make the two agree before a second caller
+  arrives.

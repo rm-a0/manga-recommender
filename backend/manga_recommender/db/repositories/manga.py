@@ -3,7 +3,7 @@
 import uuid
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
 
 from sqlalchemy import (
@@ -32,7 +32,7 @@ from sqlalchemy.orm import (
 )
 
 from manga_recommender.db.models.authors import Author, manga_authors
-from manga_recommender.db.models.manga import Manga, MangaStatus
+from manga_recommender.db.models.manga import Manga, MangaStatus, MangaType
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
 from manga_recommender.db.models.manga_metrics import MangaMetric
 from manga_recommender.db.models.tags import Tag, manga_tags
@@ -64,7 +64,9 @@ class MangaUpsertValues(TypedDict):
 
     mal_id: int | None
     title: str
-    published_date: datetime | None
+    type: MangaType | None
+    title_english: str | None
+    published_date: date | None
     description: str | None
     status: MangaStatus | None
     image_url: str | None
@@ -93,6 +95,7 @@ class MangaFilters:
 
     title_terms: tuple[str, ...] = ()
     statuses: tuple[MangaStatus, ...] = ()
+    types: tuple[MangaType, ...] = ()
     include_tag_keys: tuple[str, ...] = ()
     require_all_tags: bool = False
     exclude_tag_keys: tuple[str, ...] = ()
@@ -153,12 +156,20 @@ def _filtered_manga(filters: MangaFilters) -> Select[tuple[Manga]]:
     cannot reach one without reaching the other.
     """
     stmt = select(Manga)
+    if filters.types:
+        stmt = stmt.where(Manga.type.in_(filters.types))
     if filters.statuses:
         stmt = stmt.where(Manga.status.in_(filters.statuses))
     for clause in _tag_clauses(filters):
         stmt = stmt.where(clause)
     for term in filters.title_terms:
-        stmt = stmt.where(Manga.title.ilike(_title_pattern(term), escape="\\"))
+        pattern = _title_pattern(term)
+        stmt = stmt.where(
+            or_(
+                Manga.title.ilike(pattern, escape="\\"),
+                Manga.title_english.ilike(pattern, escape="\\"),
+            )
+        )
     if filters.published_from:
         stmt = stmt.where(Manga.published_date >= filters.published_from)
     if filters.published_to:
@@ -302,7 +313,9 @@ def create_manga(
     *,
     mal_id: int | None = None,
     title: str,
-    published_date: datetime | None = None,
+    type_: MangaType | None = None,
+    title_english: str | None = None,
+    published_date: date | None = None,
     description: str | None = None,
     image_url: str | None = None,
     status: MangaStatus | None = None,
@@ -311,6 +324,8 @@ def create_manga(
     db_manga = Manga(
         mal_id=mal_id,
         title=title,
+        type=type_,
+        title_english=title_english,
         published_date=published_date,
         description=description,
         image_url=image_url,
@@ -328,7 +343,9 @@ def get_or_create_manga(
     source_id: uuid.UUID | None = None,
     external_id: str | None = None,
     title: str,
-    published_date: datetime | None = None,
+    type_: MangaType | None = None,
+    title_english: str | None = None,
+    published_date: date | None = None,
     description: str | None = None,
     image_url: str | None = None,
     status: MangaStatus | None = None,
@@ -348,6 +365,8 @@ def get_or_create_manga(
         db,
         mal_id=mal_id,
         title=title,
+        type_=type_,
+        title_english=title_english,
         published_date=published_date,
         description=description,
         image_url=image_url,
@@ -361,7 +380,9 @@ def update_manga(
     *,
     mal_id: int | None = None,
     title: str | None = None,
-    published_date: datetime | None = None,
+    type_: MangaType | None = None,
+    title_english: str | None = None,
+    published_date: date | None = None,
     description: str | None = None,
     image_url: str | None = None,
     status: MangaStatus | None = None,
@@ -373,6 +394,8 @@ def update_manga(
     updates = {
         "mal_id": mal_id,
         "title": title,
+        "type": type_,
+        "title_english": title_english,
         "published_date": published_date,
         "description": description,
         "image_url": image_url,
@@ -392,7 +415,9 @@ def update_or_create_manga(
     source_id: uuid.UUID | None = None,
     external_id: str | None = None,
     title: str,
-    published_date: datetime | None = None,
+    type_: MangaType | None = None,
+    title_english: str | None = None,
+    published_date: date | None = None,
     description: str | None = None,
     image_url: str | None = None,
     status: MangaStatus | None = None,
@@ -412,6 +437,8 @@ def update_or_create_manga(
             manga,
             mal_id=mal_id,
             title=title,
+            type_=type_,
+            title_english=title_english,
             published_date=published_date,
             description=description,
             image_url=image_url,
@@ -421,6 +448,8 @@ def update_or_create_manga(
         db,
         mal_id=mal_id,
         title=title,
+        type_=type_,
+        title_english=title_english,
         published_date=published_date,
         description=description,
         image_url=image_url,
@@ -498,11 +527,13 @@ def stream_exportable_manga(
 
     A row qualifies when its trimmed description holds at least
     `description_length` characters. The test also drops a NULL description.
+    The title column holds the English title when there is one, and the romaji
+    title otherwise.
     """
     stmt = (
         select(
             cast(Manga.id, String).label("id"),
-            Manga.title,
+            func.coalesce(Manga.title_english, Manga.title).label("title"),
             Manga.description,
             _tag_agg_subquery().label("tags"),
         )
@@ -533,6 +564,8 @@ def _bulk_upsert_without_mal_id(
             source_id=source_id,
             external_id=record["external_id"],
             title=record["title"],
+            title_english=record["title_english"],
+            type_=record["type"],
             published_date=record["published_date"],
             description=record["description"],
             image_url=record["image_url"],
@@ -578,6 +611,8 @@ def _bulk_upsert_with_mal_id(
         {
             "mal_id": record["mal_id"],
             "title": record["title"],
+            "type": record["type"],
+            "title_english": record["title_english"],
             "published_date": record["published_date"],
             "description": record["description"],
             "image_url": record["image_url"],
@@ -590,6 +625,10 @@ def _bulk_upsert_with_mal_id(
         index_elements=[Manga.mal_id],
         set_={
             "title": func.coalesce(insert_stmt.excluded.title, Manga.title),
+            "type": func.coalesce(insert_stmt.excluded.type, Manga.type),
+            "title_english": func.coalesce(
+                insert_stmt.excluded.title_english, Manga.title_english
+            ),
             "published_date": func.coalesce(
                 insert_stmt.excluded.published_date, Manga.published_date
             ),

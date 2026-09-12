@@ -1,6 +1,7 @@
 """Extractor that pulls manga data from the AniList GraphQL API."""
 
 import asyncio
+import html
 import re
 from calendar import monthrange
 from collections.abc import AsyncIterator, Iterator
@@ -11,7 +12,7 @@ import structlog
 from aiolimiter import AsyncLimiter
 
 from manga_recommender.core.config import get_anilist_settings
-from manga_recommender.db.models.manga import MangaStatus
+from manga_recommender.db.models.manga import MangaStatus, MangaType
 from manga_recommender.ingestion.base import (
     BaseExtractor,
     NormalizedMangaRecord,
@@ -33,7 +34,9 @@ class AnilistExtractor(BaseExtractor):
             media(type: MANGA, id_in: $ids) {
                 id
                 idMal
-                title { romaji }
+                format
+                countryOfOrigin
+                title { romaji english }
                 description(asHtml: false)
                 startDate { year month day }
                 genres
@@ -52,6 +55,7 @@ class AnilistExtractor(BaseExtractor):
                     category
                     isMediaSpoiler
                     isGeneralSpoiler
+                    isAdult
                 }
                 coverImage { large }
             }
@@ -71,6 +75,20 @@ class AnilistExtractor(BaseExtractor):
         "NOT_YET_RELEASED": MangaStatus.NOT_RELEASED_YET,
         "CANCELLED": MangaStatus.CANCELLED,
         "HIATUS": MangaStatus.HIATUS,
+    }
+    BREAK_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+    HTML_TAG_RE = re.compile(r"<[^>]+>")
+    DESCRIPTION_NOISE = (
+        re.compile(r"~!|!~"),
+        re.compile(r"\(Source[^)]*\)"),
+    )
+    FORMAT_MAP = {
+        "NOVEL": MangaType.LIGHT_NOVEL,
+        "ONE_SHOT": MangaType.ONE_SHOT,
+    }
+    ORIGIN_MAP = {
+        "KR": MangaType.MANHWA,
+        "CN": MangaType.MANHUA,
     }
 
     def __init__(self):
@@ -128,12 +146,22 @@ class AnilistExtractor(BaseExtractor):
             return None
         return sum(item["amount"] for item in score_distribution)
 
+    def _clean_description(self, raw: str) -> str:
+        """Return the description without markup, spoiler marks or attribution.
+
+        A <br> becomes a line break, so the words around it stay apart. The
+        unescape runs after the strip, so an escaped bracket stays text.
+        """
+        text = self.BREAK_RE.sub("\n", raw)
+        text = html.unescape(self.HTML_TAG_RE.sub("", text))
+        for pattern in self.DESCRIPTION_NOISE:
+            text = pattern.sub("", text)
+        return text
+
     def _extract_description(self, media: dict) -> str | None:
-        """Return the manga description with HTML tags stripped."""
-        description = media.get("description")
-        if description is None:
-            return None
-        return re.sub(r"<[^>]+>", "", description)
+        """Return the manga description, cleaned, or None if absent."""
+        raw = media.get("description")
+        return self._clean_description(raw) if raw else None
 
     def _extract_published_date(self, media: dict) -> datetime | None:
         """Return the manga's published date as a datetime object.
@@ -181,6 +209,7 @@ class AnilistExtractor(BaseExtractor):
                     category=tag["category"],
                     rank=tag["rank"],
                     is_spoiler=tag["isGeneralSpoiler"] or tag["isMediaSpoiler"],
+                    is_explicit=tag["isAdult"],
                 )
                 for tag in tags
             ),
@@ -190,6 +219,7 @@ class AnilistExtractor(BaseExtractor):
                     category="Genre",  # Not an API value
                     rank=None,
                     is_spoiler=False,
+                    is_explicit=False,
                 )
                 for genre in genres
             ),
@@ -202,12 +232,30 @@ class AnilistExtractor(BaseExtractor):
             return None
         return image_url
 
+    def _extract_type(self, media: dict) -> MangaType | None:
+        """Return the medium of the media object.
+
+        AniList splits the medium over two fields. `format` gives the shape, and
+        `countryOfOrigin` separates a manhwa or a manhua from a manga. The query
+        asks for manga, so an unlisted format still gives `MANGA`. AniList has no
+        doujinshi format, and its `NOVEL` covers light novels as well.
+        """
+        format_ = media["format"]
+        origin = media["countryOfOrigin"]
+        if format_ in self.FORMAT_MAP:
+            return self.FORMAT_MAP.get(format_)
+        elif origin in self.ORIGIN_MAP:
+            return self.ORIGIN_MAP.get(origin)
+        return MangaType.MANGA
+
     def _to_record(self, media: dict) -> NormalizedMangaRecord:
         """Convert a raw AniList media object into a NormalizedMangaRecord."""
         return NormalizedMangaRecord(
             external_id=str(media["id"]),
             mal_id=media["idMal"],
             title=media["title"]["romaji"],
+            title_english=media["title"]["english"],
+            type=self._extract_type(media),
             authors=self._extract_authors(media),
             status=self._extract_status(media),
             published_date=self._extract_published_date(media),

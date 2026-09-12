@@ -1,13 +1,15 @@
 """Extractor that pulls manga data from the Kaggle MAL dataset."""
 
 import csv
+import html
+import re
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import structlog
 
 from manga_recommender.core.config import get_kaggle_mal_settings
-from manga_recommender.db.models.manga import MangaStatus
+from manga_recommender.db.models.manga import MangaStatus, MangaType
 from manga_recommender.ingestion.base import (
     BaseExtractor,
     NormalizedMangaRecord,
@@ -27,10 +29,25 @@ class KaggleMalExtractor(BaseExtractor):
         "On Hiatus": MangaStatus.HIATUS,
         "Discontinued": MangaStatus.CANCELLED,
     }
+    TYPE_MAP = {
+        "Manga": MangaType.MANGA,
+        "Manhwa": MangaType.MANHWA,
+        "Novel": MangaType.LIGHT_NOVEL,
+        "Light Novel": MangaType.LIGHT_NOVEL,
+        "Manhua": MangaType.MANHUA,
+        "Doujinshi": MangaType.DOUJINSHI,
+        "One-shot": MangaType.ONE_SHOT,
+    }
     TAG_COLUMNS = (
         ("genres", "Genre"),
         ("themes", "Theme"),
         ("demographics", "Demographic"),
+    )
+    EXPLICIT_TAGS: list[str] = ["Hentai", "Erotica"]
+    DESCRIPTION_NOISE = (
+        re.compile(r"\[Written\b[^\]]*(?:\]|$)"),
+        re.compile(r"\(Source\s*[-–—:;]?\s*(?:[^)]*\)|[^)]*$)"),
+        re.compile(r"\bIncluded one-shots?\b:?.*", re.IGNORECASE | re.DOTALL),
     )
 
     def __init__(self):
@@ -41,15 +58,16 @@ class KaggleMalExtractor(BaseExtractor):
         """Map the row's status string to a MangaStatus, or None if unmapped."""
         return self.STATUS_MAP.get(row.get("status", ""))
 
-    def _extract_published_date(self, row: dict[str, str]) -> datetime | None:
-        """Return the publication start date as a UTC datetime, or None if absent.
+    def _extract_published_date(self, row: dict[str, str]) -> date | None:
+        """Return the publication start date, or None if absent.
 
-        The dataset's `published_from` is always `YYYY-MM-DD` when present.
+        The dataset's `published_from` is always `YYYY-MM-DD` when present, and
+        carries no time.
         """
         date_raw = row.get("published_from")
         if not date_raw:
             return None
-        return datetime.strptime(date_raw, "%Y-%m-%d").replace(tzinfo=UTC)
+        return date.strptime(date_raw, "%Y-%m-%d")
 
     def _split_pipe(self, value: str) -> list[str]:
         """Split a pipe-delimited field into stripped, non-empty parts."""
@@ -67,6 +85,7 @@ class KaggleMalExtractor(BaseExtractor):
                 category=category,
                 rank=None,
                 is_spoiler=False,
+                is_explicit=name in self.EXPLICIT_TAGS,
             )
             for col, category in self.TAG_COLUMNS
             for name in self._split_pipe(row.get(col, ""))
@@ -82,6 +101,30 @@ class KaggleMalExtractor(BaseExtractor):
     def _extract_float(self, value: str) -> float | None:
         """Parse a float, returning None for an empty string."""
         return float(value) if value else None
+
+    def _clean_description(self, raw: str) -> str:
+        """Return the synopsis without its credit, attribution or one-shot list.
+
+        The dataset caps a synopsis at 1000 characters, which can cut a trailer
+        before its closing bracket. Some rows are escaped twice.
+        """
+        text = html.unescape(html.unescape(raw))
+        for pattern in self.DESCRIPTION_NOISE:
+            text = pattern.sub("", text)
+        return text
+
+    def _extract_description(self, row: dict[str, str]) -> str | None:
+        """Return the row's cleaned synopsis, or None if absent."""
+        raw = row.get("synopsis")
+        return self._clean_description(raw) if raw else None
+
+    def _extract_type(self, row: dict[str, str]) -> MangaType | None:
+        """Map the row's type string to a MangaType, or None if unmapped.
+
+        The dataset carries one value per row, so the medium needs no other
+        field.
+        """
+        return self.TYPE_MAP.get(row.get("type", ""))
 
     def _to_record(self, row: dict[str, str]) -> NormalizedMangaRecord:
         """Convert one CSV row into a NormalizedMangaRecord.
@@ -99,10 +142,12 @@ class KaggleMalExtractor(BaseExtractor):
             external_id=str(mal_id),
             mal_id=mal_id,
             title=title,
+            title_english=row.get("title_english", "").strip() or None,
+            type=self._extract_type(row),
             authors=self._extract_authors(row),
             status=self._extract_status(row),
             published_date=self._extract_published_date(row),
-            description=row.get("synopsis") or None,
+            description=self._extract_description(row),
             tags=self._extract_tags(row),
             raw_score=self._extract_float(row.get("score", "")),
             raw_scale_max=10.0,

@@ -6,7 +6,7 @@ import pytest
 from aiolimiter import AsyncLimiter
 
 from manga_recommender.core.config import AniListSettings
-from manga_recommender.db.models.manga import MangaStatus
+from manga_recommender.db.models.manga import MangaStatus, MangaType
 from manga_recommender.ingestion.base import NormalizedTag
 from manga_recommender.ingestion.extractors.anilist import AnilistExtractor
 
@@ -23,6 +23,9 @@ def _media(
     media_id: int = 1,
     mal_id: int | None = 10,
     title: str = "Test Manga",
+    title_english: str | None = "Test Manga EN",
+    format: str = "MANGA",
+    country_of_origin: str = "JP",
     description: str | None = "<p>A story about <b>things</b>.</p>",
     start_date: dict | None = None,
     genres: list[str] | None = None,
@@ -36,7 +39,9 @@ def _media(
     return {
         "id": media_id,
         "idMal": mal_id,
-        "title": {"romaji": title},
+        "format": format,
+        "countryOfOrigin": country_of_origin,
+        "title": {"romaji": title, "english": title_english},
         "description": description,
         "startDate": start_date,
         "genres": genres if genres is not None else ["Action"],
@@ -134,6 +139,20 @@ def test_extract_score_distribution_returns_none_when_no_distribution():
     assert extractor._extract_score_distribution(media) is None
 
 
+def test_to_record_cleans_and_tidies_the_description():
+    """The extractor removes the markup, and the record tidies the rest."""
+    extractor = _extractor()
+    media = _media(description="A story.<br><br><br><br>(Source: Tappytoon)")
+
+    assert extractor._to_record(media).description == "A story."
+
+
+def test_to_record_reads_a_markup_only_description_as_none():
+    extractor = _extractor()
+
+    assert extractor._to_record(_media(description="<br>")).description is None
+
+
 def test_extract_description_strips_html_tags():
     extractor = _extractor()
     media = _media(description="<p>A story about <b>things</b>.</p>")
@@ -146,6 +165,41 @@ def test_extract_description_returns_none_when_missing():
     media = _media(description=None)
 
     assert extractor._extract_description(media) is None
+
+
+def test_clean_description_turns_a_break_into_a_line_break():
+    """Deleting <br> would glue the words on either side together."""
+    extractor = _extractor()
+
+    cleaned = extractor._clean_description("End of line.<br><br>Note: extras.")
+
+    assert cleaned == "End of line.\n\nNote: extras."
+
+
+def test_clean_description_unescapes_after_stripping_tags():
+    """An escaped bracket must survive, not become a tag the strip removes."""
+    extractor = _extractor()
+
+    cleaned = extractor._clean_description("The spy &lt;Twilight&gt; works alone.")
+
+    assert cleaned == "The spy <Twilight> works alone."
+
+
+def test_clean_description_removes_a_source_trailer():
+    extractor = _extractor()
+
+    cleaned = extractor._clean_description("A story.<br><br>(Source: Tappytoon)")
+
+    assert cleaned == "A story.\n\n"
+
+
+def test_clean_description_keeps_the_text_inside_spoiler_marks():
+    """The markers hide the text on AniList. The plot itself is still useful."""
+    extractor = _extractor()
+
+    cleaned = extractor._clean_description("He wins. ~!She leaves.!~")
+
+    assert cleaned == "He wins. She leaves."
 
 
 def test_extract_published_date_uses_full_start_date():
@@ -203,13 +257,39 @@ def test_extract_tags_marks_a_spoiler_from_either_flag(flag: str):
         "category": "Technical",
         "isMediaSpoiler": False,
         "isGeneralSpoiler": False,
+        "isAdult": False,
     }
     tag[flag] = True
 
     tags = extractor._extract_tags(_media(genres=[], tags=[tag]))
 
     assert tags == [
-        NormalizedTag(name="Time Skip", category="Technical", rank=40, is_spoiler=True)
+        NormalizedTag(
+            name="Time Skip",
+            category="Technical",
+            rank=40,
+            is_spoiler=True,
+            is_explicit=False,
+        )
+    ]
+
+
+def test_extract_tags_carries_the_adult_flag_through():
+    extractor = _extractor()
+    tag = {
+        "name": "Nudity",
+        "rank": 60,
+        "category": "Sexual Content",
+        "isMediaSpoiler": False,
+        "isGeneralSpoiler": False,
+        "isAdult": True,
+    }
+
+    tags = extractor._extract_tags(_media(genres=["Action"], tags=[tag])) or []
+
+    assert [(t.name, t.is_explicit) for t in tags] == [
+        ("Nudity", True),
+        ("Action", False),
     ]
 
 
@@ -248,6 +328,39 @@ def test_extract_image_url_returns_none_when_cover_image_is_null():
     assert extractor._extract_image_url({"coverImage": None}) is None
 
 
+# --- _extract_type ---
+
+
+@pytest.mark.parametrize(
+    ("media_format", "country", "expected"),
+    [
+        ("MANGA", "JP", MangaType.MANGA),
+        ("MANGA", "KR", MangaType.MANHWA),
+        ("MANGA", "CN", MangaType.MANHUA),
+        ("NOVEL", "JP", MangaType.LIGHT_NOVEL),
+        ("ONE_SHOT", "JP", MangaType.ONE_SHOT),
+        ("MANGA", "TW", MangaType.MANGA),
+        ("NOVEL", "KR", MangaType.LIGHT_NOVEL),
+    ],
+)
+def test_extract_type_maps_format_and_origin(
+    media_format: str, country: str, expected: MangaType
+) -> None:
+    """`format` gives the shape, and the country separates manhwa from manga."""
+    extractor = _extractor()
+
+    media = _media(format=media_format, country_of_origin=country)
+
+    assert extractor._extract_type(media) == expected
+
+
+def test_extract_type_falls_back_to_manga():
+    """The query asks for manga, so an unlisted format is still a manga."""
+    extractor = _extractor()
+
+    assert extractor._extract_type(_media(format="TV")) == MangaType.MANGA
+
+
 # --- _to_record ---
 
 
@@ -265,6 +378,7 @@ def test_to_record_converts_media_to_normalized_record():
                 "category": "Setting-Time",
                 "isMediaSpoiler": False,
                 "isGeneralSpoiler": False,
+                "isAdult": False,
             }
         ],
         average_score=91.0,
@@ -275,14 +389,32 @@ def test_to_record_converts_media_to_normalized_record():
     assert record.external_id == "42"
     assert record.mal_id == 100
     assert record.title == "Vagabond"
+    assert record.title_english == "Test Manga EN"
+    assert record.type == MangaType.MANGA
     assert record.authors == ["Author One"]
     assert record.status == MangaStatus.ONGOING
     assert record.tags == [
         NormalizedTag(
-            name="Historical", category="Setting-Time", rank=88, is_spoiler=False
+            name="Historical",
+            category="Setting-Time",
+            rank=88,
+            is_spoiler=False,
+            is_explicit=False,
         ),
-        NormalizedTag(name="Action", category="Genre", rank=None, is_spoiler=False),
-        NormalizedTag(name="Drama", category="Genre", rank=None, is_spoiler=False),
+        NormalizedTag(
+            name="Action",
+            category="Genre",
+            rank=None,
+            is_spoiler=False,
+            is_explicit=False,
+        ),
+        NormalizedTag(
+            name="Drama",
+            category="Genre",
+            rank=None,
+            is_spoiler=False,
+            is_explicit=False,
+        ),
     ]
     assert record.raw_score == 91.0
     assert record.raw_scale_max == 100.0
@@ -493,3 +625,11 @@ def test_extract_skips_max_id_lookup_when_configured(monkeypatch):
     records = list(extractor.extract())
 
     assert sorted(record.external_id for record in records) == ["1", "2"]
+
+
+def test_to_record_reads_a_null_english_title_as_none():
+    extractor = _extractor()
+
+    record = extractor._to_record(_media(title_english=None))
+
+    assert record.title_english is None

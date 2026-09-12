@@ -38,7 +38,10 @@ class Tag(Base):
     """ORM model for a manga tag.
 
     `name` is the spelling to show. `normalized_name` is the identity key, so
-    one tag written several ways stays one row.
+    one tag written several ways stays one row. `is_explicit` marks adult
+    content: AniList sets it per tag, and Kaggle MAL sets it from the genre
+    name. The bulk upsert keeps the union, so a tag that any source marks adult
+    stays adult.
     """
 
     __tablename__ = "tags"
@@ -46,6 +49,7 @@ class Tag(Base):
     name: Mapped[str] = mapped_column()
     normalized_name: Mapped[str] = mapped_column(unique=True, index=True)
     category: Mapped[str | None] = mapped_column()
+    is_explicit: Mapped[bool] = mapped_column(server_default=false())
     manga: Mapped[list[Manga]] = relationship(
         secondary=manga_tags, back_populates="tags"
     )
