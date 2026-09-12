@@ -6,10 +6,15 @@ from pydantic import BaseModel
 
 
 class TagSummary(BaseModel):
-    """A tag as it appears in a list, or embedded in another resource."""
+    """A tag as it appears in a list, or embedded in another resource.
+
+    `is_explicit` marks adult content, so a client can leave the tag out of a
+    picker.
+    """
 
     id: uuid.UUID
     name: str
+    is_explicit: bool
 
 
 class TagDetail(BaseModel):
@@ -24,6 +29,7 @@ class TagDetail(BaseModel):
     name: str
     category: str | None
     manga_count: int
+    is_explicit: bool
 
 
 class MangaTag(BaseModel):
