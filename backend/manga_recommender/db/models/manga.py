@@ -1,10 +1,10 @@
-"""Manga ORM model and status enum."""
+"""Manga ORM model, with its status and type enums."""
 
-from datetime import datetime
+from datetime import date
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum
+from sqlalchemy import Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from manga_recommender.db.base import Base, enum_values
@@ -26,6 +26,21 @@ class MangaStatus(StrEnum):
     HIATUS = "hiatus"
 
 
+class MangaType(StrEnum):
+    """Medium of a manga entry.
+
+    Both sources carry it, but they do not agree on shape: Kaggle MAL sends one
+    value per member, and AniList sends a format plus a country of origin.
+    """
+
+    MANGA = "manga"
+    LIGHT_NOVEL = "light_novel"
+    MANHWA = "manhwa"
+    ONE_SHOT = "one_shot"
+    DOUJINSHI = "doujinshi"
+    MANHUA = "manhua"
+
+
 class Manga(Base):
     """ORM model for a manga entry and its metadata."""
 
@@ -33,7 +48,11 @@ class Manga(Base):
 
     mal_id: Mapped[int | None] = mapped_column(unique=True)
     title: Mapped[str] = mapped_column()
-    published_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    type: Mapped[MangaType | None] = mapped_column(
+        Enum(MangaType, name="manga_type", values_callable=enum_values)
+    )
+    title_english: Mapped[str | None] = mapped_column()
+    published_date: Mapped[date | None] = mapped_column()
     description: Mapped[str | None] = mapped_column()
     image_url: Mapped[str | None] = mapped_column()
     status: Mapped[MangaStatus | None] = mapped_column(
