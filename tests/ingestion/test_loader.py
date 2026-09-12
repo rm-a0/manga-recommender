@@ -51,8 +51,15 @@ def _tag(
     category: str | None = None,
     rank: int | None = None,
     is_spoiler: bool = False,
+    is_explicit: bool = False,
 ) -> NormalizedTag:
-    return NormalizedTag(name=name, category=category, rank=rank, is_spoiler=is_spoiler)
+    return NormalizedTag(
+        name=name,
+        category=category,
+        rank=rank,
+        is_spoiler=is_spoiler,
+        is_explicit=is_explicit,
+    )
 
 
 def _record(
@@ -60,6 +67,7 @@ def _record(
     *,
     mal_id: int | None = None,
     title: str = "Test Manga",
+    title_english: str | None = None,
     tags: list[NormalizedTag] | None = None,
     authors: list[str] | None = None,
     raw_score: float | None = None,
@@ -70,6 +78,8 @@ def _record(
         external_id=external_id,
         mal_id=mal_id,
         title=title,
+        title_english=title_english,
+        type=None,
         authors=authors or [],
         status=None,
         description=None,
@@ -137,7 +147,9 @@ class TestSyncTagsForManga:
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         manga = create_manga(db_session, title="Berserk")
-        tag = create_tag(db_session, name="Dark Fantasy", category=None)
+        tag = create_tag(
+            db_session, name="Dark Fantasy", category=None, is_explicit=False
+        )
         tag_cache = {"Dark Fantasy": tag.id}
 
         def _fail_if_called(*_args: object, **_kwargs: object) -> None:
@@ -249,6 +261,53 @@ class TestLoadBatch:
         manga = get_manga_by_mal_id(patched_session_scope, 202)
         assert manga is not None
         assert manga.title == "New Title"
+
+    def test_upserts_the_english_title_by_mal_id(
+        self, patched_session_scope: Session, test_source: Source
+    ) -> None:
+        """The English title must not take the value of the romaji one."""
+        load_batch(
+            [_record("1", mal_id=303, title="Berserk", title_english=None)],
+            test_source.id,
+            tag_cache={},
+            author_cache={},
+        )
+
+        load_batch(
+            [
+                _record(
+                    "1", mal_id=303, title="Berserk", title_english="Berserk (English)"
+                )
+            ],
+            test_source.id,
+            tag_cache={},
+            author_cache={},
+        )
+
+        manga = get_manga_by_mal_id(patched_session_scope, 303)
+        assert manga is not None
+        assert manga.title_english == "Berserk (English)"
+
+    def test_keeps_a_stored_english_title_when_a_record_omits_it(
+        self, patched_session_scope: Session, test_source: Source
+    ) -> None:
+        load_batch(
+            [_record("1", mal_id=404, title_english="Attack on Titan")],
+            test_source.id,
+            tag_cache={},
+            author_cache={},
+        )
+
+        load_batch(
+            [_record("1", mal_id=404, title_english=None)],
+            test_source.id,
+            tag_cache={},
+            author_cache={},
+        )
+
+        manga = get_manga_by_mal_id(patched_session_scope, 404)
+        assert manga is not None
+        assert manga.title_english == "Attack on Titan"
 
     def test_persists_the_image_url(
         self, patched_session_scope: Session, test_source: Source

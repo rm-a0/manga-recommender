@@ -47,7 +47,7 @@ def _tag_manga(
     is_spoiler: bool = False,
 ) -> None:
     """Attach one tag to a manga."""
-    tag = get_or_create_tag(db, name=name, category=None)
+    tag = get_or_create_tag(db, name=name, category=None, is_explicit=False)
     bulk_add_tags_to_manga(
         db,
         [

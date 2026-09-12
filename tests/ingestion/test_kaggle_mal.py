@@ -1,17 +1,18 @@
 import csv
-from datetime import UTC, datetime
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 from manga_recommender.core.config import KaggleMalSettings
-from manga_recommender.db.models.manga import MangaStatus
+from manga_recommender.db.models.manga import MangaStatus, MangaType
 from manga_recommender.ingestion.base import NormalizedTag
 from manga_recommender.ingestion.extractors.kaggle_mal import KaggleMalExtractor
 
 CSV_FIELDS = [
     "mal_id",
     "title",
+    "title_english",
     "type",
     "status",
     "published_from",
@@ -37,6 +38,7 @@ def _row(
     *,
     mal_id: str = "1",
     title: str = "Monster",
+    title_english: str = "Monster",
     type: str = "Manga",
     status: str = "Finished",
     published_from: str = "1994-12-05",
@@ -53,6 +55,7 @@ def _row(
     return {
         "mal_id": mal_id,
         "title": title,
+        "title_english": title_english,
         "type": type,
         "status": status,
         "published_from": published_from,
@@ -110,15 +113,49 @@ def test_extract_status_returns_none_when_status_missing():
     assert extractor._extract_status({}) is None
 
 
+# --- _extract_type ---
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Manga", MangaType.MANGA),
+        ("Manhwa", MangaType.MANHWA),
+        ("Manhua", MangaType.MANHUA),
+        ("One-shot", MangaType.ONE_SHOT),
+        ("Doujinshi", MangaType.DOUJINSHI),
+        ("Light Novel", MangaType.LIGHT_NOVEL),
+        ("Novel", MangaType.LIGHT_NOVEL),
+    ],
+)
+def test_extract_type_maps_every_dataset_value(raw: str, expected: MangaType) -> None:
+    """`Novel` folds into `Light Novel`: the split carries no useful signal."""
+    extractor = _extractor()
+
+    assert extractor._extract_type(_row(type=raw)) == expected
+
+
+def test_extract_type_returns_none_when_unmapped():
+    extractor = _extractor()
+
+    assert extractor._extract_type(_row(type="Manhua Comic")) is None
+
+
+def test_extract_type_returns_none_when_missing():
+    extractor = _extractor()
+
+    assert extractor._extract_type({}) is None
+
+
 # --- _extract_published_date ---
 
 
-def test_extract_published_date_parses_iso_date_as_utc():
+def test_extract_published_date_parses_iso_date():
     extractor = _extractor()
 
-    assert extractor._extract_published_date(
-        _row(published_from="1994-12-05")
-    ) == datetime(1994, 12, 5, tzinfo=UTC)
+    assert extractor._extract_published_date(_row(published_from="1994-12-05")) == date(
+        1994, 12, 5
+    )
 
 
 def test_extract_published_date_returns_none_when_empty():
@@ -188,13 +225,33 @@ def test_extract_tags_combines_genres_themes_and_demographics():
     )
 
     assert extractor._extract_tags(row) == [
-        NormalizedTag(name="Action", category="Genre", rank=None, is_spoiler=False),
-        NormalizedTag(name="Drama", category="Genre", rank=None, is_spoiler=False),
         NormalizedTag(
-            name="Psychological", category="Theme", rank=None, is_spoiler=False
+            name="Action",
+            category="Genre",
+            rank=None,
+            is_spoiler=False,
+            is_explicit=False,
         ),
         NormalizedTag(
-            name="Seinen", category="Demographic", rank=None, is_spoiler=False
+            name="Drama",
+            category="Genre",
+            rank=None,
+            is_spoiler=False,
+            is_explicit=False,
+        ),
+        NormalizedTag(
+            name="Psychological",
+            category="Theme",
+            rank=None,
+            is_spoiler=False,
+            is_explicit=False,
+        ),
+        NormalizedTag(
+            name="Seinen",
+            category="Demographic",
+            rank=None,
+            is_spoiler=False,
+            is_explicit=False,
         ),
     ]
 
@@ -204,7 +261,25 @@ def test_extract_tags_skips_empty_columns():
     row = _row(genres="Action", themes="", demographics="")
 
     assert extractor._extract_tags(row) == [
-        NormalizedTag(name="Action", category="Genre", rank=None, is_spoiler=False)
+        NormalizedTag(
+            name="Action",
+            category="Genre",
+            rank=None,
+            is_spoiler=False,
+            is_explicit=False,
+        )
+    ]
+
+
+def test_extract_tags_marks_an_explicit_genre():
+    extractor = _extractor()
+    row = _row(genres="Hentai|Action", themes="", demographics="")
+
+    tags = extractor._extract_tags(row) or []
+
+    assert [(t.name, t.is_explicit) for t in tags] == [
+        ("Hentai", True),
+        ("Action", False),
     ]
 
 
@@ -242,6 +317,7 @@ def test_to_record_maps_all_fields():
     row = _row(
         mal_id="1",
         title="Monster",
+        title_english="Monster",
         status="Finished",
         published_from="1994-12-05",
         score="9.16",
@@ -259,21 +335,41 @@ def test_to_record_maps_all_fields():
     assert record.external_id == "1"
     assert record.mal_id == 1
     assert record.title == "Monster"
+    assert record.title_english == "Monster"
+    assert record.type == MangaType.MANGA
     assert record.authors == ["Urasawa, Naoki"]
     assert record.status == MangaStatus.FINISHED
-    assert record.published_date == datetime(1994, 12, 5, tzinfo=UTC)
+    assert record.published_date == date(1994, 12, 5)
     assert record.description == "A story."
     assert record.image_url == "https://myanimelist.net/images/manga/3/258224.jpg"
     assert record.tags == [
         NormalizedTag(
-            name="Award Winning", category="Genre", rank=None, is_spoiler=False
+            name="Award Winning",
+            category="Genre",
+            rank=None,
+            is_spoiler=False,
+            is_explicit=False,
         ),
-        NormalizedTag(name="Drama", category="Genre", rank=None, is_spoiler=False),
         NormalizedTag(
-            name="Psychological", category="Theme", rank=None, is_spoiler=False
+            name="Drama",
+            category="Genre",
+            rank=None,
+            is_spoiler=False,
+            is_explicit=False,
         ),
         NormalizedTag(
-            name="Seinen", category="Demographic", rank=None, is_spoiler=False
+            name="Psychological",
+            category="Theme",
+            rank=None,
+            is_spoiler=False,
+            is_explicit=False,
+        ),
+        NormalizedTag(
+            name="Seinen",
+            category="Demographic",
+            rank=None,
+            is_spoiler=False,
+            is_explicit=False,
         ),
     ]
     assert record.raw_score == 9.16
@@ -360,3 +456,11 @@ def test_to_record_rejects_a_row_without_a_title():
 
     with pytest.raises(ValueError, match="no title"):
         extractor._to_record(_row(title="   "))
+
+
+def test_to_record_reads_a_blank_english_title_as_none():
+    extractor = _extractor()
+
+    record = extractor._to_record(_row(title_english="  "))
+
+    assert record.title_english is None

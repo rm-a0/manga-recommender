@@ -34,7 +34,7 @@ def _link(db: Session, manga_id: uuid.UUID, tag_id: uuid.UUID) -> Row:
 
 
 def test_create_tag_persists_given_name(db_session: Session) -> None:
-    tag = create_tag(db_session, name="Isekai", category="Theme")
+    tag = create_tag(db_session, name="Isekai", category="Theme", is_explicit=False)
 
     assert tag.id is not None
     assert tag.name == "Isekai"
@@ -42,7 +42,7 @@ def test_create_tag_persists_given_name(db_session: Session) -> None:
 
 
 def test_get_tag_by_name_returns_matching_tag(db_session: Session) -> None:
-    created = create_tag(db_session, name="Mecha", category=None)
+    created = create_tag(db_session, name="Mecha", category=None, is_explicit=False)
 
     found = get_tag_by_name(db_session, "Mecha")
 
@@ -55,7 +55,7 @@ def test_get_tag_by_name_returns_none_when_missing(db_session: Session) -> None:
 
 
 def test_get_tag_by_name_finds_any_spelling(db_session: Session) -> None:
-    created = create_tag(db_session, name="Sci-Fi", category=None)
+    created = create_tag(db_session, name="Sci-Fi", category=None, is_explicit=False)
 
     found = get_tag_by_name(db_session, "sci fi")
 
@@ -64,15 +64,17 @@ def test_get_tag_by_name_finds_any_spelling(db_session: Session) -> None:
 
 
 def test_get_or_create_tag_returns_existing_tag(db_session: Session) -> None:
-    created = create_tag(db_session, name="Comedy", category=None)
+    created = create_tag(db_session, name="Comedy", category=None, is_explicit=False)
 
-    found = get_or_create_tag(db_session, name="Comedy", category=None)
+    found = get_or_create_tag(
+        db_session, name="Comedy", category=None, is_explicit=False
+    )
 
     assert found.id == created.id
 
 
 def test_get_or_create_tag_creates_when_missing(db_session: Session) -> None:
-    tag = get_or_create_tag(db_session, name="Horror", category=None)
+    tag = get_or_create_tag(db_session, name="Horror", category=None, is_explicit=False)
 
     assert tag.id is not None
     assert get_tag_by_name(db_session, "Horror") is not None
@@ -108,6 +110,23 @@ def test_normalize_tag_name_is_empty_for_a_name_with_no_word_characters() -> Non
     assert normalize_tag_name("???") == ""
 
 
+def test_create_tag_stores_the_explicit_flag(db_session: Session) -> None:
+    tag = create_tag(db_session, name="Erotica", category="Genre", is_explicit=True)
+
+    assert tag.is_explicit is True
+
+
+def test_get_or_create_tag_leaves_a_stored_tag_unchanged(db_session: Session) -> None:
+    """Only the bulk upsert merges flags: this path returns the row as stored."""
+    create_tag(db_session, name="Hentai", category=None, is_explicit=True)
+
+    found = get_or_create_tag(
+        db_session, name="Hentai", category=None, is_explicit=False
+    )
+
+    assert found.is_explicit is True
+
+
 # --- bulk_get_or_create_tags ---
 
 
@@ -117,8 +136,8 @@ def test_bulk_get_or_create_tags_merges_spellings_into_one_row(
     result = bulk_get_or_create_tags(
         db_session,
         [
-            TagUpsertValues(name="Sci-Fi", category=None),
-            TagUpsertValues(name="sci fi", category=None),
+            TagUpsertValues(name="Sci-Fi", category=None, is_explicit=False),
+            TagUpsertValues(name="sci fi", category=None, is_explicit=False),
         ],
     )
 
@@ -133,16 +152,55 @@ def test_bulk_get_or_create_tags_returns_every_multi_word_name(
     names = ["Slice of Life", "Time Travel", "Sci-Fi", "Action"]
 
     result = bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name=n, category=None) for n in names]
+        db_session,
+        [TagUpsertValues(name=n, category=None, is_explicit=False) for n in names],
     )
 
     assert set(result) == set(names)
 
 
-def test_bulk_get_or_create_tags_keeps_the_first_spelling(db_session: Session) -> None:
-    bulk_get_or_create_tags(db_session, [TagUpsertValues(name="Sci-Fi", category=None)])
+def test_bulk_get_or_create_tags_keeps_an_explicit_tag_explicit(
+    db_session: Session,
+) -> None:
+    """Kaggle marks Hentai adult and AniList does not, so the union must win."""
+    bulk_get_or_create_tags(
+        db_session, [TagUpsertValues(name="Hentai", category=None, is_explicit=True)]
+    )
 
-    bulk_get_or_create_tags(db_session, [TagUpsertValues(name="sci fi", category=None)])
+    bulk_get_or_create_tags(
+        db_session, [TagUpsertValues(name="Hentai", category=None, is_explicit=False)]
+    )
+
+    tag = get_tag_by_name(db_session, "Hentai")
+    assert tag is not None
+    assert tag.is_explicit is True
+
+
+def test_bulk_get_or_create_tags_marks_a_stored_tag_explicit(
+    db_session: Session,
+) -> None:
+    """The order of the sources must not decide the flag."""
+    bulk_get_or_create_tags(
+        db_session, [TagUpsertValues(name="Hentai", category=None, is_explicit=False)]
+    )
+
+    bulk_get_or_create_tags(
+        db_session, [TagUpsertValues(name="Hentai", category=None, is_explicit=True)]
+    )
+
+    tag = get_tag_by_name(db_session, "Hentai")
+    assert tag is not None
+    assert tag.is_explicit is True
+
+
+def test_bulk_get_or_create_tags_keeps_the_first_spelling(db_session: Session) -> None:
+    bulk_get_or_create_tags(
+        db_session, [TagUpsertValues(name="Sci-Fi", category=None, is_explicit=False)]
+    )
+
+    bulk_get_or_create_tags(
+        db_session, [TagUpsertValues(name="sci fi", category=None, is_explicit=False)]
+    )
 
     tag = get_tag_by_name(db_session, "Sci-Fi")
     assert tag is not None
@@ -154,11 +212,13 @@ def test_bulk_get_or_create_tags_merges_across_separate_calls(
 ) -> None:
     """The Kaggle spelling must land on the row the AniList spelling created."""
     first = bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="Mahou Shoujo", category="Theme")]
+        db_session,
+        [TagUpsertValues(name="Mahou Shoujo", category="Theme", is_explicit=False)],
     )
 
     second = bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="mahou-shoujo", category=None)]
+        db_session,
+        [TagUpsertValues(name="mahou-shoujo", category=None, is_explicit=False)],
     )
 
     assert second["mahou-shoujo"] == first["Mahou Shoujo"]
@@ -169,10 +229,13 @@ def test_bulk_get_or_create_tags_keeps_a_category_a_later_source_omits(
 ) -> None:
     """Kaggle supplies no category, so it must not clear the AniList one."""
     bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="Isekai", category="Theme")]
+        db_session,
+        [TagUpsertValues(name="Isekai", category="Theme", is_explicit=False)],
     )
 
-    bulk_get_or_create_tags(db_session, [TagUpsertValues(name="Isekai", category=None)])
+    bulk_get_or_create_tags(
+        db_session, [TagUpsertValues(name="Isekai", category=None, is_explicit=False)]
+    )
 
     tag = get_tag_by_name(db_session, "Isekai")
     assert tag is not None
@@ -182,10 +245,13 @@ def test_bulk_get_or_create_tags_keeps_a_category_a_later_source_omits(
 def test_bulk_get_or_create_tags_fills_a_category_left_empty(
     db_session: Session,
 ) -> None:
-    bulk_get_or_create_tags(db_session, [TagUpsertValues(name="Isekai", category=None)])
+    bulk_get_or_create_tags(
+        db_session, [TagUpsertValues(name="Isekai", category=None, is_explicit=False)]
+    )
 
     bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="Isekai", category="Theme")]
+        db_session,
+        [TagUpsertValues(name="Isekai", category="Theme", is_explicit=False)],
     )
 
     tag = get_tag_by_name(db_session, "Isekai")
@@ -199,8 +265,8 @@ def test_bulk_get_or_create_tags_skips_a_name_that_normalizes_to_nothing(
     result = bulk_get_or_create_tags(
         db_session,
         [
-            TagUpsertValues(name="???", category=None),
-            TagUpsertValues(name="Action", category=None),
+            TagUpsertValues(name="???", category=None, is_explicit=False),
+            TagUpsertValues(name="Action", category=None, is_explicit=False),
         ],
     )
 
@@ -213,9 +279,9 @@ def test_bulk_get_or_create_tags_tolerates_duplicate_names(db_session: Session) 
     result = bulk_get_or_create_tags(
         db_session,
         [
-            TagUpsertValues(name="Seinen", category=None),
-            TagUpsertValues(name="Seinen", category=None),
-            TagUpsertValues(name="Josei", category=None),
+            TagUpsertValues(name="Seinen", category=None, is_explicit=False),
+            TagUpsertValues(name="Seinen", category=None, is_explicit=False),
+            TagUpsertValues(name="Josei", category=None, is_explicit=False),
         ],
     )
 
@@ -228,7 +294,8 @@ def test_bulk_get_or_create_tags_tolerates_duplicate_names(db_session: Session) 
 def test_bulk_add_tags_to_manga_writes_rank_and_spoiler(db_session: Session) -> None:
     manga = create_manga(db_session, title="Steins;Gate")
     tag_ids = bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="Time Travel", category="Theme")]
+        db_session,
+        [TagUpsertValues(name="Time Travel", category="Theme", is_explicit=False)],
     )
 
     bulk_add_tags_to_manga(
@@ -254,7 +321,8 @@ def test_bulk_add_tags_to_manga_keeps_a_rank_a_later_source_omits(
     """Kaggle supplies no rank, so it must not clear the AniList one."""
     manga = create_manga(db_session, title="Berserk")
     tag_ids = bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="Dark Fantasy", category=None)]
+        db_session,
+        [TagUpsertValues(name="Dark Fantasy", category=None, is_explicit=False)],
     )
     link = TagLinkValues(
         manga_id=manga.id, tag_id=tag_ids["Dark Fantasy"], rank=91, is_spoiler=False
@@ -269,7 +337,8 @@ def test_bulk_add_tags_to_manga_keeps_a_rank_a_later_source_omits(
 def test_bulk_add_tags_to_manga_fills_a_rank_left_empty(db_session: Session) -> None:
     manga = create_manga(db_session, title="Vinland Saga")
     tag_ids = bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="Historical", category=None)]
+        db_session,
+        [TagUpsertValues(name="Historical", category=None, is_explicit=False)],
     )
     link = TagLinkValues(
         manga_id=manga.id, tag_id=tag_ids["Historical"], rank=None, is_spoiler=False
@@ -287,7 +356,7 @@ def test_bulk_add_tags_to_manga_never_clears_a_spoiler_flag(
     """A source that flags no spoiler must not unhide a flagged tag."""
     manga = create_manga(db_session, title="Oyasumi Punpun")
     tag_ids = bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="Tragedy", category=None)]
+        db_session, [TagUpsertValues(name="Tragedy", category=None, is_explicit=False)]
     )
     link = TagLinkValues(
         manga_id=manga.id, tag_id=tag_ids["Tragedy"], rank=None, is_spoiler=True
@@ -302,7 +371,7 @@ def test_bulk_add_tags_to_manga_never_clears_a_spoiler_flag(
 def test_bulk_add_tags_to_manga_raises_a_spoiler_flag(db_session: Session) -> None:
     manga = create_manga(db_session, title="Monster")
     tag_ids = bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="Twist", category=None)]
+        db_session, [TagUpsertValues(name="Twist", category=None, is_explicit=False)]
     )
     link = TagLinkValues(
         manga_id=manga.id, tag_id=tag_ids["Twist"], rank=None, is_spoiler=False
@@ -318,7 +387,7 @@ def test_bulk_add_tags_to_manga_tolerates_duplicate_links(db_session: Session) -
     """One tag repeated in a record must collapse, not raise CardinalityViolation."""
     manga = create_manga(db_session, title="Dorohedoro")
     tag_ids = bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="Gore", category=None)]
+        db_session, [TagUpsertValues(name="Gore", category=None, is_explicit=False)]
     )
     link = TagLinkValues(
         manga_id=manga.id, tag_id=tag_ids["Gore"], rank=55, is_spoiler=False
@@ -337,7 +406,7 @@ def test_bulk_add_tags_to_manga_does_nothing_with_no_links(db_session: Session) 
 
 
 def test_get_tag_by_id_returns_matching_tag(db_session: Session) -> None:
-    created = create_tag(db_session, name="Mecha", category="Theme")
+    created = create_tag(db_session, name="Mecha", category="Theme", is_explicit=False)
 
     found = get_tag_by_id(db_session, created.id)
 
@@ -355,7 +424,7 @@ def test_get_tag_by_id_returns_none_when_missing(db_session: Session) -> None:
 
 def test_get_all_tags_orders_by_name(db_session: Session) -> None:
     for name in ("Seinen", "Action", "Mecha"):
-        create_tag(db_session, name=name, category=None)
+        create_tag(db_session, name=name, category=None, is_explicit=False)
 
     found = get_all_tags(db_session, limit=10, offset=0)
 
@@ -366,7 +435,7 @@ def test_get_all_tags_pages_without_repeating_or_skipping(
     db_session: Session,
 ) -> None:
     created = {
-        create_tag(db_session, name=name, category=None).id
+        create_tag(db_session, name=name, category=None, is_explicit=False).id
         for name in ("Action", "Mecha", "Seinen", "Tragedy")
     }
 
@@ -378,7 +447,7 @@ def test_get_all_tags_pages_without_repeating_or_skipping(
 
 
 def test_get_all_tags_returns_empty_past_the_last_page(db_session: Session) -> None:
-    create_tag(db_session, name="Action", category=None)
+    create_tag(db_session, name="Action", category=None, is_explicit=False)
 
     assert get_all_tags(db_session, limit=10, offset=10) == []
 

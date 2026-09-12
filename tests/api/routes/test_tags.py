@@ -18,7 +18,7 @@ from manga_recommender.db.repositories.tags import get_or_create_tag
 
 def _seed_tag(db: Session, name: str, category: str | None = "Theme") -> uuid.UUID:
     """Create the named tag, or reuse it, and return its ID."""
-    return get_or_create_tag(db, name=name, category=category).id
+    return get_or_create_tag(db, name=name, category=category, is_explicit=False).id
 
 
 def _seed_manga(
@@ -155,6 +155,7 @@ class TestGetTag:
             "name": "Psychological",
             "category": "Theme",
             "manga_count": 1,
+            "is_explicit": False,
         }
 
     def test_returns_a_null_category(

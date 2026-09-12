@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
-from manga_recommender.db.models.manga import Manga, MangaStatus
+from manga_recommender.db.models.manga import Manga, MangaStatus, MangaType
 from manga_recommender.db.models.manga_external_ratings import MangaExternalRating
 from manga_recommender.db.models.sources import Source
 from manga_recommender.db.repositories.authors import get_or_create_author
@@ -270,12 +270,7 @@ def _page(
 
 def _dated(db: Session, title: str, published: date | None) -> uuid.UUID:
     """Create one manga with a publication date, and return its ID."""
-    stamp = (
-        datetime(published.year, published.month, published.day, tzinfo=UTC)
-        if published
-        else None
-    )
-    return create_manga(db, title=title, published_date=stamp).id
+    return create_manga(db, title=title, published_date=published).id
 
 
 def _tagged(db: Session, title: str, *tag_names: str) -> uuid.UUID:
@@ -516,6 +511,36 @@ def test_get_all_manga_filters_by_status(db_session: Session) -> None:
     assert [m.title for m in found] == ["Ongoing One"]
 
 
+def test_get_all_manga_filters_by_type(db_session: Session) -> None:
+    create_manga(db_session, title="A Manhwa", type_=MangaType.MANHWA)
+    create_manga(db_session, title="A Manga", type_=MangaType.MANGA)
+
+    found = _page(db_session, MangaFilters(types=(MangaType.MANHWA,)))
+
+    assert [m.title for m in found] == ["A Manhwa"]
+
+
+def test_get_all_manga_filters_by_several_types(db_session: Session) -> None:
+    create_manga(db_session, title="A Manhwa", type_=MangaType.MANHWA)
+    create_manga(db_session, title="A Manhua", type_=MangaType.MANHUA)
+    create_manga(db_session, title="A Novel", type_=MangaType.LIGHT_NOVEL)
+
+    found = _page(db_session, MangaFilters(types=(MangaType.MANHWA, MangaType.MANHUA)))
+
+    assert [m.title for m in found] == ["A Manhua", "A Manhwa"]
+
+
+def test_get_all_manga_keeps_an_untyped_manga_out_of_a_type_filter(
+    db_session: Session,
+) -> None:
+    """AniList can send no type, and a NULL must not pass a filter."""
+    create_manga(db_session, title="Untyped", type_=None)
+
+    found = _page(db_session, MangaFilters(types=(MangaType.MANGA,)))
+
+    assert found == []
+
+
 def test_get_all_manga_filters_by_one_included_tag(db_session: Session) -> None:
     _tagged(db_session, "Berserk", "action")
     _tagged(db_session, "Monster", "psychological")
@@ -611,6 +636,28 @@ def test_get_all_manga_matches_a_title_term_anywhere_in_the_title(
     found = _page(db_session, MangaFilters(title_terms=("titan",)))
 
     assert [m.title for m in found] == ["Attack on Titan"]
+
+
+def test_get_all_manga_matches_a_term_in_the_english_title(db_session: Session) -> None:
+    """A reader searches the English name of a manga stored under its romaji one."""
+    create_manga(
+        db_session, title="Shingeki no Kyojin", title_english="Attack on Titan"
+    )
+
+    found = _page(db_session, MangaFilters(title_terms=("attack",)))
+
+    assert [m.title for m in found] == ["Shingeki no Kyojin"]
+
+
+def test_get_all_manga_matches_a_term_in_the_romaji_title_without_an_english_one(
+    db_session: Session,
+) -> None:
+    """Two thirds of the catalogue has no English title, so a NULL must still match."""
+    create_manga(db_session, title="Shingeki no Kyojin", title_english=None)
+
+    found = _page(db_session, MangaFilters(title_terms=("kyojin",)))
+
+    assert [m.title for m in found] == ["Shingeki no Kyojin"]
 
 
 def test_get_all_manga_requires_every_title_term(db_session: Session) -> None:
@@ -744,7 +791,7 @@ def _link_tag(
     is_spoiler: bool = False,
 ) -> uuid.UUID:
     """Attach a tag to a manga and return the tag's ID."""
-    tag = get_or_create_tag(db, name=name, category=None)
+    tag = get_or_create_tag(db, name=name, category=None, is_explicit=False)
     bulk_add_tags_to_manga(
         db,
         [
@@ -982,7 +1029,9 @@ def _seed_manga_with_tags(db: Session, title: str, *tag_names: str) -> uuid.UUID
 def test_get_manga_by_tag_id_returns_only_manga_with_that_tag(
     db_session: Session,
 ) -> None:
-    action = get_or_create_tag(db_session, name="Action", category=None)
+    action = get_or_create_tag(
+        db_session, name="Action", category=None, is_explicit=False
+    )
     _seed_manga_with_tags(db_session, "Berserk", "Action")
     _seed_manga_with_tags(db_session, "Monster", "Psychological")
 
@@ -995,7 +1044,9 @@ def test_get_manga_by_tag_id_returns_a_multi_tagged_manga_once(
     db_session: Session,
 ) -> None:
     """The join must not multiply a manga by its other tags."""
-    action = get_or_create_tag(db_session, name="Action", category=None)
+    action = get_or_create_tag(
+        db_session, name="Action", category=None, is_explicit=False
+    )
     _seed_manga_with_tags(db_session, "Berserk", "Action", "Seinen", "Tragedy")
 
     found = get_manga_by_tag_id(db_session, action.id, limit=10, offset=0)
@@ -1004,7 +1055,9 @@ def test_get_manga_by_tag_id_returns_a_multi_tagged_manga_once(
 
 
 def test_get_manga_by_tag_id_orders_by_title(db_session: Session) -> None:
-    action = get_or_create_tag(db_session, name="Action", category=None)
+    action = get_or_create_tag(
+        db_session, name="Action", category=None, is_explicit=False
+    )
     for title in ("Gigantomakhia", "Berserk", "Duranki"):
         _seed_manga_with_tags(db_session, title, "Action")
 
@@ -1016,7 +1069,9 @@ def test_get_manga_by_tag_id_orders_by_title(db_session: Session) -> None:
 def test_get_manga_by_tag_id_pages_without_repeating_or_skipping(
     db_session: Session,
 ) -> None:
-    action = get_or_create_tag(db_session, name="Action", category=None)
+    action = get_or_create_tag(
+        db_session, name="Action", category=None, is_explicit=False
+    )
     created = {
         _seed_manga_with_tags(db_session, title, "Action")
         for title in ("Berserk", "Duranki", "Gigantomakhia", "Japan")
@@ -1031,7 +1086,9 @@ def test_get_manga_by_tag_id_pages_without_repeating_or_skipping(
 
 def test_get_manga_by_tag_id_pages_when_titles_are_equal(db_session: Session) -> None:
     """Equal titles need the ID tiebreaker to give a total order."""
-    action = get_or_create_tag(db_session, name="Action", category=None)
+    action = get_or_create_tag(
+        db_session, name="Action", category=None, is_explicit=False
+    )
     created = {
         _seed_manga_with_tags(db_session, "Same Title", "Action") for _ in range(4)
     }
@@ -1046,7 +1103,7 @@ def test_get_manga_by_tag_id_pages_when_titles_are_equal(db_session: Session) ->
 def test_get_manga_by_tag_id_returns_empty_for_a_tag_on_no_manga(
     db_session: Session,
 ) -> None:
-    tag = get_or_create_tag(db_session, name="Unused", category=None)
+    tag = get_or_create_tag(db_session, name="Unused", category=None, is_explicit=False)
 
     assert get_manga_by_tag_id(db_session, tag.id, limit=10, offset=0) == []
 
@@ -1059,7 +1116,9 @@ def test_get_manga_by_tag_id_returns_empty_for_an_unknown_tag(
 
 def test_get_manga_by_tag_id_eager_loads_authors(db_session: Session) -> None:
     """A lazy load here would cost one query per manga in the page."""
-    action = get_or_create_tag(db_session, name="Action", category=None)
+    action = get_or_create_tag(
+        db_session, name="Action", category=None, is_explicit=False
+    )
     manga = create_manga(db_session, title="Berserk")
     assign_authors_to_manga(
         db_session, manga, [get_or_create_author(db_session, name="Kentaro Miura")]
@@ -1074,7 +1133,9 @@ def test_get_manga_by_tag_id_eager_loads_authors(db_session: Session) -> None:
 
 def test_get_manga_by_tag_id_eager_loads_the_metric(db_session: Session) -> None:
     """A lazy load here would cost one query per manga in the page."""
-    action = get_or_create_tag(db_session, name="Action", category=None)
+    action = get_or_create_tag(
+        db_session, name="Action", category=None, is_explicit=False
+    )
     manga = create_manga(db_session, title="Berserk")
     _link_tag(db_session, manga.id, "Action", rank=None)
     _with_metric(db_session, manga.id)
@@ -1091,7 +1152,9 @@ def test_get_manga_by_tag_id_eager_loads_the_metric(db_session: Session) -> None
 def test_count_manga_by_tag_id_counts_every_manga_not_only_a_page(
     db_session: Session,
 ) -> None:
-    action = get_or_create_tag(db_session, name="Action", category=None)
+    action = get_or_create_tag(
+        db_session, name="Action", category=None, is_explicit=False
+    )
     for title in ("Berserk", "Duranki", "Gigantomakhia"):
         _seed_manga_with_tags(db_session, title, "Action")
 
@@ -1101,7 +1164,9 @@ def test_count_manga_by_tag_id_counts_every_manga_not_only_a_page(
 def test_count_manga_by_tag_id_ignores_manga_without_the_tag(
     db_session: Session,
 ) -> None:
-    action = get_or_create_tag(db_session, name="Action", category=None)
+    action = get_or_create_tag(
+        db_session, name="Action", category=None, is_explicit=False
+    )
     _seed_manga_with_tags(db_session, "Berserk", "Action")
     _seed_manga_with_tags(db_session, "Monster", "Psychological")
 
@@ -1111,7 +1176,9 @@ def test_count_manga_by_tag_id_ignores_manga_without_the_tag(
 def test_count_manga_by_tag_id_counts_a_multi_tagged_manga_once(
     db_session: Session,
 ) -> None:
-    action = get_or_create_tag(db_session, name="Action", category=None)
+    action = get_or_create_tag(
+        db_session, name="Action", category=None, is_explicit=False
+    )
     _seed_manga_with_tags(db_session, "Berserk", "Action", "Seinen", "Tragedy")
 
     assert count_manga_by_tag_id(db_session, action.id) == 1

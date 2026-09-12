@@ -8,7 +8,7 @@ repeated names, and naive timestamp columns.
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import inspect, select
+from sqlalchemy import Date, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -157,7 +157,8 @@ def test_delete_manga_removes_its_tag_links(db_session: Session) -> None:
     """Deleting a manga must not fail on its manga_tags rows."""
     manga = create_manga(db_session, title="Blame!")
     tag_ids = bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="cyberpunk", category=None)]
+        db_session,
+        [TagUpsertValues(name="cyberpunk", category=None, is_explicit=False)],
     )
     bulk_add_tags_to_manga(
         db_session,
@@ -184,9 +185,9 @@ def test_bulk_get_or_create_tags_tolerates_duplicate_names(
     result = bulk_get_or_create_tags(
         db_session,
         [
-            TagUpsertValues(name="seinen", category=None),
-            TagUpsertValues(name="seinen", category=None),
-            TagUpsertValues(name="josei", category=None),
+            TagUpsertValues(name="seinen", category=None, is_explicit=False),
+            TagUpsertValues(name="seinen", category=None, is_explicit=False),
+            TagUpsertValues(name="josei", category=None, is_explicit=False),
         ],
     )
 
@@ -200,7 +201,6 @@ def test_bulk_get_or_create_tags_tolerates_duplicate_names(
     ("table", "column"),
     [
         ("manga_external_ratings", "fetched_at"),
-        ("manga", "published_date"),
     ],
 )
 def test_timestamp_columns_keep_their_time_zone(
@@ -211,6 +211,14 @@ def test_timestamp_columns_keep_their_time_zone(
     column_type = next(c["type"] for c in columns if c["name"] == column)
 
     assert getattr(column_type, "timezone", False), f"{table}.{column} is naive"
+
+
+def test_published_date_is_a_date_column(db_session: Session) -> None:
+    """Neither source carries a time, so the column holds a plain date."""
+    columns = inspect(db_session.get_bind()).get_columns("manga")
+    column_type = next(c["type"] for c in columns if c["name"] == "published_date")
+
+    assert isinstance(column_type, Date)
 
 
 def test_fetched_at_round_trips_as_an_aware_datetime(
@@ -324,7 +332,7 @@ def test_orphan_prune_takes_the_tag_and_author_links_with_it(
     """The link rows must cascade, not block the delete."""
     manga = create_manga(db_session, title="Orphan With Links")
     tag_ids = bulk_get_or_create_tags(
-        db_session, [TagUpsertValues(name="seinen", category=None)]
+        db_session, [TagUpsertValues(name="seinen", category=None, is_explicit=False)]
     )
     author_ids = bulk_get_or_create_authors(db_session, ["Naoki Urasawa"])
     bulk_add_tags_to_manga(
