@@ -35,6 +35,8 @@ def _record(external_id: str) -> NormalizedMangaRecord:
         external_id=external_id,
         mal_id=None,
         title="Test Manga",
+        title_english=None,
+        type=None,
         authors=["Test Author"],
         status=None,
         description=None,

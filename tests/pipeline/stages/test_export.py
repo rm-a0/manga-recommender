@@ -20,14 +20,22 @@ MINIMUM_LENGTH = 100
 QUALIFYING_DESCRIPTION = "x" * 150
 
 
-def _seed(db: Session, title: str, *, description: str | None) -> uuid.UUID:
+def _seed(
+    db: Session,
+    title: str,
+    *,
+    description: str | None,
+    title_english: str | None = None,
+) -> uuid.UUID:
     """Create one manga and return its ID."""
-    return create_manga(db, title=title, description=description).id
+    return create_manga(
+        db, title=title, title_english=title_english, description=description
+    ).id
 
 
 def _link_tag(db: Session, manga_id: uuid.UUID, name: str, *, rank: int | None) -> None:
     """Attach one ranked tag to a manga."""
-    tag = get_or_create_tag(db, name=name, category=None)
+    tag = get_or_create_tag(db, name=name, category=None, is_explicit=False)
     bulk_add_tags_to_manga(
         db,
         [TagLinkValues(manga_id=manga_id, tag_id=tag.id, rank=rank, is_spoiler=False)],
@@ -79,6 +87,36 @@ def test_create_manga_parquet_carries_the_row_fields_through(
     assert row["title"] == "Berserk"
     assert row["description"] == QUALIFYING_DESCRIPTION
     assert row["tags"] == ["Drama", "Action"]
+
+
+def test_create_manga_parquet_prefers_the_english_title(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """The snapshot carries the title a reader sees, so English wins when stored."""
+    _seed(
+        db_session,
+        "Shingeki no Kyojin",
+        title_english="Attack on Titan",
+        description=QUALIFYING_DESCRIPTION,
+    )
+    path = tmp_path / "manga.parquet"
+
+    create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)
+
+    (row,) = _read(path)
+    assert row["title"] == "Attack on Titan"
+
+
+def test_create_manga_parquet_falls_back_to_the_romaji_title(
+    db_session: Session, tmp_path: Path
+) -> None:
+    _seed(db_session, "Berserk", title_english=None, description=QUALIFYING_DESCRIPTION)
+    path = tmp_path / "manga.parquet"
+
+    create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)
+
+    (row,) = _read(path)
+    assert row["title"] == "Berserk"
 
 
 def test_create_manga_parquet_writes_no_tags_as_null(
