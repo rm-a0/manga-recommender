@@ -35,7 +35,14 @@ def build_embedding_text(title: str, description: str, tags: list[str]) -> str:
     A change to this template changes every vector, so it needs a full re-run
     of this stage and of `index`.
     """
-    return title + " " + description + " " + ",".join(tags or [])
+    parts: list[str] = []
+    if description:
+        parts.append(f"Description: {description}")
+    if tags:
+        parts.append(f"Tags: {', '.join(tags)}")
+    if title:
+        parts.append(f"Title: {title}")
+    return "\n".join(parts)
 
 
 def _parse_batch(batch: list[Any]) -> tuple[list[str], list[str], list[str]]:
@@ -114,6 +121,8 @@ def _save_datasets_to_npz(
     Writes a temporary file first, then replaces `path` in one step. An
     interrupted run cannot leave a partial artifact for the next run to trust.
     """
+    if not chunks:
+        raise
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(".tmp.npz")
     try:
@@ -151,6 +160,10 @@ def create_manga_embeddings(
         model=model_name,
         batch_size=encode_batch_size,
     )
+
+    if pq.ParquetFile(parquet_path).metadata.num_rows == 0:
+        raise ValueError(f"{parquet_path} holds no rows, nothing to embed")
+
     model = load_model(model_name, device)
     vector_dict, hash_dict = _load_npz_to_dicts(embeddings_path, model_name)
 
