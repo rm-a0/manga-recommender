@@ -189,6 +189,7 @@ machine-readable label, always tracked at 0.07em and uppercase.
 |---|---|---|---|
 | Masthead | Anton | 1.7rem | uppercase, on paper |
 | Page title | Anton | 1.875–2.25rem | uppercase |
+| Title alias | Zen Kaku Gothic New | 1.125rem | `dim`, under a romaji title, only when the English differs |
 | Hall heading | Anton | 1.25–1.5rem | over the spot rule |
 | Body | Zen Kaku Gothic New | 1rem | measure capped at 70ch |
 | Cell caption | Zen Kaku Gothic New 500 | 0.9rem | exactly two lines |

@@ -40,7 +40,9 @@ Planned work, not yet scheduled.
   the client must not be the one to decide. Needs a derived `is_explicit` on
   `MangaSummary` and `MangaDetail`, plus a default-off `include_explicit` that
   filters in SQL (`NOT EXISTS` over the explicit tags) on `GET /manga` and on
-  every recommendation route.
+  every recommendation route. Until then the frontend sends the flagged tags as
+  `exclude_tag`, which caps at ten values; AniList ships ~50 adult tags, so
+  the workaround breaks the day that source is ingested.
 - Canonical display names for tags. `normalize_tag_name` folds case, accents and
   punctuation, so the stored `name` is whichever spelling a source wrote first
   ("Sci-Fi" vs "Sci Fi"). Needs a display map keyed on `normalized_name`, applied
@@ -86,18 +88,6 @@ Planned work, not yet scheduled.
   ships, so the frontend can render a fallback rather than an apology.
 - An index on `manga.title`. Every page already pays a full sort for
   `ORDER BY title OFFSET n`.
-- Content rating on the data, replacing `frontend/lib/explicit.ts`. Neither
-  `manga` nor `tags` carries an `is_adult` flag, so which codes are explicit is
-  a list written down in the frontend. Both sources already state it: AniList
-  has `isAdult` on `Media` and `isAdultOnly` on `MediaTag`, MAL's explicit
-  genres are fixed IDs (Hentai 12, Erotica 49, Ecchi 9). Wants `tags.is_adult`
-  and `manga.is_adult` set at ingest, `is_adult` on `TagSummary`, and an
-  `include_adult: bool = False` on `MangaListParams` and the `/tags` pagination.
-  Three reasons it cannot stay in the frontend: `exclude_tag` caps at ten values
-  and AniList ships ~50 adult tags; tag-based exclusion misses a work the source
-  marked adult that carries no adult tag; and every other client of the API gets
-  no default at all. **Do this before AniList ingestion lands** — at that point
-  the frontend list stops being incomplete and starts being wrong.
 
 ## Not built yet
 

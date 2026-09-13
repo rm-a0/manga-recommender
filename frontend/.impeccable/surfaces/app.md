@@ -13,7 +13,7 @@ manga detail, tag index, author pages. Visitor mode: **Operate**.
 Audience: manga readers deciding what to read next, arriving with titles in mind.
 Task: name what you have read, choose a route, scan the result.
 Content: 82,629 real titles from the local dataset. Constraints: covers sharp only to
-~200px; ~30% have no description; romaji-only search; 63% carry no rating at all; a third
+~200px; ~30% have no description; romaji is the entry and English the alias; 63% carry no rating at all; a third
 of the catalogue is explicit and withheld by default. The API ranks by its own weighted
 score and by vote count — what it cannot do, and what may never be simulated, is measure
 how well a title answers the reader's marks.
@@ -66,3 +66,11 @@ had nothing real to print — and the cell's mono row now carries score and read
 Added in the same pass: `exclude_tag` reached the interface as a tri-state code ledger,
 the order select became an index tab strip, and the explicit codes are withheld from
 every picker and listing behind one checkbox. DESIGN.md and PRODUCT.md updated to match.
+
+**2026-09-13 — English titles, medium, explicit flag.** The backend added
+`title_english`, `type` and `tags.is_explicit`, and narrowed `published_date` to a date.
+The hand-kept explicit list was retired: the seal now reads the API's flag. Romaji stays
+the entry (the user's call, and the field the API sorts on); the English title prints as
+an alias under it on the detail page and in search hits, and search copy no longer warns
+that English finds nothing. The detail page gained a Format row. Embeddings landed with no
+reading endpoint, so nothing in the interface uses them.
