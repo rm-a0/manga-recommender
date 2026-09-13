@@ -5,11 +5,13 @@ from collections.abc import Callable, Sequence
 from manga_recommender.pipeline.stages.embed import run_embed
 from manga_recommender.pipeline.stages.export import run_export
 from manga_recommender.pipeline.stages.fill import run_fill
+from manga_recommender.pipeline.stages.index import run_index
 
 _STAGE_MAP: dict[str, Callable[[], None]] = {
     "fill": run_fill,
     "export": run_export,
     "embed": run_embed,
+    "index": run_index,
 }
 
 
