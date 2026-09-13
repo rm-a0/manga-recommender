@@ -16,6 +16,15 @@ export const MAX_TAG_FILTERS = 10
 
 export type MangaStatus = 'ongoing' | 'finished' | 'hiatus' | 'cancelled' | 'not_released_yet'
 
+/** The medium an entry was published in. Mirrors `MangaType`. */
+export type MangaType =
+  | 'manga'
+  | 'light_novel'
+  | 'manhwa'
+  | 'one_shot'
+  | 'doujinshi'
+  | 'manhua'
+
 export type SortOrder = 'asc' | 'desc'
 export type MangaSort = 'title' | 'published_date' | 'popularity' | 'rating'
 export type TagMatch = 'any' | 'all'
@@ -39,6 +48,8 @@ export interface AuthorDetail extends AuthorSummary {
 export interface TagSummary {
   id: string
   name: string
+  /** Adult content. Set at ingest: a tag any source marks adult stays adult. */
+  is_explicit: boolean
 }
 
 export interface TagDetail extends TagSummary {
@@ -46,7 +57,10 @@ export interface TagDetail extends TagSummary {
   manga_count: number
 }
 
-export interface MangaTag extends TagSummary {
+/** A tag inside a manga response. Carries no `is_explicit`: read it off the vocabulary. */
+export interface MangaTag {
+  id: string
+  name: string
   is_spoiler: boolean
   rank: number | null
 }
@@ -67,7 +81,10 @@ export interface MangaMetrics {
 
 export interface MangaSummary {
   id: string
+  /** The romaji title. The API sorts and deduplicates on this one. */
   title: string
+  /** The licensed English title, when a source records one. Often equal to `title`. */
+  title_english: string | null
   authors: AuthorSummary[]
   status: MangaStatus | null
   image_url: string | null
@@ -75,6 +92,9 @@ export interface MangaSummary {
 }
 
 export interface MangaDetail extends MangaSummary {
+  /** Only the detail response carries it, so a listing cannot print or filter on it. */
+  type: MangaType | null
+  /** A calendar date, `YYYY-MM-DD`, with no time part. */
   published_date: string | null
   description: string | null
   tags: MangaTag[]

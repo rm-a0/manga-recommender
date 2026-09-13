@@ -6,6 +6,8 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 interface Hit {
   id: string
   title: string
+  /** The English title, only when it differs from the romaji. */
+  english: string | null
   author: string | null
 }
 
@@ -19,8 +21,9 @@ export interface Seed {
  *
  * Seeds live in the URL, so a set of them is shareable and the back button walks
  * them. Lookup is debounced because the API's title search is an unindexed
- * `ILIKE` scan, and matches romaji only — the field says so rather than leaving
- * an English title to fail silently.
+ * `ILIKE` scan over both the romaji and the English title. A hit prints the
+ * English title under the romaji, so a reader who typed one sees it matched the
+ * entry they meant.
  */
 export function SurveyStrip({ seeds }: { seeds: Seed[] }) {
   const router = useRouter()
@@ -98,9 +101,9 @@ export function SurveyStrip({ seeds }: { seeds: Seed[] }) {
         Ring what you have read
       </h1>
       <p className="mt-2 max-w-[62ch] text-base text-dim">
-        Name titles you already know and they are marked in the hall. Search matches romaji
-        only, so <span className="text-text">shingeki no kyojin</span>, not{' '}
-        <span className="text-text">attack on titan</span>.
+        Name titles you already know and they are marked in the hall. Search reads romaji
+        and English titles alike, so <span className="text-text">shingeki no kyojin</span>{' '}
+        and <span className="text-text">attack on titan</span> find the same entry.
       </p>
 
       <div ref={boxRef} className="relative mt-3.5 max-w-xl">
@@ -121,7 +124,7 @@ export function SurveyStrip({ seeds }: { seeds: Seed[] }) {
           onChange={(event) => setQuery(event.target.value)}
           onFocus={() => hits.length > 0 && setOpen(true)}
           onKeyDown={(event) => event.key === 'Escape' && setOpen(false)}
-          placeholder="Search the hall — romaji title"
+          placeholder="Search the hall — romaji or English title"
           className="w-full border-0 bg-cell px-3 py-2.5 text-base text-cell-ink placeholder:text-cell-sub"
         />
 
@@ -139,11 +142,18 @@ export function SurveyStrip({ seeds }: { seeds: Seed[] }) {
                 <button
                   type="button"
                   onClick={() => addSeed(hit)}
-                  className="flex w-full items-baseline gap-2 px-3 py-2 text-left hover:bg-ground"
+                  className="flex w-full items-baseline gap-3 px-3 py-2 text-left hover:bg-ground"
                 >
-                  <span className="truncate text-base">{hit.title}</span>
+                  <span className="min-w-0 flex-1">
+                    <span lang="ja-Latn" className="block truncate text-base">
+                      {hit.title}
+                    </span>
+                    {hit.english && (
+                      <span className="block truncate text-sm text-dim">{hit.english}</span>
+                    )}
+                  </span>
                   {hit.author && (
-                    <span className="ml-auto shrink-0 truncate text-xs text-dim">
+                    <span className="max-w-[40%] shrink-0 truncate text-xs text-dim">
                       {hit.author}
                     </span>
                   )}
@@ -155,7 +165,7 @@ export function SurveyStrip({ seeds }: { seeds: Seed[] }) {
 
         {term.length >= 2 && !searching && hits.length === 0 && (
           <p className="mt-2 text-base text-dim">
-            No title matches “{term}”. Try the romaji spelling.
+            No title matches “{term}”. Try a shorter part of it.
           </p>
         )}
       </div>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-import { SEALED_WORK_TAGS, barredCodeLimit } from '@/lib/explicit'
+import { barredCodeLimit } from '@/lib/explicit'
 import { MAX_TAG_FILTERS } from '@/lib/types'
 import type { TagMatch, TagSummary } from '@/lib/types'
 
@@ -92,15 +92,15 @@ export function CodeLedger({
   exclude,
   match,
   showSealed,
-  sealedCount,
+  sealed,
 }: {
   tags: TagSummary[]
   include: string[]
   exclude: string[]
   match: TagMatch
   showSealed: boolean
-  /** How many codes the seal is holding back from this vocabulary. */
-  sealedCount: number
+  /** The codes the API flags explicit, whether or not the seal is holding them. */
+  sealed: string[]
 }) {
   const [state, setState] = useState<Record<string, CodeState>>(() => {
     const initial: Record<string, CodeState> = {}
@@ -112,7 +112,7 @@ export function CodeLedger({
   const required = tags.filter((tag) => state[tag.name] === 'required').map((tag) => tag.name)
   const barred = tags.filter((tag) => state[tag.name] === 'barred').map((tag) => tag.name)
 
-  const maxBarred = barredCodeLimit(showSealed)
+  const maxBarred = barredCodeLimit(showSealed, sealed.length)
 
   /** Return true when the API has no room left for one more code in that state. */
   function isFull(current: Record<string, CodeState>, wanted: CodeState): boolean {
@@ -218,8 +218,8 @@ export function CodeLedger({
             className="size-4"
           />
           {showSealed
-            ? `Explicit codes shown — ${SEALED_WORK_TAGS.join(', ')}`
-            : `${sealedCount} explicit ${sealedCount === 1 ? 'code' : 'codes'} withheld — show them`}
+            ? `Explicit codes shown — ${sealed.join(', ')}`
+            : `${sealed.length} explicit ${sealed.length === 1 ? 'code' : 'codes'} withheld — show them`}
         </label>
       </div>
     </div>

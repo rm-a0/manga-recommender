@@ -16,7 +16,7 @@ export default async function TagsPage(props: PageProps<'/tags'>) {
   const query = (await props.searchParams) as Query
   const showSealed = query.explicit === '1'
 
-  const allTags = await listAllTags({ showSealed: true })
+  const allTags = await listAllTags()
   const tags = unsealed(allTags, showSealed)
   const sealedCount = allTags.length - tags.length
 

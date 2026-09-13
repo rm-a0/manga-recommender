@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { listManga } from '@/lib/api'
+import { englishAlias } from '@/lib/titles'
 
 /**
  * Title lookup for the survey field.
@@ -15,12 +16,15 @@ export async function GET(request: Request) {
   // The API rejects a `q` under two characters, so answer empty rather than 422.
   if (q.length < 2) return NextResponse.json({ items: [] })
 
-  const page = await listManga({ q, limit: 8, sort: 'title', order: 'asc' })
+  // Most read first: a reader typing "berserk" means the one everyone has read,
+  // not the alphabetically first of twelve spin-offs.
+  const page = await listManga({ q, limit: 8, sort: 'popularity', order: 'desc' })
 
   return NextResponse.json({
     items: page.items.map((manga) => ({
       id: manga.id,
       title: manga.title,
+      english: englishAlias(manga),
       author: manga.authors[0]?.name ?? null,
     })),
   })

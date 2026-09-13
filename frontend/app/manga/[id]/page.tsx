@@ -9,6 +9,7 @@ import { HallGrid } from '@/components/HallGrid'
 import { SectionHead } from '@/components/SectionHead'
 import { getManga } from '@/lib/api'
 import { resolveSharedTags } from '@/lib/routes'
+import { MANGA_TYPE_LABEL, englishAlias } from '@/lib/titles'
 
 const STATUS_LABEL: Record<string, string> = {
   ongoing: 'Still running',
@@ -18,12 +19,17 @@ const STATUS_LABEL: Record<string, string> = {
   not_released_yet: 'Announced',
 }
 
-/** Format the publication date. The stored time is always midnight, so it is dropped. */
+/**
+ * Format the publication date.
+ *
+ * The API sends a calendar date with no time. It is read field by field and set
+ * in UTC, so no server time zone can move it onto the day before.
+ */
 function publicationDate(value: string | null): string | null {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toLocaleDateString('en-GB', {
+  const parts = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!parts) return null
+  const [year, month, day] = parts.slice(1).map(Number)
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -35,8 +41,9 @@ export async function generateMetadata(props: PageProps<'/manga/[id]'>): Promise
   const { id } = await props.params
   const manga = await getManga(id)
   if (!manga) return { title: 'Not in the catalogue — MangaRec' }
+  const english = englishAlias(manga)
   return {
-    title: `${manga.title} — MangaRec`,
+    title: `${manga.title}${english ? ` (${english})` : ''} — MangaRec`,
     description: manga.description?.slice(0, 160) ?? undefined,
   }
 }
@@ -69,6 +76,7 @@ export default async function MangaPage(props: PageProps<'/manga/[id]'>) {
 
   const published = publicationDate(manga.published_date)
   const status = manga.status ? STATUS_LABEL[manga.status] : null
+  const english = englishAlias(manga)
 
   return (
     <article className="mx-auto max-w-5xl px-5 pb-16 pt-8 sm:px-8">
@@ -76,9 +84,15 @@ export default async function MangaPage(props: PageProps<'/manga/[id]'>) {
         <Cover url={manga.image_url} title={manga.title} width={200} priority />
 
         <div className="min-w-0 flex-1">
-          <h1 className="font-display text-4xl leading-[0.95] tracking-[-0.02em] sm:text-5xl">
+          <h1
+            lang="ja-Latn"
+            className="font-display text-4xl leading-[0.95] tracking-[-0.02em] text-balance sm:text-5xl"
+          >
             {manga.title}
           </h1>
+          {english && (
+            <p className="mt-2 text-lg leading-snug text-dim text-balance">{english}</p>
+          )}
 
           <p className="mt-3 text-base">
             {manga.authors.length > 0 ? (
@@ -98,6 +112,14 @@ export default async function MangaPage(props: PageProps<'/manga/[id]'>) {
           <ScoreRule metrics={manga.metrics} />
 
           <dl className="border-t border-line mt-4 flex flex-wrap gap-x-8 gap-y-2 pt-3 text-sm">
+            {manga.type && (
+              <div>
+                <dt className="font-display text-xs uppercase tracking-[0.08em] text-dim">
+                  Format
+                </dt>
+                <dd>{MANGA_TYPE_LABEL[manga.type]}</dd>
+              </div>
+            )}
             {status && (
               <div>
                 <dt className="font-display text-xs uppercase tracking-[0.08em] text-dim">

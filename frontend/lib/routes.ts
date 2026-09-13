@@ -1,7 +1,7 @@
 import 'server-only'
 
-import { getManga, listManga } from './api'
-import { isSealedTag } from './explicit'
+import { getManga, listAllTags, listManga } from './api'
+import { explicitNames } from './explicit'
 import { MAX_TAG_FILTERS } from './types'
 import type { MangaDetail, MangaSummary, TagMatch } from './types'
 
@@ -96,14 +96,19 @@ export async function resolveSharedTags(
     showSealed = false,
   }: { tags?: string[]; match?: TagMatch; limit?: number; showSealed?: boolean } = {},
 ): Promise<RouteResult> {
-  const seeds = (await Promise.all(seedIds.map((id) => getManga(id)))).filter(
-    (seed): seed is MangaDetail => seed !== null,
-  )
+  const [fetched, vocabulary] = await Promise.all([
+    Promise.all(seedIds.map((id) => getManga(id))),
+    listAllTags(),
+  ])
+  const seeds = fetched.filter((seed): seed is MangaDetail => seed !== null)
+
+  // A manga's own tags carry no explicit flag, so the vocabulary supplies it.
+  const sealed = new Set(showSealed ? [] : explicitNames(vocabulary))
 
   const availableTags: string[] = []
   for (const seed of seeds) {
     for (const tag of seed.tags) {
-      if (!showSealed && isSealedTag(tag.name)) continue
+      if (sealed.has(tag.name)) continue
       if (!availableTags.includes(tag.name)) availableTags.push(tag.name)
     }
   }
