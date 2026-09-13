@@ -73,13 +73,15 @@ Not available, and must not be faked:
 
 - Any recommendation endpoint. No similarity, no personalisation, and no measure of how
   well one title answers another. `MangaSort.RELEVANCE` is still commented out.
-- Any content rating on the data. Neither `manga` nor `tags` carries an `is_adult` flag,
-  so which codes are explicit is a list written down in the frontend
-  (`lib/explicit.ts`) rather than a fact the API states. That list is the interim; the
-  durable fix is a column at ingest.
+- A server-side explicit filter. `tags.is_explicit` exists and `TagSummary` carries it,
+  but `GET /manga` has no `include_explicit` and `MangaSummary` carries no flag, so a
+  sealed listing still excludes by tag name, inside `exclude_tag`'s ten-value cap.
+- Filtering or printing the medium in a listing. `type` (manga, manhwa, manhua, light
+  novel, one-shot, doujinshi) is on `MangaDetail` only, and `MangaListParams` has no
+  `type` field.
 - A `q` filter on `/authors`. Author lookup by name is not possible.
-- English titles. Search matches romaji only, so `attack on titan` returns nothing
-  while `shingeki no kyojin` works. Users must be told this rather than left guessing.
+- Similarity search. `manga_embeddings` is populated by the pipeline, but no endpoint
+  reads it, so the semantic route stays in the back matter.
 - User accounts, lists, or persistence of any kind. The `users` table is unused.
 
 Constraints that shape the interface:
@@ -104,9 +106,12 @@ Constraints that shape the interface:
   figure and sorted on; it cannot be drawn as a length where several are compared at
   once, because half the catalogue would draw the same bar.
 - **A third of the catalogue is explicit.** Hentai and Erotica cover ~26,000 titles, and
-  they are withheld from listings and pickers by default. Ecchi is deliberately not
-  sealed: it is fanservice rather than explicit content, and 4,002 of its 4,080 titles
-  carry neither of the other two.
+  they are withheld from listings and pickers by default. The API decides which codes
+  are explicit; the interface only applies the seal and says how many it holds.
+- **Romaji is the entry, English is the alias.** 28,230 titles carry an English title,
+  and 20,044 of those differ from the romaji. The API sorts on romaji, so cells print
+  romaji; the detail page and search hits print the English title beneath it when it
+  differs. Search reads both.
 - **Boundary.** AGENTS.md reserves recommendation logic for `backend/`. The frontend
   composes existing endpoint calls and renders results in the order returned. It asks the
   API to order a listing; it does not score, rank, or weight anything client-side.
@@ -146,7 +151,7 @@ explicitly not corny.
 4. **Placeholders must leave no scar.** Anything standing in for unbuilt work is removed
    by deletion, never by rewriting around it, and the design should improve when the
    real thing arrives.
-5. **State the limits in the interface.** Romaji-only search, missing descriptions and
+5. **State the limits in the interface.** Withheld codes, missing descriptions and
    an empty result set are told to the reader directly, not hidden behind a spinner or a
    blank grid.
 
