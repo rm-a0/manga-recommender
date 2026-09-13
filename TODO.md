@@ -24,23 +24,6 @@ Planned work, not yet scheduled.
 - Add `role` to `manga_authors` once something needs Story separate from Art.
 - Revisit `delete_orphaned_manga`'s predicate if a source ever supplies
   descriptions without ratings.
-- Explicit content flag on `manga`. The catalogue carries adult titles and nothing
-  marks them, so every listing and every recommendation can return one. Needs a
-  column on `manga`, both extractors writing it, and a decision on the API surface:
-  a default-off `include_explicit` query parameter is the smallest shape, but the
-  filter has to reach the recommendation routes too, not only `GET /manga` — a
-  vector search that ignores it leaks exactly what the flag exists to hide. Source
-  signal differs: AniList gives a boolean `isAdult`, Kaggle MAL gives the `Hentai`
-  and `Erotica` genres, so `_to_record` derives the same flag two ways.
-  Landed 2026-09-12 as a flag on `tags`, not on `manga`: AniList sets `isAdult`
-  per tag, Kaggle marks the `Hentai` and `Erotica` genres, and the tag upsert
-  keeps the union, so source order cannot lose the flag. Still open: a manga is
-  explicit when any of its tags is, and nothing computes that yet.
-  `MangaSummary` carries no tags, so a listing cannot hide an adult title, and
-  the client must not be the one to decide. Needs a derived `is_explicit` on
-  `MangaSummary` and `MangaDetail`, plus a default-off `include_explicit` that
-  filters in SQL (`NOT EXISTS` over the explicit tags) on `GET /manga` and on
-  every recommendation route.
 - Canonical display names for tags. `normalize_tag_name` folds case, accents and
   punctuation, so the stored `name` is whichever spelling a source wrote first
   ("Sci-Fi" vs "Sci Fi"). Needs a display map keyed on `normalized_name`, applied
@@ -96,56 +79,6 @@ Planned work, not yet scheduled.
 Stages run in order: `fill` -> `export` -> `embed` -> `index` -> `train`.
 Registry order is the run order, so `--stage` accepts any order.
 
-- `fill`: post-ingestion in-DB work. Bayesian metrics are done. Still to do:
-  canonical arbitration, normalized title, tag display names, orphan prune
-  (move it out of `ingestion/runner.py`).
-- `export`: DB -> Parquet snapshot. Built. Everything downstream reads the
-  snapshot, not the live database. Read-only: it writes no rows.
-  Owns row selection and field shape; it does not compose model input text.
-  Emits structured columns (id, title, description, tags as `list<string>`), so
-  changing the embedding template is an `embed` re-run with no DB round trip.
-  Gate: only manga whose description is at least 100 characters after trimming.
-  That was 52,236 of the 82,629 rows in the Kaggle seed (63%). The catalogue has
-  grown since, and the first full run on 2026-09-08 exported 93,514 rows — the
-  count confirmed against both the database and the written snapshot, every id
-  distinct. Re-measure the excluded tail before quoting a percentage against it.
-  No title-plus-tags fallback for the rest — the tag vocabulary is closed
-  (79 tags), so those rows would produce near-identical vectors with cosine near
-  1, which returns arbitrary neighbours and degrades the HNSW graph for the good
-  rows as well.
-  The short tail is mostly tables of contents listing included one-shots, plus
-  literal `None.`; it is not thin synopsis text. Cost was roughly 6,000 genuine
-  one-line synopses excluded on the Kaggle seed, accepted because length cannot
-  separate them from the list-shaped noise; the figure is stale for the larger
-  catalogue and was never re-derived. The rows left out are exactly what the
-  live shared-tags route already serves. Adding rows back later is an `embed` +
-  `index` re-run with no schema change; removing them after readers have seen
-  results is not.
-  Write artifacts to `data/artifacts/`, not `data/` itself — `data/` holds the
-  44 MB hand-downloaded Kaggle CSV, and generated files must stay separately
-  disposable. All of `data/` is already gitignored.
-- `embed`: Parquet -> `.npz`. No DB writes. Import `sentence_transformers`
-  inside the stage, so the registry can import every stage at module scope.
-  Built.
-  Change the text template from `title desc tags` to `desc tags`, and drop the
-  title. Measured on 2,000 sampled rows with bge-small (2026-09-11). The model
-  weights the start of the text: the same field moves the vector 2.7x more at
-  the start than at the end for the title (1 - cos 0.059 vs 0.022), and 1.6x
-  more for tags (0.060 vs 0.037). Two random manga already sit at cos 0.594, so
-  a 0.06 shift is ~15% of the usable range. Romaji titles carry no meaning for
-  an English model, only spelling overlap, so title-first gives franchise and
-  lookalike neighbours (One Piece -> "CHIN PIECE", 0.815). Neighbours that share
-  a title word: 4.3% with the title first, 2.0% without it, and higher on the
-  full catalogue, where franchises are dense. Truncation does not decide the
-  order: 99.5% of rows fit in 512 tokens (median 130, p99 407), and the tail of
-  the other 472 is mostly chapter lists. The order changes results a lot (top-10
-  overlap with the current template: 37% for `desc tags`), but no measurement
-  says which is better yet. Before locking the template, score each variant by
-  recall@10 against MAL user recommendations (Jikan
-  `/manga/{id}/recommendations`) on a few hundred seeds. Tags stay in the text
-  for free-text semantic search. A re-rank of the top 100-200 by
-  `cos + λ·tag_overlap` can come later, but it only reorders vector candidates.
-  Revisit the title once English titles are stored.
 - `index`: `.npz` -> `manga_embeddings`, then build HNSW. Load the rows before
   the HNSW index exists, as pgvector recommends: drop the index, bulk insert,
   create it again.
