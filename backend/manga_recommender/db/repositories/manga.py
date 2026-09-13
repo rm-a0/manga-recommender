@@ -537,7 +537,9 @@ def stream_exportable_manga(
             Manga.description,
             _tag_agg_subquery().label("tags"),
         )
-        .where(func.length(func.trim(Manga.description)) >= description_length)
+        .where(
+            func.length(func.btrim(Manga.description, " \t\r\n")) >= description_length
+        )
         .execution_options(yield_per=batch_size)
     )
     yield from db.execute(stmt).partitions(batch_size)
