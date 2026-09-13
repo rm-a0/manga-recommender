@@ -19,6 +19,13 @@ _SPACES_RE = re.compile(r"[^\S\n]+")
 _LINE_EDGE_RE = re.compile(r" *\n *")
 _BLANK_LINES_RE = re.compile(r"\n{3,}")
 _PLACEHOLDER_RE = re.compile(r"(?i)^(none\.?|n/?a|-{1,3}|\.)$")
+_BBCODE_IMG_RE = re.compile(r"\[img\][^\[\n]*\[/img\]", re.IGNORECASE)
+_BBCODE_BULLET_RE = re.compile(r"\[\*\]")
+_BBCODE_RE = re.compile(
+    r"\[/?(?:spoiler|center|quote|color|code|size|list|url|img|b|i|u|s)"
+    r"(?:=[^\]\n]*)?\]",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -56,14 +63,21 @@ class NormalizedMangaRecord:
     @field_validator("description")
     @classmethod
     def _normalize_description(cls, value: str | None) -> str | None:
-        """Tidy the whitespace, and read a text that says nothing as None.
+        """Remove BBCode, tidy whitespace, and read a text that says nothing as None.
 
         Paragraph breaks stay, because the detail page shows this text. Each
-        extractor removes its own source noise before this runs.
+        extractor removes its own source noise first, but BBCode reaches both
+        sources. Only the named tags go, so an aside like `[Special Edition]`
+        survives.
         """
         if value is None:
             return None
-        text = _SPACES_RE.sub(" ", value.replace("\r\n", "\n"))
+        # An image URL is not prose, so the tag goes with its contents. A bullet
+        # is the only separator between list items, so it becomes a line break.
+        text = _BBCODE_IMG_RE.sub("", value)
+        text = _BBCODE_BULLET_RE.sub("\n", text)
+        text = _BBCODE_RE.sub("", text)
+        text = _SPACES_RE.sub(" ", text.replace("\r\n", "\n"))
         text = _LINE_EDGE_RE.sub("\n", text)
         text = _BLANK_LINES_RE.sub("\n\n", text).strip()
         if not text or _PLACEHOLDER_RE.match(text):
