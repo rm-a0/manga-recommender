@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { countAuthors, listAllTags, listManga } from '@/lib/api'
+import { unsealed } from '@/lib/explicit'
 
 const NAV = [
   { href: '/', label: 'Discover' },
@@ -16,7 +17,7 @@ async function counts(): Promise<{ titles: number; tags: number; authors: number
       listAllTags(),
       countAuthors(),
     ])
-    return { titles: page.total, tags: tags.length, authors }
+    return { titles: page.total, tags: unsealed(tags, false).length, authors }
   } catch {
     // The strip is chrome. If the API is asleep the page still prints.
     return null

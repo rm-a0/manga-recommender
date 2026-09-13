@@ -32,11 +32,12 @@ export interface FilterState {
 export function FilterForm({
   tags,
   state,
-  sealedCount,
+  sealed,
 }: {
   tags: TagSummary[]
   state: FilterState
-  sealedCount: number
+  /** The codes the API flags explicit. */
+  sealed: string[]
 }) {
   const activeCodes = state.includeTag.length + state.excludeTag.length
 
@@ -49,7 +50,7 @@ export function FilterForm({
           type="search"
           defaultValue={state.q}
           minLength={2}
-          placeholder="Search the hall — romaji title"
+          placeholder="Search the hall — romaji or English title"
           aria-label="Search the hall by title"
           className="min-w-[13rem] flex-1 border-0 bg-cell px-3 py-2 text-base text-cell-ink placeholder:text-cell-sub"
         />
@@ -99,7 +100,7 @@ export function FilterForm({
             exclude={state.excludeTag}
             match={state.tagMatch}
             showSealed={state.showSealed}
-            sealedCount={sealedCount}
+            sealed={sealed}
           />
         </div>
       </details>

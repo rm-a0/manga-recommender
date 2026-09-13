@@ -1,6 +1,9 @@
 import 'server-only'
 
-import { SEALED_WORK_TAGS, unsealed } from './explicit'
+import { cache } from 'react'
+
+import { explicitNames } from './explicit'
+import { MAX_TAG_FILTERS } from './types'
 import type {
   AuthorDetail,
   AuthorSummary,
@@ -12,6 +15,9 @@ import type {
 } from './types'
 
 const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:8000'
+
+/** The API's ceiling on `limit` for every paged endpoint. */
+const MAX_PAGE_SIZE = 100
 
 export class ApiError extends Error {
   constructor(
@@ -52,21 +58,47 @@ async function get<T>(path: string): Promise<T> {
 }
 
 /**
+ * Return the whole tag vocabulary, explicit codes included.
+ *
+ * Pages through `GET /tags` until `total` is reached: MAL alone ships ~80 codes,
+ * but AniList's vocabulary runs past the endpoint's 100-row ceiling. Filtering
+ * happens in the browser rather than per keystroke.
+ *
+ * Wrapped in `cache` so the masthead, the listing's seal and a picker on one
+ * render share a single walk rather than three.
+ */
+export const listAllTags = cache(async (): Promise<TagSummary[]> => {
+  const tags: TagSummary[] = []
+  for (;;) {
+    const page = await get<Page<TagSummary>>(
+      `/tags${toQuery({ limit: MAX_PAGE_SIZE, offset: tags.length })}`,
+    )
+    tags.push(...page.items)
+    if (page.items.length === 0 || tags.length >= page.total) return tags
+  }
+})
+
+/**
  * Return one page of manga.
  *
- * The sealed codes are excluded unless `showSealed` says otherwise. The API caps
- * `exclude_tag` at ten values, so a caller barring codes of its own has to leave
- * room for the seal's three.
+ * The explicit codes are excluded unless `showSealed` says otherwise. The API caps
+ * `exclude_tag` at ten values and the seal's codes go first, so a reader's own
+ * barred codes are expected to fit in `barredCodeLimit`. If the vocabulary ever
+ * flags more than ten, the surplus cannot be sent: that is the point at which the
+ * server-side `include_explicit` filter stops being optional.
  */
-export function listManga(
+export async function listManga(
   params: MangaListParams = {},
   { showSealed = false }: { showSealed?: boolean } = {},
 ): Promise<Page<MangaSummary>> {
-  const exclude = [...(params.exclude_tag ?? [])]
+  let exclude = [...(params.exclude_tag ?? [])]
   if (!showSealed) {
-    for (const tag of SEALED_WORK_TAGS) if (!exclude.includes(tag)) exclude.push(tag)
+    const sealed = explicitNames(await listAllTags())
+    exclude = [...sealed, ...exclude.filter((tag) => !sealed.includes(tag))]
   }
-  return get(`/manga${toQuery({ ...params, exclude_tag: exclude })}`)
+  return get(
+    `/manga${toQuery({ ...params, exclude_tag: exclude.slice(0, MAX_TAG_FILTERS) })}`,
+  )
 }
 
 /** Return one manga in full, or null when the ID matches nothing. */
@@ -77,22 +109,6 @@ export async function getManga(id: string): Promise<MangaDetail | null> {
     if (error instanceof ApiError && error.status === 404) return null
     throw error
   }
-}
-
-/**
- * Return the tag vocabulary in one call.
- *
- * The vocabulary is ~79 rows and the endpoint caps `limit` at 100, so one page
- * holds all of it. Filtering happens in the browser rather than per keystroke.
- *
- * Sealed codes are dropped unless `showSealed` says otherwise, so a picker built
- * on this never lists a code the reader asked not to see.
- */
-export async function listAllTags(
-  { showSealed = false }: { showSealed?: boolean } = {},
-): Promise<TagSummary[]> {
-  const page = await get<Page<TagSummary>>(`/tags${toQuery({ limit: 100 })}`)
-  return unsealed(page.items, showSealed)
 }
 
 /**

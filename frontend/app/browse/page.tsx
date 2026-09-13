@@ -5,7 +5,7 @@ import { Pagination } from '@/components/Pagination'
 import { HallGrid, HallSkeleton } from '@/components/HallGrid'
 import { SectionHead } from '@/components/SectionHead'
 import { listAllTags, listManga } from '@/lib/api'
-import { barredCodeLimit, unsealed } from '@/lib/explicit'
+import { barredCodeLimit, explicitNames, unsealed } from '@/lib/explicit'
 import {
   DEFAULT_ORDERING,
   METRIC_SORTS,
@@ -24,7 +24,7 @@ function asArray(value: string | string[] | undefined): string[] {
   return Array.isArray(value) ? value : [value]
 }
 
-function readState(query: Query): FilterState {
+function readState(query: Query, explicitCount: number): FilterState {
   // The order control submits one field as `field:direction`.
   const [rawSort, rawOrder] = (
     typeof query.sort === 'string' ? query.sort : DEFAULT_ORDERING
@@ -40,7 +40,7 @@ function readState(query: Query): FilterState {
     q: typeof query.q === 'string' ? query.q : '',
     status: asArray(query.status),
     includeTag: required.slice(0, MAX_TAG_FILTERS),
-    excludeTag: barred.slice(0, barredCodeLimit(showSealed)),
+    excludeTag: barred.slice(0, barredCodeLimit(showSealed, explicitCount)),
     tagMatch: query.tag_match === 'all' ? 'all' : 'any',
     sort: VALID_SORTS.includes(rawSort as MangaSort) ? rawSort : 'popularity',
     order: rawOrder === 'asc' ? 'asc' : 'desc',
@@ -87,7 +87,8 @@ async function Results({ state, offset }: { state: FilterState; offset: number }
         <div className="border-b border-line py-8">
           <p className="max-w-[70ch] text-sm text-dim">
             Nothing in the catalogue matches these filters.
-            {state.q && ' Title search matches romaji only, so an English title finds nothing.'}
+            {state.q &&
+              ' Search reads romaji and English titles for the whole phrase, so a shorter part of the title reaches further.'}
             {state.excludeTag.length > 0 &&
               ` ${state.excludeTag.length === 1 ? 'One code is' : `${state.excludeTag.length} codes are`} barred — dropping one widens the hall.`}
           </p>
@@ -124,12 +125,14 @@ async function Results({ state, offset }: { state: FilterState; offset: number }
 
 export default async function BrowsePage(props: PageProps<'/browse'>) {
   const query = (await props.searchParams) as Query
-  const state = readState(query)
-  const offset = Math.max(0, Number(query.offset ?? 0) || 0)
 
   // Read the whole vocabulary once, then split it, so the ledger can say how
   // many codes the seal is holding rather than only that it is holding some.
-  const allTags = await listAllTags({ showSealed: true })
+  const allTags = await listAllTags()
+  const sealed = explicitNames(allTags)
+
+  const state = readState(query, sealed.length)
+  const offset = Math.max(0, Number(query.offset ?? 0) || 0)
   const tags = unsealed(allTags, state.showSealed)
 
   return (
@@ -140,7 +143,7 @@ export default async function BrowsePage(props: PageProps<'/browse'>) {
       <FilterForm
         tags={tags}
         state={state}
-        sealedCount={allTags.length - tags.length}
+        sealed={sealed}
       />
       <div className="mt-8">
         <Suspense key={buildQuery(state, offset)} fallback={<HallSkeleton cells={15} />}>
