@@ -121,8 +121,6 @@ def _save_datasets_to_npz(
     Writes a temporary file first, then replaces `path` in one step. An
     interrupted run cannot leave a partial artifact for the next run to trust.
     """
-    if not chunks:
-        raise
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(".tmp.npz")
     try:
