@@ -49,7 +49,8 @@ the default and then just run `make ui`.
 | `lib/covers.ts` | Cover URL upgrade. Delete it if a larger URL is ever stored at ingest |
 | `lib/ordering.ts` | The orderings the hall offers, and how a heading names each one |
 | `lib/score.ts` | Reads the metrics row out of ten, and sets vote counts |
-| `lib/explicit.ts` | Which codes are explicit. Delete it if the API ever says so itself |
+| `lib/explicit.ts` | Applies the seal on the codes the API flags `is_explicit` |
+| `lib/titles.ts` | The English alias beside a romaji title, and how each medium is named |
 
 ## Design
 
@@ -68,12 +69,12 @@ Two rules matter more than the rest:
 
 ### The explicit codes
 
-`lib/explicit.ts` is a stopgap. Neither `manga` nor `tags` carries a content rating, so
-which codes are explicit is written down in the frontend. Two lists, because they answer
-different questions: `SEALED_WORK_TAGS` feeds `exclude_tag`, which the API caps at ten
-values, and `SEALED_TAGS` hides codes from pickers, which has no cap. An `is_adult`
-column set at ingest and surfaced on the tag and manga models would replace the whole
-file with one boolean — worth doing before AniList ingestion grows the vocabulary.
+Which codes are explicit is the API's call: `TagSummary.is_explicit`, set at ingest.
+Pickers drop the flagged codes directly. A listing cannot, because `GET /manga` has no
+`include_explicit` yet, so a sealed listing sends the flagged codes as `exclude_tag`. That
+parameter caps at ten values and the seal spends its slots first, which is why the
+reader's own barred budget shrinks while the seal holds. Once the API filters explicit
+titles in SQL, `listManga` passes the flag through and `barredCodeLimit` goes.
 
 ## Checks
 
