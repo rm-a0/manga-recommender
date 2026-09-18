@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import NotRequired, TypedDict, cast
 
-from sqlalchemy import CursorResult, Index, Table, delete, insert, text
+from sqlalchemy import CursorResult, Index, Table, delete, insert, select, text
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga_embeddings import MangaEmbedding
@@ -61,6 +61,32 @@ def create_content_vector_index(db: Session) -> None:
     db.execute(text("SET LOCAL max_parallel_maintenance_workers = 0"))
     db.execute(text("SET LOCAL maintenance_work_mem = '128MB'"))
     _content_vector_index().create(bind=db.connection())
+
+
+def get_embedding_by_manga_id(
+    db: Session,
+    manga_id: uuid.UUID,
+) -> MangaEmbedding | None:
+    return db.scalar(select(MangaEmbedding).where(MangaEmbedding.manga_id == manga_id))
+
+
+def get_nearest_neighbours(
+    db: Session,
+    embedding: MangaEmbedding,
+    n: int,
+) -> Sequence[uuid.UUID]:
+    db.execute(
+        text("SELECT set_config('hnsw.ef_search', :ef, true)"),
+        {"ef": str(max(n, 40))},
+    )
+    return db.scalars(
+        select(MangaEmbedding.manga_id)
+        .where(MangaEmbedding.id != embedding.id)
+        .order_by(
+            MangaEmbedding.content_vector.max_inner_product(embedding.content_vector)
+        )
+        .limit(n)
+    ).all()
 
 
 # --- Bulk operations ---
