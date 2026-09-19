@@ -47,8 +47,8 @@ class Candidate:
     """
 
     manga_id: uuid.UUID
-    source_ranks: dict[str, int] = field(default_factory=dict)
     reasons: list[Reason] = field(default_factory=list)
+    source_ranks: dict[str, int] = field(default_factory=dict)
     score: float = 0.0
 
 
