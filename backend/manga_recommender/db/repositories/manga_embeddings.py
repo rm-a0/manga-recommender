@@ -67,6 +67,7 @@ def get_embedding_by_manga_id(
     db: Session,
     manga_id: uuid.UUID,
 ) -> MangaEmbedding | None:
+    """Return the embedding of the manga, or None if it has no embedding."""
     return db.scalar(select(MangaEmbedding).where(MangaEmbedding.manga_id == manga_id))
 
 
@@ -75,6 +76,12 @@ def get_nearest_neighbours(
     embedding: MangaEmbedding,
     n: int,
 ) -> Sequence[uuid.UUID]:
+    """Return the ids of the `n` manga nearest to `embedding`, nearest first.
+
+    Order by inner product, which the HNSW index supports. The vectors have
+    unit length, so this order is the cosine order. An HNSW scan returns at most
+    `hnsw.ef_search` rows, so set it to at least `n` for this transaction.
+    """
     db.execute(
         text("SELECT set_config('hnsw.ef_search', :ef, true)"),
         {"ef": str(max(n, 40))},
