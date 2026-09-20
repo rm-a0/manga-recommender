@@ -4,6 +4,7 @@ from manga_recommender.recommender.base import BaseCandidateSource, Filter
 from manga_recommender.recommender.candidate_sources.content import (
     ContentCandidateSource,
 )
+from manga_recommender.recommender.filters.dislikes import drop_near_dislikes
 from manga_recommender.recommender.filters.exclusions import (
     exclude_manga_ids,
     exclude_manga_with_tags,
@@ -16,6 +17,7 @@ _SOURCE_MAP: dict[str, BaseCandidateSource] = {
 _FILTERS: list[Filter] = [
     exclude_manga_ids,
     exclude_manga_with_tags,
+    drop_near_dislikes,
 ]
 
 

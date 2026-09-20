@@ -5,7 +5,15 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import NotRequired, TypedDict, cast
 
-from sqlalchemy import CursorResult, Index, Table, delete, insert, select, text
+from sqlalchemy import (
+    CursorResult,
+    Index,
+    Table,
+    delete,
+    insert,
+    select,
+    text,
+)
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga_embeddings import MangaEmbedding
@@ -93,6 +101,30 @@ def get_nearest_neighbours(
             MangaEmbedding.content_vector.max_inner_product(embedding.content_vector)
         )
         .limit(n)
+    ).all()
+
+
+def get_manga_ids_near(
+    db: Session,
+    embedding: MangaEmbedding,
+    manga_ids: Sequence[uuid.UUID],
+    max_distance: float,
+) -> Sequence[uuid.UUID]:
+    """Return the ids, among `manga_ids`, that sit within `max_distance`.
+
+    The distance is the negative inner product, which pgvector writes as `<#>`.
+    The vectors have unit length, so a distance of -0.9 is a cosine similarity
+    of 0.9. A smaller distance means a closer manga.
+    """
+    if not manga_ids:
+        return []
+    return db.scalars(
+        select(MangaEmbedding.manga_id)
+        .where(MangaEmbedding.manga_id.in_(manga_ids))
+        .where(
+            MangaEmbedding.content_vector.max_inner_product(embedding.content_vector)
+            <= max_distance
+        )
     ).all()
 
 
