@@ -31,7 +31,7 @@ def drop_near_dislikes(
         return list(candidates)
 
     exclude_ids: set[uuid.UUID] = set()
-    candidate_ids: Sequence[uuid.UUID] = [c.manga_id for c in candidates]
+    candidate_ids = [c.manga_id for c in candidates]
     for disliked_id in query.disliked_ids:
         embedding = get_embedding_by_manga_id(db, disliked_id)
         if not embedding:

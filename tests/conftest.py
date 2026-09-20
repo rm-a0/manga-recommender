@@ -1,5 +1,8 @@
+import math
 import os
-from collections.abc import Generator
+import uuid
+from collections.abc import Callable, Generator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -10,7 +13,18 @@ from testcontainers.community.postgres import PostgresContainer
 
 from alembic import command
 from manga_recommender.db.engine import get_engine
+from manga_recommender.db.models.manga import Manga
 from manga_recommender.db.models.sources import Source
+from manga_recommender.db.repositories.manga import (
+    TagLinkValues,
+    bulk_add_tags_to_manga,
+    create_manga,
+)
+from manga_recommender.db.repositories.manga_embeddings import (
+    EmbeddingValues,
+    bulk_create_manga_embeddings,
+)
+from manga_recommender.db.repositories.tags import get_or_create_tag
 
 REPO_ROOT = Path(__file__).parent.parent
 
@@ -67,3 +81,75 @@ def test_source(db_session: Session) -> Source:
     db_session.add(source)
     db_session.flush()
     return source
+
+
+DIMENSIONS = 384
+
+
+def vector_at(degrees: float) -> list[float]:
+    """Return a unit vector that sits `degrees` from the vector at zero.
+
+    Only the first two dimensions carry a value, so the angle between two
+    vectors is the difference of their degrees. The inner product of two unit
+    vectors is the cosine of that angle.
+    """
+    radians = math.radians(degrees)
+    vector = [0.0] * DIMENSIONS
+    vector[0] = math.cos(radians)
+    vector[1] = math.sin(radians)
+    return vector
+
+
+@pytest.fixture
+def embedded_manga(db_session: Session) -> Callable[[str, float], Manga]:
+    """Return a factory that creates one manga with a vector at an angle."""
+
+    def _create(title: str, degrees: float) -> Manga:
+        manga = create_manga(
+            db_session,
+            title=title,
+            description=f"The description of {title}.",
+        )
+        db_session.flush()
+        values: EmbeddingValues = {
+            "manga_id": manga.id,
+            "content_vector": vector_at(degrees),
+            "model_name": "test-model",
+            "computed_at": datetime.now(UTC),
+        }
+        bulk_create_manga_embeddings(db_session, [values])
+        db_session.flush()
+        return manga
+
+    return _create
+
+
+@pytest.fixture
+def plain_manga(db_session: Session) -> Callable[[str], Manga]:
+    """Return a factory that creates one manga without an embedding."""
+
+    def _create(title: str) -> Manga:
+        manga = create_manga(db_session, title=title, description=title)
+        db_session.flush()
+        return manga
+
+    return _create
+
+
+@pytest.fixture
+def tag_manga(db_session: Session) -> Callable[[uuid.UUID, str], None]:
+    """Return a function that attaches one tag to one manga."""
+
+    def _tag(manga_id: uuid.UUID, name: str) -> None:
+        tag = get_or_create_tag(db_session, name=name, category=None, is_explicit=False)
+        db_session.flush()
+        link: TagLinkValues = {
+            "manga_id": manga_id,
+            "tag_id": tag.id,
+            "rank": None,
+            "is_spoiler": False,
+        }
+        bulk_add_tags_to_manga(db_session, [link])
+        db_session.flush()
+
+    return _tag
