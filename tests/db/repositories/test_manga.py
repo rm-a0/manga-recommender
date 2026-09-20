@@ -1,5 +1,5 @@
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime
 
 from sqlalchemy import inspect
@@ -26,7 +26,9 @@ from manga_recommender.db.repositories.manga import (
     get_manga_by_mal_id,
     get_manga_by_source_external_id,
     get_manga_by_tag_id,
+    get_manga_ids_by_tag_ids,
     get_manga_tag_links,
+    get_tag_ids_by_manga_ids,
     stream_exportable_manga,
     update_manga,
 )
@@ -1305,3 +1307,101 @@ def test_stream_exportable_manga_applies_the_given_minimum_length(
 
     assert _stream_titles(db_session, minimum=100) == []
     assert _stream_titles(db_session, minimum=50) == ["Berserk"]
+
+
+def test_get_tag_ids_by_manga_ids_returns_one_row_per_manga(
+    db_session: Session,
+    plain_manga: Callable[[str], Manga],
+    tag_manga: Callable[[uuid.UUID, str], None],
+) -> None:
+    first = plain_manga("First")
+    second = plain_manga("Second")
+    tag_manga(first.id, "Action")
+    tag_manga(first.id, "Drama")
+    tag_manga(second.id, "Action")
+
+    tag_ids_by_manga = {
+        manga_id: tag_ids
+        for manga_id, tag_ids in get_tag_ids_by_manga_ids(
+            db_session, [first.id, second.id]
+        )
+    }
+
+    assert len(tag_ids_by_manga[first.id]) == 2
+    assert set(tag_ids_by_manga[second.id]) < set(tag_ids_by_manga[first.id])
+
+
+def test_get_tag_ids_by_manga_ids_returns_nothing_without_manga(
+    db_session: Session,
+) -> None:
+    assert get_tag_ids_by_manga_ids(db_session, []) == []
+
+
+def test_get_manga_ids_by_tag_ids_orders_by_the_number_of_shared_tags(
+    db_session: Session,
+    plain_manga: Callable[[str], Manga],
+    tag_manga: Callable[[uuid.UUID, str], None],
+) -> None:
+    seed = plain_manga("Seed")
+    tag_manga(seed.id, "Action")
+    tag_manga(seed.id, "Drama")
+    one_tag = plain_manga("One Tag")
+    tag_manga(one_tag.id, "Action")
+    two_tags = plain_manga("Two Tags")
+    tag_manga(two_tags.id, "Action")
+    tag_manga(two_tags.id, "Drama")
+
+    ((_, seed_tag_ids),) = get_tag_ids_by_manga_ids(db_session, [seed.id])
+    rows = get_manga_ids_by_tag_ids(db_session, seed_tag_ids, 10)
+
+    # The seed and `two_tags` both share two tags, so their order between them
+    # rests on the id tiebreaker.
+    assert {manga_id for manga_id, _ in rows[:2]} == {seed.id, two_tags.id}
+    assert rows[2] == (one_tag.id, 1)
+    assert [count for _, count in rows] == [2, 2, 1]
+
+
+def test_get_manga_ids_by_tag_ids_applies_the_limit(
+    db_session: Session,
+    plain_manga: Callable[[str], Manga],
+    tag_manga: Callable[[uuid.UUID, str], None],
+) -> None:
+    for index in range(3):
+        manga = plain_manga(f"Manga {index}")
+        tag_manga(manga.id, "Action")
+    tag_ids = [
+        tag_id
+        for _, manga_tag_ids in get_tag_ids_by_manga_ids(
+            db_session, [m.id for m in db_session.query(Manga).all()]
+        )
+        for tag_id in manga_tag_ids
+    ]
+
+    assert len(get_manga_ids_by_tag_ids(db_session, tag_ids, 2)) == 2
+
+
+def test_get_manga_ids_by_tag_ids_counts_only_the_shared_tags(
+    db_session: Session,
+    plain_manga: Callable[[str], Manga],
+    tag_manga: Callable[[uuid.UUID, str], None],
+) -> None:
+    seed = plain_manga("Seed")
+    tag_manga(seed.id, "Action")
+    tag_manga(seed.id, "Drama")
+    # Carries one shared tag and four tags the seed does not have.
+    broadly_tagged = plain_manga("Broadly Tagged")
+    tag_manga(broadly_tagged.id, "Action")
+    for name in ("Cooking", "Mecha", "Sports", "Horror"):
+        tag_manga(broadly_tagged.id, name)
+    narrowly_tagged = plain_manga("Narrowly Tagged")
+    tag_manga(narrowly_tagged.id, "Action")
+    tag_manga(narrowly_tagged.id, "Drama")
+
+    ((_, seed_tag_ids),) = get_tag_ids_by_manga_ids(db_session, [seed.id])
+    counts = {
+        manga_id: count
+        for manga_id, count in get_manga_ids_by_tag_ids(db_session, seed_tag_ids, 10)
+    }
+
+    assert counts[broadly_tagged.id] == 1
+    assert counts[narrowly_tagged.id] == 2

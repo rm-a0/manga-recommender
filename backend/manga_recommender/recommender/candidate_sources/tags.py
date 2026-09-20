@@ -1,13 +1,13 @@
-"""Nominate manga whose content vectors are near the manga the reader liked."""
+"""Nominate manga that share tags with the manga the reader liked."""
 
 import uuid
 from collections.abc import Sequence
 
 from sqlalchemy.orm import Session
 
-from manga_recommender.db.repositories.manga_embeddings import (
-    get_embedding_by_manga_id,
-    get_nearest_neighbours,
+from manga_recommender.db.repositories.manga import (
+    get_manga_ids_by_tag_ids,
+    get_tag_ids_by_manga_ids,
 )
 from manga_recommender.recommender.base import (
     BaseCandidateSource,
@@ -20,10 +20,14 @@ from manga_recommender.recommender.candidate_sources.common import (
 )
 
 
-class ContentCandidateSource(BaseCandidateSource):
-    """Nominate the nearest neighbours of each liked manga by content vector."""
+class TagsCandidateSource(BaseCandidateSource):
+    """Nominate the manga that share the most tags with each liked manga.
 
-    name = "content"
+    Answers for a manga that has no embedding, which the content source cannot
+    reach.
+    """
+
+    name = "tags"
 
     def _find_matches(
         self,
@@ -31,17 +35,15 @@ class ContentCandidateSource(BaseCandidateSource):
         seed_ids: Sequence[uuid.UUID],
         k: int,
     ) -> list[SeedMatches]:
-        """Return the `k` nearest manga of each seed.
+        """Return the `k` manga that share the most tags with each seed.
 
-        Skip a seed that has no embedding.
+        Skip a seed that carries no tag. Each seed keeps its own tags, so two
+        seeds of different taste each get their own matches.
         """
         matches: list[SeedMatches] = []
-        for seed_id in seed_ids:
-            embedding = get_embedding_by_manga_id(db, seed_id)
-            if not embedding:
-                continue
 
-            match_ids = get_nearest_neighbours(db, embedding, k)
+        for seed_id, tag_ids in get_tag_ids_by_manga_ids(db, seed_ids):
+            match_ids = [id_ for id_, _ in get_manga_ids_by_tag_ids(db, tag_ids, k)]
             matches.append(SeedMatches(seed_id=seed_id, match_ids=match_ids))
 
         return matches

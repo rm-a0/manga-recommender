@@ -563,6 +563,52 @@ def stream_exportable_manga(
     yield from db.execute(stmt).partitions(batch_size)
 
 
+def get_tag_ids_by_manga_ids(
+    db: Session,
+    manga_ids: Sequence[uuid.UUID],
+) -> Sequence[Row[tuple[uuid.UUID, Sequence[uuid.UUID]]]]:
+    """Return one row per manga: its id, then the ids of the tags it carries.
+
+    A manga that carries no tag gets no row. The rows carry ids alone, unlike
+    `get_manga_tag_links`, which also reads the tags themselves.
+    """
+    if not manga_ids:
+        return []
+    return db.execute(
+        select(
+            manga_tags.c.manga_id,
+            func.array_agg(manga_tags.c.tag_id).label("tag_ids"),
+        )
+        .where(manga_tags.c.manga_id.in_(manga_ids))
+        .group_by(manga_tags.c.manga_id)
+    ).all()
+
+
+def get_manga_ids_by_tag_ids(
+    db: Session,
+    tag_ids: Sequence[uuid.UUID],
+    limit: int,
+) -> Sequence[Row[tuple[uuid.UUID, int]]]:
+    """Return the manga that carry the most of the given tags, and how many.
+
+    Count only the tags that `tag_ids` names, so a manga with many other tags
+    gains nothing. `manga_id` breaks a tie, so two manga with the same count
+    keep one order. A manga in `manga_ids` matches its own tags, so the caller
+    must drop it.
+    """
+    if not tag_ids:
+        return []
+    return db.execute(
+        select(
+            manga_tags.c.manga_id, func.count(manga_tags.c.tag_id).label("tag_count")
+        )
+        .where(manga_tags.c.tag_id.in_(tag_ids))
+        .group_by(manga_tags.c.manga_id)
+        .order_by(func.count(manga_tags.c.tag_id).desc(), manga_tags.c.manga_id)
+        .limit(limit)
+    ).all()
+
+
 # --- Bulk operations ---
 
 
