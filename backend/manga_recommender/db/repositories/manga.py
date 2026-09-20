@@ -1,7 +1,7 @@
 """Data-access functions for the Manga model."""
 
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
@@ -466,6 +466,24 @@ def delete_manga(db: Session, manga: Manga) -> None:
 def get_manga_by_mal_id(db: Session, mal_id: int) -> Manga | None:
     """Return the manga with the given MyAnimeList ID, or None if not found."""
     return db.scalar(select(Manga).where(Manga.mal_id == mal_id))
+
+
+def get_manga_ids_with_any_tags(
+    db: Session,
+    manga_ids: Sequence[uuid.UUID],
+    tags: Collection[str],
+) -> Sequence[uuid.UUID]:
+    """Return the ids, among `manga_ids`, of the manga that carry one tag or more.
+
+    Return an empty list when either argument is empty.
+    """
+    if not tags or not manga_ids:
+        return []
+    return db.scalars(
+        select(Manga.id)
+        .where(Manga.id.in_(manga_ids))
+        .where(or_(*(_has_tag(t) for t in tags)))
+    ).all()
 
 
 def get_manga_by_source_external_id(
