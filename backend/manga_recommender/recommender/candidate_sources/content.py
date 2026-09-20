@@ -46,12 +46,8 @@ class ContentCandidateSource(BaseCandidateSource):
             if not embedding:
                 continue
 
-            matches.append(
-                SeedMatches(
-                    seed_id=seed_id,
-                    match_ids=get_nearest_neighbours(db, embedding, k),
-                )
-            )
+            match_ids = get_nearest_neighbours(db, embedding, k)
+            matches.append(SeedMatches(seed_id=seed_id, match_ids=match_ids))
 
         return matches
 
