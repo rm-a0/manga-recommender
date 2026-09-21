@@ -6,7 +6,12 @@ from typing import Final
 from sqlalchemy.orm import Session
 
 from manga_recommender.recommender.base import Candidate, RecommendationQuery
-from manga_recommender.recommender.registry import get_candidate_source, get_filters
+from manga_recommender.recommender.registry import (
+    get_candidate_source,
+    get_filters,
+    get_scorers,
+    get_selectors,
+)
 
 _OVERFETCH_FACTOR: Final[int] = 5
 _OVERFETCH_FLOOR: Final[int] = 200
@@ -61,10 +66,29 @@ def _apply_filters(
     return candidates
 
 
+def _run_scorers(
+    query: RecommendationQuery,
+    candidates: list[Candidate],
+) -> list[Candidate]:
+    """Return the candidates with their scores set, in registry order."""
+    for scorer in get_scorers():
+        candidates = scorer(query, candidates)
+    return candidates
+
+
+def _run_selectors(
+    query: RecommendationQuery,
+    candidates: list[Candidate],
+) -> list[Candidate]:
+    """Return the candidates the reader sees, in display order."""
+    for selector in get_selectors():
+        candidates = selector(query, candidates)
+    return candidates
+
+
 def run_recommender(db: Session, query: RecommendationQuery) -> list[Candidate]:
     """Return the recommended candidates for one query."""
     candidates = _run_sources(db, query)
     candidates = _apply_filters(db, query, candidates)
-    # run_candidate_scorers
-    # run_candidate_selectors
-    return candidates
+    candidates = _run_scorers(query, candidates)
+    return _run_selectors(query, candidates)
