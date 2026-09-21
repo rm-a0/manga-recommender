@@ -71,7 +71,15 @@ type Filter = Callable[[Session, RecommendationQuery, list[Candidate]], list[Can
 """Return the candidates that the query allows. Judge each candidate alone."""
 
 type Scorer = Callable[[RecommendationQuery, list[Candidate]], list[Candidate]]
-"""Return the same candidates, each with its `score` set."""
+"""Return the same candidates, each with its `score` set.
+
+The first scorer sets the score. A later scorer adjusts the score it reads,
+so that each scorer keeps the work of the one before it.
+"""
 
 type Selector = Callable[[RecommendationQuery, list[Candidate]], list[Candidate]]
-"""Return the final candidates, in display order. Judge the list as a whole."""
+"""Return the final candidates, in display order. Judge the list as a whole.
+
+A selector that cuts the list runs last. A selector after it reads only the
+candidates that are left.
+"""
