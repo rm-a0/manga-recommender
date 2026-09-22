@@ -177,6 +177,19 @@ def _filtered_manga(filters: MangaFilters) -> Select[tuple[Manga]]:
     return stmt
 
 
+def get_manga_by_ids(db: Session, manga_ids: Sequence[uuid.UUID]):
+    """Return the manga with the given ids, with authors and metrics loaded.
+
+    The order does not follow `manga_ids`. An id that matches no manga is
+    left out.
+    """
+    return db.scalars(
+        select(Manga)
+        .where(Manga.id.in_(manga_ids))
+        .options(selectinload(Manga.authors), selectinload(Manga.metric))
+    ).all()
+
+
 def get_manga_by_author_id(
     db: Session,
     author_id: uuid.UUID,

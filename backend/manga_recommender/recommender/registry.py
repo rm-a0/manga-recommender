@@ -41,6 +41,11 @@ _SELECTORS: list[Selector] = [
 ]
 
 
+def get_source_names() -> frozenset[str]:
+    """Return the name of every candidate source."""
+    return frozenset(_SOURCE_MAP)
+
+
 def get_candidate_source(name: str) -> BaseCandidateSource:
     """Return the candidate source with the given name."""
     source = _SOURCE_MAP.get(name)
