@@ -47,7 +47,7 @@ def _to_metric_summary(metric: MangaMetric | None) -> MangaMetricSummary | None:
     )
 
 
-def _to_summary(manga: Manga) -> MangaSummary:
+def to_manga_summary(manga: Manga) -> MangaSummary:
     """Map a manga row to its list-response model.
 
     Reads `manga.authors` and `manga.metric`, so the caller must load both
@@ -136,7 +136,7 @@ def get_manga_page(db: Session, params: MangaListParams) -> Page[MangaSummary]:
     filters = _to_filters(params)
     return Page(
         items=[
-            _to_summary(m)
+            to_manga_summary(m)
             for m in get_all_manga(
                 db,
                 filters,
@@ -166,7 +166,7 @@ def get_manga_page_by_author_id(
     """
     return Page(
         items=[
-            _to_summary(m)
+            to_manga_summary(m)
             for m in get_manga_by_author_id(db, author_id, limit=limit, offset=offset)
         ],
         total=count_manga_by_author_id(db, author_id),
@@ -189,7 +189,7 @@ def get_manga_page_by_tag_id(
     """
     return Page(
         items=[
-            _to_summary(t)
+            to_manga_summary(t)
             for t in get_manga_by_tag_id(db, tag_id, limit=limit, offset=offset)
         ],
         total=count_manga_by_tag_id(db, tag_id),
