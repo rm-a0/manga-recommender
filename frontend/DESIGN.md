@@ -135,10 +135,10 @@ native state for the seed set: the titles you name are the ones you ring.
 The governing constraint is honesty, and what it forbids narrowed when the catalogue
 gained real figures. A weighted score and a vote count now exist for 30,513 of the 82,629
 titles, and the API orders on either, so a listing may rank — it must simply say what
-ranked it. What is still forbidden is implying a *recommendation*: nothing here measures
-how well a title answers what the reader ringed, because the engine that would is not
-built. Every listing states the field that ordered it, and a figure printed on a cell is
-the catalogue's own score, never a match.
+ranked it. The engine's picks are the only thing ordered by how well a title answers
+what the reader liked, and they are shown exactly in the order it returned. Every listing
+states what ordered it, and a figure printed on a cell is the catalogue's own score, never
+a match.
 
 ## Colors
 
@@ -319,6 +319,44 @@ The masthead prints on paper with a 4px spot rule beneath, and a mono statistics
 under it on the stock: hall, entries, codes. Counts degrade to `—`, never to zero, when the
 API is unreachable.
 
+### The recommend page
+
+The cover line names what the picks are for: "Picks for readers of" over the liked titles,
+underlined in pen, sized down as it gets longer and capped at three names plus "& N more".
+
+**Picks** are hall cells in engine order, numbered. A title the last run brought in carries
+a red *New* flag and a moved one a ▲▼ count — red because the engine did it. Opening a pick
+puts its entry in the grid (a bottom sheet over a scrim on phones), with the three marks
+first, beside the title, keys 1 2 3.
+
+**Marks** are the reader's, so they are pen: a ring for *More like this*, a strike for *Not
+for me*, a tick for *Already read*. A mark is **stamped** on the cover and waits; nothing
+moves until *Update picks*. It never silently removes a cell.
+
+**Piles** hold the three marks as cover stamps, eight then "+N". A column beside the picks;
+on phones one paper bar pinned to the bottom edge — what is in the piles, *Tune*, *Update* —
+whose bar opens the piles as a sheet with a Close. Drag onto a pile only where there is a
+fine pointer.
+
+### The tuning drawer
+
+A modal dialog from the right, full screen on phones: paper header, stock body, one-row
+footer. Every control the recommendation API accepts is here, and nothing it does not.
+Changes are drafted; the footer previews them ("4 new · 15 move · 4 leave") and nothing
+applies before *Apply*, which keeps the reader's place.
+
+Sections under the spot rule, each with its own *Reset* once changed: *Start from* (the
+four strategies as recipe cards), *What makes a match* (a slider per source, the balance
+bar, and one sentence on how they compare), *Leave out*, *How many*.
+
+**The slider** is a native range input drawn to the catalogue: ruled track, filled run,
+a tick at the default, a paper thumb. Its value is printed in words on the right, in pen
+blue once it differs from the default, with one line under it on what that value does.
+
+**Engine details** is a drawn switch in the drawer's header, off by default. On, each
+control gains one mono line naming the request field it sets, and *Under the hood* shows
+the fusion formula typeset as a stacked fraction and the exact request body.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -334,8 +372,8 @@ API is unreachable.
 
 ### Don't:
 
-- Imply that a listing is ordered by how well it matches what the reader ringed. The
-  catalogue's own score is the only ranking there is, and the heading always says so.
+- Imply that a catalogue listing is ordered by how well it matches what the reader
+  liked. Only the picks are, and their heading says "engine order".
 - Set type in vivid `spot` or `pen` below 24px. The score rule's 2.5rem figure is the one
   place vivid red sets type at all.
 - Encode a score as a length anywhere a reader compares several at once. Half the
