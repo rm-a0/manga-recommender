@@ -74,3 +74,13 @@ the entry (the user's call, and the field the API sorts on); the English title p
 an alias under it on the detail page and in search hits, and search copy no longer warns
 that English finds nothing. The detail page gained a Format row. Embeddings landed with no
 reading endpoint, so nothing in the interface uses them.
+
+**2026-09-24 — the engine lands.** `POST /recommendations` replaced the shared-tags stand-in.
+The front page is now the recommend page: a cover line sized to fit, the picks as hall
+cells in engine order with New and moved flags, marks stamped in pen and applied on Update,
+three piles (a bottom tray on phones), and a tuning drawer from the right that holds every
+setting the request accepts, applied only on Apply. Chosen over seven rounds of scratchpad
+demos; the drawer's slider sections and the optional engine-details layer came from the
+user's own critique. The "Next edition" back matter, the tag-requirement chips and the
+shared-tags route were deleted; the detail page's strip is now "More like this" from the
+engine. DESIGN.md and PRODUCT.md updated to match.

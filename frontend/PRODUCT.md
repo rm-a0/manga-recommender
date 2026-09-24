@@ -45,7 +45,9 @@ here is that the reader picks — or composes — the strategy: prior reading hi
 semantic similarity over tags and descriptions, collaborative signal from other readers,
 or a custom blend with tags excluded and specific likes and dislikes weighted.
 
-None of this is built yet. The engine does not exist.
+Built so far: two sources — synopsis similarity over embeddings (`content`) and shared
+codes (`tags`) — fused by weighted reciprocal rank fusion, with four named strategies and
+per-source weight overrides. Reading history and collaborative signal are not built.
 
 ## Operating Context
 
@@ -68,11 +70,17 @@ Working today, via the existing FastAPI JSON API:
 - `GET /tags`, `GET /tags/{id}`, `GET /tags/{id}/manga`
 - `GET /authors`, `GET /authors/{id}`, `GET /authors/{id}/manga`
 - `GET /health`, `GET /ready`
+- `POST /recommendations` — `liked_ids` (at least one), `disliked_ids`, `exclude_ids`,
+  `exclude_tags`, `strategy` (`auto|balanced|content|tags`), `weights` (per source, ≥0,
+  overriding the strategy's), `limit` 1–50. Returns the picks in display order, each with
+  the source and liked title that nominated it. `GET /recommendations/strategies` lists
+  every strategy's weights.
 
 Not available, and must not be faked:
 
-- Any recommendation endpoint. No similarity, no personalisation, and no measure of how
-  well one title answers another. `MangaSort.RELEVANCE` is still commented out.
+- Tuning beyond the request above. The rank-fusion constant, the candidate pool, the
+  "not for me" cut-off, per-title weights and filters on picks are fixed in the backend;
+  the tuning drawer shows no control for them until the request accepts them.
 - A server-side explicit filter. `tags.is_explicit` exists and `TagSummary` carries it,
   but `GET /manga` has no `include_explicit` and `MangaSummary` carries no flag, so a
   sealed listing still excludes by tag name, inside `exclude_tag`'s ten-value cap.
@@ -80,8 +88,8 @@ Not available, and must not be faked:
   novel, one-shot, doujinshi) is on `MangaDetail` only, and `MangaListParams` has no
   `type` field.
 - A `q` filter on `/authors`. Author lookup by name is not possible.
-- Similarity search. `manga_embeddings` is populated by the pipeline, but no endpoint
-  reads it, so the semantic route stays in the back matter.
+- Similarity search as its own endpoint. Embeddings are read only inside the `content`
+  recommendation source.
 - User accounts, lists, or persistence of any kind. The `users` table is unused.
 
 Constraints that shape the interface:
@@ -113,8 +121,12 @@ Constraints that shape the interface:
   romaji; the detail page and search hits print the English title beneath it when it
   differs. Search reads both.
 - **Boundary.** AGENTS.md reserves recommendation logic for `backend/`. The frontend
-  composes existing endpoint calls and renders results in the order returned. It asks the
-  API to order a listing; it does not score, rank, or weight anything client-side.
+  composes existing endpoint calls and renders results in the order returned. It sends
+  the reader's weights to the API; it does not score, rank, or weight anything
+  client-side.
+- **The explicit seal on picks is genre-level.** Recommendation requests always exclude
+  the Hentai and Erotica genres. The tag-level flag also marks codes found on mainstream
+  titles, so it is not used for picks until the API can filter explicit titles itself.
 
 ## Brand Commitments
 
@@ -143,8 +155,8 @@ explicitly not corny.
    they want, and where results land. It is not the destination.
 2. **Never claim a recommendation the engine did not make.** The catalogue's own score
    may order a listing, and the heading says when it did. What no listing may suggest is
-   that it was ordered by how well a title answers what the reader ringed — that is the
-   engine's judgement, and the engine does not exist.
+   that it was ordered by how well a title answers what the reader liked — that is the
+   engine's judgement, and only the engine's picks carry it, in the order it returned.
 3. **Design for the strategy list being long.** Every future strategy shares one input
    (a set of reference titles) and one output (a set of manga). Build that shape now so
    later strategies are additions, not redesigns.
