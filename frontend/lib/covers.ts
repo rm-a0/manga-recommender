@@ -14,7 +14,9 @@
  * MAL: insert `l` before the extension and use the CDN host directly, which also
  * avoids a 301. Verified on a random sample of eight; the variant is capped by
  * the original upload, so it can return less than 424px wide.
- * AniList: swap the `large` path segment for `extraLarge`.
+ * AniList: the path folders run one size below the API's field names. Stored
+ * rows point at `/cover/medium/`, which already holds the `large` field; the
+ * `extraLarge` image sits under `/cover/large/`.
  */
 export function largeCover(url: string | null): string | null {
   if (!url) return null
@@ -24,7 +26,7 @@ export function largeCover(url: string | null): string | null {
     next = next.replace('://myanimelist.net/', '://cdn.myanimelist.net/')
     next = next.replace(/(\/\d+)(\.[a-z]+)$/i, '$1l$2')
   } else if (next.includes('s4.anilist.co/')) {
-    next = next.replace('/cover/large/', '/cover/extraLarge/')
+    next = next.replace('/cover/medium/', '/cover/large/')
   }
   return next
 }

@@ -7,17 +7,9 @@ import { Cover } from '@/components/Cover'
 import { ScoreRule } from '@/components/ScoreRule'
 import { HallGrid } from '@/components/HallGrid'
 import { SectionHead } from '@/components/SectionHead'
-import { getManga } from '@/lib/api'
-import { resolveSharedTags } from '@/lib/routes'
-import { MANGA_TYPE_LABEL, englishAlias } from '@/lib/titles'
-
-const STATUS_LABEL: Record<string, string> = {
-  ongoing: 'Still running',
-  finished: 'Complete',
-  hiatus: 'On hiatus',
-  cancelled: 'Cancelled',
-  not_released_yet: 'Announced',
-}
+import { getManga, recommend } from '@/lib/api'
+import { GENRE_SEAL } from '@/lib/explicit'
+import { MANGA_STATUS_LABEL, MANGA_TYPE_LABEL, englishAlias } from '@/lib/titles'
 
 /**
  * Format the publication date.
@@ -48,23 +40,22 @@ export async function generateMetadata(props: PageProps<'/manga/[id]'>): Promise
   }
 }
 
-async function AlsoCarrying({ id, title }: { id: string; title: string }) {
-  const { items, activeTags } = await resolveSharedTags([id], { limit: 10 })
-  if (items.length === 0) return null
+/** The engine's picks for this one title, in the order it returned them. */
+async function MoreLikeThis({ id, title }: { id: string; title: string }) {
+  const result = await recommend({ liked_ids: [id], exclude_tags: [...GENRE_SEAL], limit: 14 })
+  if (result.recommendations.length === 0) return null
 
   return (
     <section className="mt-12">
-      <SectionHead title="Also coded this way" meta="best rated first" />
+      <SectionHead title="More like this" meta="engine order" />
       <p className="border-b border-line py-3 max-w-[70ch] text-sm text-dim">
-        Every title below carries {activeTags.join(', ')} — tags recorded for {title} —
-        and is listed by the catalogue&rsquo;s own score. Nothing is weighed against{' '}
-        {title} itself.{' '}
-        <Link href={`/?seed=${id}`} className="text-text underline">
-          Choose the tags yourself
+        What the recommender picks for readers of {title} alone.{' '}
+        <Link href={`/?like=${id}`} className="text-text underline">
+          Start from it and tune the picks
         </Link>
         .
       </p>
-      <HallGrid items={items} />
+      <HallGrid items={result.recommendations.map((r) => r.manga)} />
     </section>
   )
 }
@@ -75,7 +66,7 @@ export default async function MangaPage(props: PageProps<'/manga/[id]'>) {
   if (!manga) notFound()
 
   const published = publicationDate(manga.published_date)
-  const status = manga.status ? STATUS_LABEL[manga.status] : null
+  const status = manga.status ? MANGA_STATUS_LABEL[manga.status] : null
   const english = englishAlias(manga)
 
   return (
@@ -160,7 +151,7 @@ export default async function MangaPage(props: PageProps<'/manga/[id]'>) {
           )}
 
           <Link
-            href={`/?seed=${manga.id}`}
+            href={`/?like=${manga.id}`}
             className="mt-6 inline-block bg-spot text-white px-5 py-2.5 font-display text-base uppercase tracking-[0.04em] no-underline transition-opacity hover:opacity-85"
           >
             Use as a starting point
@@ -187,7 +178,7 @@ export default async function MangaPage(props: PageProps<'/manga/[id]'>) {
       </section>
 
       <Suspense fallback={null}>
-        <AlsoCarrying id={manga.id} title={manga.title} />
+        <MoreLikeThis id={manga.id} title={manga.title} />
       </Suspense>
     </article>
   )

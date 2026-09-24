@@ -154,3 +154,426 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * The recommend page's cover line. Its size is set per render from the length
+ * of the names it prints (`--hs`), and scaled down on phones.
+ */
+.hero-line {
+  font-size: var(--hs, 4.4rem);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .hero-line {
+    font-size: min(calc(var(--hs, 4.4rem) * 0.64), 2.6rem);
+  }
+}
+/* The liked titles are the reader's own words, underlined in pen. */
+.hero-name {
+  background: linear-gradient(var(--color-pen), var(--color-pen)) 0 94% / 100% 0.065em no-repeat;
+}
+.hero-more {
+  font: inherit;
+  background: linear-gradient(var(--color-line), var(--color-line)) 0 94% / 100% 0.065em no-repeat;
+}
+
+/*
+ * A pending mark, stamped over the cover in the reader's pen until the next
+ * update applies it.
+ */
+.stamp {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 44%;
+  transform: translate(-50%, -50%) rotate(-8deg);
+  padding: 3px 8px 2px;
+  border: 2px solid var(--color-pen);
+  color: var(--color-pen);
+  background: rgb(232 228 216 / 0.9);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: stamp-in 0.28s var(--ease-press);
+}
+@keyframes stamp-in {
+  from {
+    transform: translate(-50%, -50%) rotate(-8deg) scale(1.5);
+    opacity: 0;
+  }
+}
+.is-marked img {
+  filter: grayscale(0.75);
+  opacity: 0.7;
+}
+
+/* An opened pick: in the grid on wide screens, a bottom sheet over a scrim on phones. */
+.pick-scrim {
+  display: none;
+}
+@media (max-width: 759px) {
+  .pick-sheet {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 50;
+    max-height: 88dvh;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .pick-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+    background: rgb(8 12 11 / 0.62);
+  }
+}
+
+/*
+ * The piles: a column beside the picks on wide screens. On phones they fold
+ * into a tray pinned to the bottom edge, and open as a sheet above it.
+ */
+.piles-scrim {
+  display: none;
+}
+@media (max-width: 759px) {
+  .piles {
+    display: none;
+  }
+  .piles.piles-open {
+    display: grid;
+    position: fixed;
+    inset: auto 0 62px 0;
+    z-index: 37;
+    max-height: 74dvh;
+    overflow: auto;
+    padding: 14px;
+    background: var(--color-ground);
+    border-top: 1px solid var(--color-line);
+  }
+  .piles-open .piles-sheet-head {
+    display: flex;
+  }
+  .piles-open .piles-update,
+  .piles-tools {
+    display: none;
+  }
+  .piles-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 34;
+    background: rgb(8 12 11 / 0.62);
+  }
+  .tray {
+    display: grid;
+  }
+  body:has(.tray) {
+    padding-bottom: 70px;
+  }
+  /* An opened pick owns the screen; the tray steps aside. */
+  body:has(.pick-sheet) .tray {
+    display: none;
+  }
+}
+
+/* Notices fade where they are; on phones they sit above the tray. */
+.notice {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 60;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  max-width: calc(100vw - 24px);
+  padding: 10px 14px;
+  background: var(--color-cell);
+  color: var(--color-cell-ink);
+  border-bottom: 3px solid var(--color-pen);
+  transform: translate(-50%, 8px);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    transform 0.25s var(--ease-press),
+    opacity 0.2s,
+    visibility 0s 0.25s;
+}
+.notice.notice-show {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  visibility: visible;
+  transition:
+    transform 0.25s var(--ease-press),
+    opacity 0.2s;
+}
+@media (max-width: 759px) {
+  .notice {
+    bottom: 80px;
+    width: calc(100vw - 24px);
+    font-size: 0.9rem;
+  }
+  body:has(.pick-sheet) .notice,
+  body:has(dialog[open]) .notice {
+    top: 12px;
+    bottom: auto;
+  }
+}
+
+/* The right-hand sidebar: an opened pile title, and the tuning drawer. */
+.side-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(480px, 100vw);
+  height: 100dvh;
+  max-height: none;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--color-panel);
+  color: var(--color-text);
+  box-shadow: -18px 0 40px rgb(0 0 0 / 0.35);
+}
+.side-drawer[open] {
+  animation: drawer-in 0.3s var(--ease-press);
+}
+.side-drawer::backdrop {
+  background: rgb(8 12 11 / 0.6);
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+@media (max-width: 759px) {
+  .side-drawer {
+    width: 100vw;
+    box-shadow: none;
+  }
+}
+
+/* The tuning drawer's slider: a ruled track, the filled run, a tick at the default. */
+.slider {
+  --v: 50%;
+  --d: 50%;
+  position: relative;
+  display: block;
+  height: 22px;
+}
+.slider::before,
+.slider::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  height: 2px;
+}
+.slider::before {
+  right: 0;
+  background: var(--color-line);
+}
+.slider::after {
+  width: var(--v);
+  background: var(--color-text);
+}
+.slider-changed::after {
+  background: var(--color-pen-on-ground);
+}
+.slider-default {
+  position: absolute;
+  z-index: 1;
+  top: 5px;
+  left: var(--d);
+  width: 1px;
+  height: 12px;
+  background: var(--color-dim);
+}
+.slider input {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+.slider input::-webkit-slider-runnable-track {
+  height: 22px;
+  background: transparent;
+}
+.slider input::-webkit-slider-thumb {
+  width: 14px;
+  height: 18px;
+  margin-top: 2px;
+  appearance: none;
+  background: var(--color-cell);
+  border: 2px solid var(--color-cell-ink);
+  box-shadow: 0 0 0 1px var(--color-line);
+}
+.slider input::-moz-range-thumb {
+  width: 12px;
+  height: 16px;
+  border-radius: 0;
+  background: var(--color-cell);
+  border: 2px solid var(--color-cell-ink);
+}
+
+/* Engine details: a drawn switch in the drawer's header, and one line per control. */
+.engine-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  color: var(--color-cell-sub);
+}
+.engine-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.engine-track {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  background: var(--color-cell);
+  border: 1.5px solid var(--color-cell-ink);
+  transition: background-color 0.18s;
+}
+.engine-track > span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  background: var(--color-cell-ink);
+  transition: transform 0.2s var(--ease-press);
+}
+.engine-switch input:checked + .engine-track {
+  background: var(--color-cell-ink);
+}
+.engine-switch input:checked + .engine-track > span {
+  transform: translateX(16px);
+  background: var(--color-cell);
+}
+.engine-switch input:checked ~ .code {
+  color: var(--color-cell-ink);
+}
+.engine-switch input:focus-visible + .engine-track {
+  outline: 2px solid var(--color-spot-on-cell);
+  outline-offset: 2px;
+}
+.engine-line {
+  margin: 4px 0 2px;
+  font: 500 0.66rem / 1.45 var(--font-code);
+  color: var(--color-dim);
+}
+
+/* The fusion formula, typeset as a stacked fraction under a real sigma. */
+.formula {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  background: var(--color-ground);
+  border: 1px solid var(--color-line);
+}
+.formula-now {
+  margin-top: -5px;
+  border-top: 0;
+  padding-top: 4px;
+  font-size: 0.92rem;
+  color: var(--color-dim);
+}
+.formula-sum {
+  display: inline-grid;
+  justify-items: center;
+  line-height: 1;
+}
+.formula-sum > span {
+  font-size: 1.9rem;
+  line-height: 0.9;
+}
+.formula-sum small {
+  margin-top: 2px;
+  font: 0.6rem var(--font-code);
+  color: var(--color-dim);
+}
+.formula-frac {
+  display: inline-grid;
+  text-align: center;
+  font-style: italic;
+}
+.formula-frac > span:first-child {
+  padding: 0 6px 3px;
+  border-bottom: 1.5px solid currentColor;
+}
+.formula-frac > span:last-child {
+  padding: 3px 6px 0;
+}
+.formula-now .formula-frac {
+  font: 0.82rem var(--font-code);
+  font-style: normal;
+  color: var(--color-text);
+}
+
+/* Drawer footer: one row on wide screens, stacked on phones. */
+.drawer-foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 2px 8px;
+}
+.drawer-line {
+  grid-column: 1;
+  grid-row: 1;
+}
+.drawer-reset {
+  grid-column: 1;
+  grid-row: 2;
+  justify-self: start;
+}
+.drawer-cancel {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+.drawer-apply {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+@media (max-width: 759px) {
+  .drawer-foot {
+    grid-template-columns: 1fr auto auto;
+    grid-template-rows: auto auto;
+    row-gap: 10px;
+  }
+  .drawer-line {
+    grid-column: 1 / -1;
+  }
+  .drawer-reset,
+  .drawer-cancel,
+  .drawer-apply {
+    grid-row: 2;
+  }
+  .drawer-reset {
+    grid-column: 1;
+  }
+}
+/* The tray's Tune button, on the paper bar. */
+.tray-tools > button {
+  border-width: 0 0 0 1px;
+  border-color: #cbc5b5;
+  color: var(--color-cell-ink);
+  font-size: 0.92rem;
+}

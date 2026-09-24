@@ -2,7 +2,8 @@
  * The codes the catalogue keeps sealed.
  *
  * Which codes are explicit is the API's call: `TagSummary.is_explicit`, set at
- * ingest. Nothing here names a code. What stays in the frontend is how a seal is
+ * ingest. Nothing here names a code, except the recommendation stopgap at the
+ * bottom, `GENRE_SEAL`. What stays in the frontend is how a seal is
  * applied, because the API has no switch for it yet.
  *
  * A picker drops the flagged codes itself. A listing cannot: `MangaSummary`
@@ -33,3 +34,14 @@ export function explicitNames(tags: { name: string; is_explicit: boolean }[]): s
 export function barredCodeLimit(showSealed: boolean, explicitCount: number): number {
   return showSealed ? MAX_TAG_FILTERS : Math.max(0, MAX_TAG_FILTERS - explicitCount)
 }
+
+/**
+ * The codes a recommendation run keeps out, until the API can filter explicit titles.
+ *
+ * Genre level only, and deliberately short. The tag-level flag also marks codes
+ * that sit on mainstream titles, so sending every flagged code as `exclude_tags`
+ * drops series no one would call explicit. These two are the source genres that
+ * mark a whole title adult. Retire this list when the API gains `include_explicit`
+ * (backend issue #23).
+ */
+export const GENRE_SEAL: readonly string[] = ['Hentai', 'Erotica']

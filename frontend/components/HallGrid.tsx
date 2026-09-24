@@ -60,7 +60,7 @@ function CellRule() {
   return <span aria-hidden="true" className="mt-1.5 block h-0.5 bg-spot" />
 }
 
-function Figures({ manga }: { manga: MangaSummary }) {
+export function Figures({ manga }: { manga: MangaSummary }) {
   const score = scoreOutOfTen(manga.metrics)
 
   if (!manga.metrics || score === null) {
