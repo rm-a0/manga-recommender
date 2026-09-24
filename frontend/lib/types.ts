@@ -114,3 +114,55 @@ export interface MangaListParams {
   limit?: number
   offset?: number
 }
+
+/** The most picks one recommendation may return. Mirrors `le=50` on `limit`. */
+export const MAX_RECOMMENDATIONS = 50
+
+/** A named blend of the candidate sources. Mirrors `RecommendationStrategy`. */
+export type RecommendationStrategy = 'auto' | 'balanced' | 'content' | 'tags'
+
+/**
+ * Query body for `POST /recommendations`. Mirrors `RecommendationRequest`.
+ *
+ * `weights` overrides single weights of the strategy; the strategy supplies the
+ * rest. Only the ratio between weights changes the order.
+ */
+export interface RecommendationRequest {
+  liked_ids: string[]
+  disliked_ids?: string[]
+  exclude_ids?: string[]
+  exclude_tags?: string[]
+  strategy?: RecommendationStrategy
+  weights?: Record<string, number>
+  limit?: number
+}
+
+/** Why one candidate source nominated a pick, and from which liked title. */
+export interface RecommendationReason {
+  source: string
+  seed_id: string | null
+}
+
+export interface Recommendation {
+  manga: MangaSummary
+  reasons: RecommendationReason[]
+}
+
+/** A liked title the run started from. */
+export interface RecommendationSeed {
+  id: string
+  title: string
+}
+
+/** One run's picks, in display order. The whole result, never a page. */
+export interface RecommendationResult {
+  recommendations: Recommendation[]
+  strategy: RecommendationStrategy
+  seeds: RecommendationSeed[]
+}
+
+/** One strategy and the weight it gives each source. Mirrors `StrategyInfo`. */
+export interface StrategyInfo {
+  strategy: RecommendationStrategy
+  weights: Record<string, number>
+}

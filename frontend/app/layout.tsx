@@ -28,7 +28,7 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: 'MangaRec — 推',
   description:
-    'A manga recommender over a catalogue of 82,629 titles. Ring what you have read, choose which codes matter, read the hall listing.',
+    'A manga recommender over a catalogue of 82,629 titles. Name what you liked, sort the picks, tune how they are chosen.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -50,9 +50,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </p>
           <p className="mt-2 max-w-[70ch]">
             A score is the catalogue&rsquo;s own weighted figure over the ratings its
-            sources recorded, and it orders listings when you ask it to. It is not a
-            recommendation: the engine that would judge a title against what you have read
-            is not built yet, and no route here claims a result it did not fetch.
+            sources recorded, and it orders listings when you ask it to. Picks are the
+            recommender&rsquo;s, shown in the order it returned them; nothing here re-ranks
+            them.
           </p>
         </footer>
       </body>

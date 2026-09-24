@@ -25,6 +25,7 @@ export async function GET(request: Request) {
       id: manga.id,
       title: manga.title,
       english: englishAlias(manga),
+      image_url: manga.image_url,
       author: manga.authors[0]?.name ?? null,
     })),
   })

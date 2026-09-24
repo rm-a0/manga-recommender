@@ -11,6 +11,9 @@ import type {
   MangaListParams,
   MangaSummary,
   Page,
+  RecommendationRequest,
+  RecommendationResult,
+  StrategyInfo,
   TagSummary,
 } from './types'
 
@@ -56,6 +59,38 @@ async function get<T>(path: string): Promise<T> {
   if (!response.ok) throw new ApiError(response.status, path)
   return (await response.json()) as T
 }
+
+/** Post a JSON body to one API path. Same error contract as `get`. */
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  })
+  if (!response.ok) throw new ApiError(response.status, path)
+  return (await response.json()) as T
+}
+
+/**
+ * Run the recommendation engine once.
+ *
+ * The picks come back in display order and are rendered in that order: the
+ * frontend never scores or re-ranks them.
+ */
+export function recommend(request: RecommendationRequest): Promise<RecommendationResult> {
+  return post('/recommendations', request)
+}
+
+/**
+ * Return every strategy and the weight it gives each source.
+ *
+ * Reads no table on the API side, so one call per render is plenty; the drawer
+ * uses it for each slider's default and to list the sources at all.
+ */
+export const listStrategies = cache(
+  (): Promise<StrategyInfo[]> => get('/recommendations/strategies'),
+)
 
 /**
  * Return the whole tag vocabulary, explicit codes included.

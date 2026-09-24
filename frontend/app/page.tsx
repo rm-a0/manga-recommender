@@ -1,179 +1,106 @@
-import Link from 'next/link'
 import { Suspense } from 'react'
 
-import { HallGrid, HallSkeleton } from '@/components/HallGrid'
+import { HallSkeleton } from '@/components/HallGrid'
+import { Hero } from '@/components/recommend/Hero'
+import { Notice } from '@/components/recommend/Notice'
+import { Piles } from '@/components/recommend/Piles'
+import { PicksHall } from '@/components/recommend/PicksHall'
+import { RecommendProvider } from '@/components/recommend/RecommendProvider'
+import type { TitleStub } from '@/components/recommend/RecommendProvider'
+import { SideEntry } from '@/components/recommend/SideEntry'
+import { TuneButton, TuneDrawer } from '@/components/recommend/TuneDrawer'
 import { SectionHead } from '@/components/SectionHead'
-import { SurveyStrip } from '@/components/SurveyStrip'
-import { TagRequirements } from '@/components/TagRequirements'
-import { getManga, listManga } from '@/lib/api'
-import { LIVE_ROUTE, PLANNED_ROUTES, resolveSharedTags } from '@/lib/routes'
-import type { TagMatch } from '@/lib/types'
+import { getManga, listAllTags, listManga, listStrategies, recommend } from '@/lib/api'
+import { GENRE_SEAL, unsealed } from '@/lib/explicit'
+import { parseQuery, toRequest } from '@/lib/recommend'
+import type { RecommendQuery } from '@/lib/recommend'
 
-function asArray(value: string | string[] | undefined): string[] {
-  if (!value) return []
-  return Array.isArray(value) ? value : [value]
-}
+/** The engine's picks for the reader's marks, in the order it returned them. */
+async function Picks({ query }: { query: RecommendQuery }) {
+  const result = await recommend(toRequest(query, GENRE_SEAL))
 
-/** The hall's best-read entries, shown before the reader has ringed anything. */
-async function InTheHall() {
-  const page = await listManga({ limit: 14, sort: 'popularity', order: 'desc' })
-
-  return (
-    <>
-      <SectionHead
-        title="Hall listing"
-        meta={`${page.total.toLocaleString('en')} entries · most read first`}
-      />
-      <HallGrid items={page.items} />
-      <p className="mt-5 max-w-[70ch] text-base text-dim">
-        The most-read titles in the hall — a starting point to ring from, not a
-        recommendation.{' '}
-        <Link href="/browse" className="text-text underline">
-          Open the full catalogue
-        </Link>{' '}
-        to filter and order it yourself.
-      </p>
-    </>
-  )
-}
-
-async function RouteResults({
-  seedIds,
-  tags,
-  match,
-}: {
-  seedIds: string[]
-  tags: string[]
-  match: TagMatch
-}) {
-  const result = await resolveSharedTags(seedIds, { tags, match, limit: 30 })
-
-  if (result.seeds.length === 0) {
+  if (!result.seeds.length) {
     return (
-      <p className="border-t border-line py-6 text-base text-dim">
-        None of those entries are in the hall any more.
+      <p className="border-t border-line py-6 text-dim">
+        None of the titles you liked are in the catalogue any more. Add another one above.
       </p>
     )
   }
-
-  if (result.availableTags.length === 0) {
+  if (!result.recommendations.length) {
     return (
       <>
-        <SectionHead title="Shared codes" meta="nothing to match on" />
-        <p className="py-6 text-base text-dim">
-          The catalogue records no codes for the entries you ringed, so this route has
-          nothing to work from.
+        <SectionHead title="Your picks" meta="none left" />
+        <p className="max-w-[62ch] py-6 text-dim">
+          Nothing is left after your marks and skipped codes. Take a title off Not for me
+          or Already read, or skip fewer codes.
         </p>
       </>
     )
   }
-
   return (
     <>
-      <section className="mb-9">
-        <SectionHead title="Your marks" meta={`${result.seeds.length} ringed`} />
-        <HallGrid items={result.seeds} ringedIds={result.seeds.map((s) => s.id)} />
-      </section>
-
       <SectionHead
-        title="Shared codes"
-        meta={
-          result.items.length > 0
-            ? `${result.items.length} shown · best rated first`
-            : 'no matches'
-        }
+        title="Your picks"
+        meta={`${result.recommendations.length} · engine order`}
       />
+      <PicksHall items={result.recommendations} seeds={result.seeds} />
+    </>
+  )
+}
 
-      <TagRequirements
-        seedIds={seedIds}
-        available={result.availableTags}
-        active={result.activeTags}
-        match={result.match}
-        total={result.total}
+/** Before anything is liked: the most-read titles, as a place to start. Not picks. */
+async function MostRead() {
+  const page = await listManga({ limit: 21, sort: 'popularity', order: 'desc' })
+  return (
+    <>
+      <SectionHead title="Most read in the hall" meta="not picks · open one you liked" />
+      <PicksHall
+        items={page.items.map((manga) => ({ manga, reasons: [] }))}
+        ranked={false}
       />
-
-      {result.items.length > 0 ? (
-        <>
-          <HallGrid items={result.items} />
-          <p className="mt-5 max-w-[70ch] text-base text-dim">
-            You chose the codes; the hall returned what carries them, best rated first.
-            The score is the catalogue&rsquo;s own figure for a title, not a measure of
-            how well it answers your marks — nothing here is weighed against what you
-            ringed.
-          </p>
-        </>
-      ) : (
-        <p className="py-6 text-base text-dim">
-          Nothing else in the hall carries {result.match === 'all' ? 'all of' : 'any of'}{' '}
-          these codes. Drop one, or switch to matching any of them.
-        </p>
-      )}
     </>
   )
 }
 
 export default async function Page(props: PageProps<'/'>) {
-  const searchParams = await props.searchParams
-  const seedIds = asArray(searchParams.seed)
-  const tags = asArray(searchParams.tag)
-  const match: TagMatch = searchParams.match === 'any' ? 'any' : 'all'
+  const query = parseQuery(await props.searchParams)
+  const marked = [...query.marks.like, ...query.marks.dislike, ...query.marks.read]
 
-  // Resolve the ringed titles for the chips. Cheap: one request per named title.
-  const seeds = (
-    await Promise.all(
-      seedIds.map(async (id) => {
+  // Titles for the piles and the headline. One request per marked title.
+  const [strategies, tags, stubs] = await Promise.all([
+    listStrategies(),
+    listAllTags(),
+    Promise.all(
+      marked.map(async (id): Promise<TitleStub | null> => {
         const manga = await getManga(id)
-        return manga ? { id: manga.id, title: manga.title } : null
+        return manga
+          ? { id: manga.id, title: manga.title, image_url: manga.image_url }
+          : null
       }),
-    )
-  ).filter((seed): seed is { id: string; title: string } => seed !== null)
+    ),
+  ])
 
   return (
-    <div className="mx-auto max-w-[1080px] px-5 pb-16 pt-7 sm:px-8">
-      <SurveyStrip seeds={seeds} />
-
-      {seedIds.length === 0 && (
-        <p className="mt-5 max-w-[62ch] text-base text-dim">
-          <span className="font-display text-lg uppercase tracking-[0.02em] text-text">
-            {LIVE_ROUTE.name}
-          </span>{' '}
-          is the only route built so far. Ring a title above and it runs against it.
-        </p>
-      )}
-
-      <div className="mt-8">
-        {seedIds.length === 0 ? (
-          <Suspense fallback={<HallSkeleton />}>
-            <InTheHall />
-          </Suspense>
-        ) : (
-          <Suspense
-            key={`${seedIds.join(',')}|${tags.join(',')}|${match}`}
-            fallback={<HallSkeleton />}
-          >
-            <RouteResults seedIds={seedIds} tags={tags} match={match} />
-          </Suspense>
-        )}
+    <RecommendProvider
+      query={query}
+      strategies={strategies}
+      initialTitles={stubs.filter((stub): stub is TitleStub => stub !== null)}
+      codes={unsealed(tags, false).map((tag) => tag.name)}
+    >
+      <div className="mx-auto max-w-[1320px] px-5 pb-16 sm:px-8">
+        <Hero tools={<TuneButton />} />
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <div>
+            <Suspense fallback={<HallSkeleton cells={14} />}>
+              {query.marks.like.length ? <Picks query={query} /> : <MostRead />}
+            </Suspense>
+          </div>
+          <Piles tools={<TuneButton />} />
+        </div>
       </div>
-
-      {/* The catalogue's back matter: what is coming, stated plainly and never
-          dressed as something you can use today. */}
-      <section className="mt-14" aria-labelledby="next-issue-heading">
-        <h2 id="next-issue-heading" className="code hall-rule pb-1.5 text-dim">
-          Next edition — routes not built yet
-        </h2>
-        <ul className="mt-3 grid gap-x-8 gap-y-2 sm:grid-cols-2">
-          {PLANNED_ROUTES.map((route) => (
-            <li key={route.id} className="text-base text-dim">
-              <span className="font-display uppercase tracking-[0.02em] text-text">
-                {route.name}
-              </span>
-              <br />
-              {route.description}
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
+      <SideEntry />
+      <TuneDrawer />
+      <Notice />
+    </RecommendProvider>
   )
 }

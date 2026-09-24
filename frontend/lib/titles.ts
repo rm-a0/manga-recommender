@@ -1,4 +1,4 @@
-import type { MangaSummary, MangaType } from './types'
+import type { MangaStatus, MangaSummary, MangaType } from './types'
 
 /**
  * Return the English title when it says something the romaji does not.
@@ -25,4 +25,13 @@ export const MANGA_TYPE_LABEL: Record<MangaType, string> = {
   manhua: 'Manhua',
   one_shot: 'One-shot',
   doujinshi: 'Doujinshi',
+}
+
+/** How each publication status is named, on the detail page and in an opened pick. */
+export const MANGA_STATUS_LABEL: Record<MangaStatus, string> = {
+  ongoing: 'Still running',
+  finished: 'Complete',
+  hiatus: 'On hiatus',
+  cancelled: 'Cancelled',
+  not_released_yet: 'Announced',
 }
