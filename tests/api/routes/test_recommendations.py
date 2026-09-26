@@ -183,6 +183,46 @@ class TestRecommendManga:
 
         assert set(_titles(payload)) == {"By Vector", "By Tag"}
 
+    def test_applies_the_requested_dislike_cutoff(
+        self,
+        client: TestClient,
+        embedded_manga: Callable[[str, float], Manga],
+    ) -> None:
+        """cos(30) is about 0.866: kept at the default 0.9, dropped at 0.8."""
+        seed = embedded_manga("Seed", 0)
+        disliked = embedded_manga("Disliked", 60)
+        embedded_manga("Relative", 30)
+        embedded_manga("Far", -60)
+        body = {
+            "liked_ids": [str(seed.id)],
+            "disliked_ids": [str(disliked.id)],
+            "strategy": "content",
+        }
+
+        default = _post(client, **body).json()
+        loose = _post(client, **body, dislike_similarity_cutoff=0.8).json()
+
+        assert _titles(default) == ["Relative", "Far"]
+        assert _titles(loose) == ["Far"]
+
+    def test_asks_each_source_for_the_requested_candidates(
+        self,
+        client: TestClient,
+        embedded_manga: Callable[[str, float], Manga],
+    ) -> None:
+        seed = embedded_manga("Seed", 0)
+        for degrees in (5, 10, 15):
+            embedded_manga(f"Match {degrees}", degrees)
+
+        payload = _post(
+            client,
+            liked_ids=[str(seed.id)],
+            strategy="content",
+            candidates_per_source=1,
+        ).json()
+
+        assert _titles(payload) == ["Match 5"]
+
 
 class TestRecommendMangaRejects:
     def test_an_empty_liked_ids_list(self, client: TestClient) -> None:
@@ -205,3 +245,16 @@ class TestRecommendMangaRejects:
 
         assert response.status_code == 422
         assert "conten" in response.json()["detail"][0]["msg"]
+
+    def test_a_rank_constant_of_zero(self, client: TestClient) -> None:
+        """The top candidate has rank 0, so a constant of 0 divides by zero."""
+        response = _post(client, liked_ids=[str(uuid.uuid4())], rank_constant=0)
+
+        assert response.status_code == 422
+
+    def test_a_dislike_cutoff_above_one(self, client: TestClient) -> None:
+        response = _post(
+            client, liked_ids=[str(uuid.uuid4())], dislike_similarity_cutoff=1.5
+        )
+
+        assert response.status_code == 422

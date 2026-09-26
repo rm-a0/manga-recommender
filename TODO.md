@@ -70,9 +70,128 @@ Planned work, not yet scheduled.
 - An index on `manga.title`. Every page already pays a full sort for
   `ORDER BY title OFFSET n`.
 
-## Not built yet
+## Recommender
 
-- The recommendation engine, including semantic search over descriptions.
+Order: configurable engine -> AniList signals -> collab -> franchise -> eval ->
+tuning. Starts after the frontend merge.
+
+### 1. Configurable engine
+
+- Expose `_RANK_CONSTANT`, `_OVERFETCH_FACTOR`, `_OVERFETCH_FLOOR` and the
+  dislike `_MAX_DISTANCE` as request fields. No settings class, no env vars:
+  the default is `Field(0.9, ge=0, le=1)` on the request, visible in OpenAPI.
+  A tuned value is a code change.
+- Flat fields on `RecommendationRequest` and `RecommendationQuery`. No
+  grouping classes. Defaults are `DEFAULT_*: Final` constants in
+  `recommender/base.py`, applied only by the request (`Field(DEFAULT_X, ...)`).
+  The query has no defaults and is `kw_only`: `_to_query` passes every field,
+  so a request field it forgets fails loudly instead of being ignored. Tests
+  and the eval build queries from a factory plus `dataclasses.replace`.
+- `candidates_per_source` is a fixed default (200), with no floor or formula.
+  An explicit value is used as given. Raise the default if the `limit` cap
+  grows.
+- Echo the resolved values in `RecommendationResult`, so a run is reproducible.
+- Bound every field. It is a public engine. `liked_ids`, `exclude_ids` and
+  `exclude_tags` have no `max_length` today. Pool size drives
+  `hnsw.ef_search`, so cap it (~1000). `rank_constant >= 1`.
+- Thresholds in similarity terms (cosine 0..1, higher = closer), never raw
+  negative inner product. Convert inside the repository. The raw value is
+  pgvector's convention and shifts with the embedding model.
+- Keep the dislike threshold and a liked near-duplicate threshold separate.
+  They answer different questions.
+
+### 2. Catalogue filters
+
+- `year_from` / `year_to`, `types`, `statuses`, `include_tags` (decide any vs
+  all), `exclude_tags` (exists), `min_score` (`bayesian_score`), `min_votes`,
+  maybe `exclude_explicit`. `year_from <= year_to` in a model validator.
+- `min_votes` doubles as a popularity floor, which drops most art books and
+  guidebooks.
+- NULL semantics: `published_date` and `type` are nullable, and a manga with no
+  `manga_metrics` row has no score. Make it explicit (`include_unknown: bool`).
+- Push catalogue filters into the source queries, not post-filters. Strict
+  filters otherwise starve the 200-candidate pool. One `WHERE` builder shared by
+  the kNN and tags queries. Filtered HNSW returns fewer than `k` rows: use
+  `hnsw.iterative_scan = relaxed_order` (pgvector >= 0.8). Seed-dependent
+  filters (dislikes, franchise) stay post-filters.
+
+### 3. AniList recommendations and relations
+
+- Add `recommendations(perPage: 25, sort: RATING_DESC)` and `relations` to
+  `MANGA_QUERY`. Check query complexity on one chunk. `chunk_size` may drop.
+- Store raw edges by external id, resolve to `manga_id` in a pipeline stage.
+  Targets are often in another chunk or not ingested.
+  `manga_external_ratings(source_id, external_id)` already maps them.
+- Relations include anime nodes: keep `type == MANGA` only.
+- Franchise = connected components over SEQUEL, PREQUEL, SIDE_STORY, SPIN_OFF,
+  ALTERNATIVE, PARENT, SUMMARY. Not CHARACTER or OTHER: crossovers glue
+  unrelated series into one giant component.
+
+### 4. Collab source
+
+- One public `collab` source. AniList and Goodreads are provenance, not
+  strategies, so neither name reaches the API.
+- Raw signal tables per origin -> `collab` stage -> `manga_neighbours(manga_id,
+  neighbour_id, score)`, top ~50 per manga. Sparse, not a dense matrix.
+- Stage: normalize per source per row, symmetrize (A->B implies B->A, take
+  max), weighted sum, top-N. One input today. Do not build a plugin framework
+  for one input.
+- Keep the merge a pure function (edges in -> neighbours out), apart from DB
+  I/O. Production feeds it all edges. An eval can feed it a subset in memory
+  and never touch the production table.
+- Source: same shape as `ContentCandidateSource` -> `SeedMatches` ->
+  `round_robin_merge`. Add to `_SOURCE_MAP` and the strategies.
+- Reason text: "Readers who liked X also liked this".
+- Goodreads later, as the extensibility exercise. Local UCSD comics dump.
+  Collapse volumes to series, fuzzy-match title + author (`rapidfuzz`), store a
+  confidence. Similarity by normalized co-occurrence (binary cosine or lift),
+  min co-count ~5, "liked" = rating >= 4. Heavy franchise noise.
+
+### 5. Franchise handling
+
+- Filter: drop candidates in a seed's franchise. Or a selector: at most one per
+  franchise. Exposed as `hide_same_series: bool = True`, not a number.
+- Fallback where relations are missing: `similarity > t AND (shared author OR
+  title-token overlap)`, applied to liked seeds.
+- Calibrate `t` from relations: cosine histogram of franchise pairs vs
+  non-franchise top-10 neighbours.
+- Consider dropping `Title:` from `build_embedding_text`. Full re-embed, so
+  measure first.
+- Frontend option: a separate "More in this series" row.
+
+### 6. Eval harness (hand-coded)
+
+- Ground truth: AniList rec pairs (item -> item). Goodreads user hold-out later,
+  as a second, independent eval.
+- Never score collab on the pairs it is built from: it returns the answer key.
+- Edge hold-out is degenerate for a one-hop lookup. A held-out pair A-B never
+  comes back from seed A alone. Decide first:
+  - Independent ground truth (preferred): MAL recommendations via Jikan
+    `/manga/{id}/recommendations` for a sample of seeds. Collab keeps 100% of
+    AniList edges, no split. Correlated with AniList, so read it as optimistic.
+  - Edge k-fold only if collab becomes a derived similarity (shared
+    rec-neighbourhoods, item vectors) that can predict unseen pairs. Then
+    `hash(sorted pair) % k`, both directions held out together.
+- Split the eval seeds, not the edges, for tuning: tune on one half, report on
+  the other. Production data stays whole.
+- Report seeds with no collab neighbours separately (cold start).
+- Metrics: recall@k, nDCG@k, hit-rate@k. Beyond accuracy: franchise leakage,
+  median `votes_count` of results, catalogue coverage, intra-list diversity.
+- Baselines: random, top-k by popularity, content-only, tags-only, fused.
+- Golden set: 20-30 known seeds with "should appear" / "must not appear".
+- Design for extensibility and tests: ground-truth loaders, splitters, metrics
+  and baselines as separate, swappable parts.
+
+### 7. Tuning and later ideas
+
+- Sweep source weights, `rank_constant`, `candidates_per_source`, cutoffs.
+  Pick knees on leakage vs recall.
+- Quality prior scorer: blend RRF with `bayesian_score` / `log(votes_count)`.
+  Measure it, because popularity inflates recall on biased ground truth.
+- IDF-weighted tag overlap. Use AniList tag `rank`.
+- MMR diversity selector before `take_top_k`.
+- Embedding text cleanup (strip "(Source: ...)"), larger model than
+  `bge-small-en-v1.5`.
 
 ## Pipeline
 

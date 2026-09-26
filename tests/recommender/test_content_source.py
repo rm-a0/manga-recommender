@@ -10,15 +10,11 @@ from manga_recommender.recommender.base import Candidate, RecommendationQuery
 from manga_recommender.recommender.candidate_sources.content import (
     ContentCandidateSource,
 )
+from tests.recommender.queries import make_query
 
 
-def _query(*liked: uuid.UUID, limit: int = 20) -> RecommendationQuery:
-    return RecommendationQuery(
-        liked_ids=liked,
-        disliked_ids=(),
-        source_weights={"content": 1.0},
-        limit=limit,
-    )
+def _query(*liked: uuid.UUID) -> RecommendationQuery:
+    return make_query(liked_ids=liked, source_weights={"content": 1.0})
 
 
 def _ids(candidates: list[Candidate]) -> list[uuid.UUID]:
