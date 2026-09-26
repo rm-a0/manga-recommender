@@ -1,7 +1,7 @@
 """Data-access functions for the Manga model."""
 
 import uuid
-from collections.abc import Collection, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
@@ -10,7 +10,6 @@ from sqlalchemy import (
     ColumnElement,
     Row,
     ScalarSelect,
-    Select,
     String,
     cast,
     delete,
@@ -91,7 +90,11 @@ class TagLink(NamedTuple):
 
 @dataclass(frozen=True, slots=True)
 class MangaFilters:
-    """The WHERE clause of a manga list query, as one value."""
+    """Hold the conditions that a manga must meet, as one value.
+
+    The catalogue list and the recommender sources both read it, so a filter
+    means the same thing on both routes. `exclude_explicit` has no effect yet.
+    """
 
     title_terms: tuple[str, ...] = ()
     statuses: tuple[MangaStatus, ...] = ()
@@ -101,6 +104,10 @@ class MangaFilters:
     exclude_tag_keys: tuple[str, ...] = ()
     published_from: date | None = None
     published_to: date | None = None
+    exclude_ids: tuple[uuid.UUID, ...] = ()
+    min_votes: int | None = None
+    min_score: float | None = None
+    exclude_explicit: bool = False
 
 
 def _has_tag(key: str) -> ColumnElement[bool]:
@@ -149,32 +156,43 @@ def _title_pattern(term: str) -> str:
     return f"%{escaped}%"
 
 
-def _filtered_manga(filters: MangaFilters) -> Select[tuple[Manga]]:
-    """Return the manga query with every filter applied, unordered.
+def filter_clauses(filters: MangaFilters) -> list[ColumnElement[bool]]:
+    """Return one WHERE condition for each filter that `filters` sets.
 
-    The page query and the count query both build on this, so a filter
-    cannot reach one without reaching the other.
+    The caller must select from `manga` or join it. Every catalogue and
+    recommender query builds on this, so a filter cannot reach one query and
+    miss another.
     """
-    stmt = select(Manga)
+    clauses: list[ColumnElement[bool]] = []
     if filters.types:
-        stmt = stmt.where(Manga.type.in_(filters.types))
+        clauses.append(Manga.type.in_(filters.types))
     if filters.statuses:
-        stmt = stmt.where(Manga.status.in_(filters.statuses))
-    for clause in _tag_clauses(filters):
-        stmt = stmt.where(clause)
+        clauses.append(Manga.status.in_(filters.statuses))
+    if filters.published_from:
+        clauses.append(Manga.published_date >= filters.published_from)
+    if filters.published_to:
+        clauses.append(Manga.published_date < filters.published_to)
+    if filters.exclude_ids:
+        clauses.append(Manga.id.not_in(filters.exclude_ids))
+    if filters.min_votes is not None:
+        clauses.append(Manga.metric.has(MangaMetric.votes_count >= filters.min_votes))
+    if filters.min_score is not None:
+        clauses.append(
+            Manga.metric.has(MangaMetric.bayesian_score >= filters.min_score)
+        )
+    # TODO
+    # if filters.exclude_explicit:
+    #    clauses.append(Manga.is_explicit == False)
     for term in filters.title_terms:
         pattern = _title_pattern(term)
-        stmt = stmt.where(
+        clauses.append(
             or_(
                 Manga.title.ilike(pattern, escape="\\"),
                 Manga.title_english.ilike(pattern, escape="\\"),
             )
         )
-    if filters.published_from:
-        stmt = stmt.where(Manga.published_date >= filters.published_from)
-    if filters.published_to:
-        stmt = stmt.where(Manga.published_date < filters.published_to)
-    return stmt
+    clauses.extend(_tag_clauses(filters))
+    return clauses
 
 
 def get_manga_by_ids(db: Session, manga_ids: Sequence[uuid.UUID]):
@@ -301,7 +319,8 @@ def get_all_manga(
     Loads authors, because the list response needs the author names.
     """
     return db.scalars(
-        _filtered_manga(filters)
+        select(Manga)
+        .where(*filter_clauses(filters))
         .outerjoin(MangaMetric, Manga.id == MangaMetric.manga_id)
         .order_by(*_order_by(sort, descending))
         .offset(offset)
@@ -316,7 +335,9 @@ def count_manga(db: Session, filters: MangaFilters) -> int:
     Counts every match, not the items on one page.
     """
     count = db.scalar(
-        select(func.count()).select_from(_filtered_manga(filters).subquery())
+        select(func.count()).select_from(
+            (select(Manga).where(*filter_clauses(filters))).subquery()
+        )
     )
     return count or 0
 
@@ -481,24 +502,6 @@ def get_manga_by_mal_id(db: Session, mal_id: int) -> Manga | None:
     return db.scalar(select(Manga).where(Manga.mal_id == mal_id))
 
 
-def get_manga_ids_with_any_tags(
-    db: Session,
-    manga_ids: Sequence[uuid.UUID],
-    tags: Collection[str],
-) -> Sequence[uuid.UUID]:
-    """Return the ids, among `manga_ids`, of the manga that carry one tag or more.
-
-    Return an empty list when either argument is empty.
-    """
-    if not tags or not manga_ids:
-        return []
-    return db.scalars(
-        select(Manga.id)
-        .where(Manga.id.in_(manga_ids))
-        .where(or_(*(_has_tag(t) for t in tags)))
-    ).all()
-
-
 def get_manga_by_source_external_id(
     db: Session,
     source_id: uuid.UUID,
@@ -600,14 +603,15 @@ def get_tag_ids_by_manga_ids(
 def get_manga_ids_by_tag_ids(
     db: Session,
     tag_ids: Sequence[uuid.UUID],
+    filters: MangaFilters,
     limit: int,
 ) -> Sequence[Row[tuple[uuid.UUID, int]]]:
     """Return the manga that carry the most of the given tags, and how many.
 
-    Count only the tags that `tag_ids` names, so a manga with many other tags
-    gains nothing. `manga_id` breaks a tie, so two manga with the same count
-    keep one order. A manga in `manga_ids` matches its own tags, so the caller
-    must drop it.
+    Return only the manga that pass `filters`. Count only the tags that
+    `tag_ids` names, so a manga with many other tags gains nothing. `manga_id`
+    breaks a tie, so two manga with the same count keep one order. A manga in
+    `manga_ids` matches its own tags, so the caller must drop it.
     """
     if not tag_ids:
         return []
@@ -615,6 +619,8 @@ def get_manga_ids_by_tag_ids(
         select(
             manga_tags.c.manga_id, func.count(manga_tags.c.tag_id).label("tag_count")
         )
+        .join(Manga)
+        .where(*filter_clauses(filters))
         .where(manga_tags.c.tag_id.in_(tag_ids))
         .group_by(manga_tags.c.manga_id)
         .order_by(func.count(manga_tags.c.tag_id).desc(), manga_tags.c.manga_id)

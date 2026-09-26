@@ -8,6 +8,8 @@ from typing import Final
 
 from sqlalchemy.orm import Session
 
+from manga_recommender.db.repositories.manga import MangaFilters
+
 # The defaults that the API applies. The query itself has none.
 DEFAULT_RANK_CONSTANT: Final[int] = 60
 DEFAULT_DISLIKE_SIMILARITY_CUTOFF: Final[float] = 0.9
@@ -35,12 +37,11 @@ class RecommendationQuery:
     liked_ids: tuple[uuid.UUID, ...]
     disliked_ids: tuple[uuid.UUID, ...]
     source_weights: Mapping[str, float]
-    exclude_ids: frozenset[uuid.UUID]
-    excluded_tags: frozenset[str]
     dislike_similarity_cutoff: float
     rank_constant: int
     candidates_per_source: int
     limit: int
+    filters: MangaFilters
 
 
 @dataclass(frozen=True, slots=True)

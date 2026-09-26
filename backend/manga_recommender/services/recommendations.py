@@ -6,8 +6,12 @@ from collections.abc import Sequence
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga import Manga
-from manga_recommender.db.repositories.manga import get_manga_by_ids
-from manga_recommender.recommender.base import Candidate, Reason, RecommendationQuery
+from manga_recommender.db.repositories.manga import MangaFilters, get_manga_by_ids
+from manga_recommender.recommender.base import (
+    Candidate,
+    Reason,
+    RecommendationQuery,
+)
 from manga_recommender.recommender.runner import run_recommender
 from manga_recommender.schemas.recommendations import (
     Recommendation,
@@ -49,12 +53,23 @@ def _to_query(request: RecommendationRequest) -> RecommendationQuery:
             **_STRATEGY_WEIGHTS[request.strategy],
             **(request.weights or {}),
         },
-        exclude_ids=frozenset(request.exclude_ids),
-        excluded_tags=frozenset(request.exclude_tags),
         dislike_similarity_cutoff=request.dislike_similarity_cutoff,
         rank_constant=request.rank_constant,
         candidates_per_source=request.candidates_per_source,
         limit=request.limit,
+        filters=MangaFilters(
+            statuses=tuple(request.statuses),
+            types=tuple(request.types),
+            include_tag_keys=tuple(request.include_tags),
+            require_all_tags=True,
+            exclude_tag_keys=tuple(request.exclude_tags),
+            published_from=request.published_from,
+            published_to=request.published_to,
+            exclude_ids=tuple(request.exclude_ids),
+            min_votes=request.min_votes,
+            min_score=request.min_score,
+            exclude_explicit=request.exclude_explicit,
+        ),
     )
 
 

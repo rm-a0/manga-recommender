@@ -5,6 +5,7 @@ from collections.abc import Sequence
 
 from sqlalchemy.orm import Session
 
+from manga_recommender.db.repositories.manga import MangaFilters
 from manga_recommender.db.repositories.manga_embeddings import (
     get_embedding_by_manga_id,
     get_nearest_neighbours,
@@ -29,9 +30,10 @@ class ContentCandidateSource(BaseCandidateSource):
         self,
         db: Session,
         seed_ids: Sequence[uuid.UUID],
+        filters: MangaFilters,
         k: int,
     ) -> list[SeedMatches]:
-        """Return the `k` nearest manga of each seed.
+        """Return the `k` nearest manga of each seed, among those that pass `filters`.
 
         Skip a seed that has no embedding.
         """
@@ -41,7 +43,7 @@ class ContentCandidateSource(BaseCandidateSource):
             if not embedding:
                 continue
 
-            match_ids = get_nearest_neighbours(db, embedding, k)
+            match_ids = get_nearest_neighbours(db, embedding, filters, k)
             matches.append(SeedMatches(seed_id=seed_id, match_ids=match_ids))
 
         return matches
@@ -53,5 +55,5 @@ class ContentCandidateSource(BaseCandidateSource):
         k: int,
     ) -> list[Candidate]:
         """Return up to `k` candidates, best first."""
-        matches_per_seed = self._find_matches(db, query.liked_ids, k)
+        matches_per_seed = self._find_matches(db, query.liked_ids, query.filters, k)
         return round_robin_merge(matches_per_seed, query.liked_ids, self.name, k)
