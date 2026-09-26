@@ -1,14 +1,15 @@
 """Score a candidate by its rank in each source that nominated it."""
 
 from collections.abc import Mapping
-from typing import Final
 
 from manga_recommender.recommender.base import Candidate, RecommendationQuery
 
-_RANK_CONSTANT: Final[int] = 60
 
-
-def _score(source_weights: Mapping[str, float], source_ranks: dict[str, int]) -> float:
+def _score(
+    source_weights: Mapping[str, float],
+    source_ranks: dict[str, int],
+    rank_constant: int,
+) -> float:
     """Return the reciprocal rank fusion score of one candidate.
 
     Each source adds its weight divided by the rank it gave the candidate. The
@@ -17,7 +18,7 @@ def _score(source_weights: Mapping[str, float], source_ranks: dict[str, int]) ->
     """
     score = 0.0
     for source_name, candidate_rank in source_ranks.items():
-        score += source_weights[source_name] * (1 / (_RANK_CONSTANT + candidate_rank))
+        score += source_weights[source_name] * (1 / (rank_constant + candidate_rank))
     return score
 
 
@@ -31,5 +32,9 @@ def weighted_rank_fusion(
     candidate changes nothing.
     """
     for candidate in candidates:
-        candidate.score = _score(query.source_weights, candidate.source_ranks)
+        candidate.score = _score(
+            query.source_weights,
+            candidate.source_ranks,
+            query.rank_constant,
+        )
     return candidates

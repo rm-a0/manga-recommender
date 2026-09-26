@@ -1,7 +1,6 @@
 """Run one recommendation: nominate candidates, then filter, score and select."""
 
 import uuid
-from typing import Final
 
 from sqlalchemy.orm import Session
 
@@ -12,18 +11,6 @@ from manga_recommender.recommender.registry import (
     get_scorers,
     get_selectors,
 )
-
-_OVERFETCH_FACTOR: Final[int] = 5
-_OVERFETCH_FLOOR: Final[int] = 200
-
-
-def _candidate_pool_size(limit: int) -> int:
-    """Return how many candidates each source must nominate.
-
-    The filters drop candidates, so the pool must hold more than the reader
-    sees. The floor keeps a small `limit` from starving the filters.
-    """
-    return max(limit * _OVERFETCH_FACTOR, _OVERFETCH_FLOOR)
 
 
 def _run_sources(db: Session, query: RecommendationQuery) -> list[Candidate]:
@@ -40,7 +27,7 @@ def _run_sources(db: Session, query: RecommendationQuery) -> list[Candidate]:
         candidates = source.get_candidates(
             db=db,
             query=query,
-            k=_candidate_pool_size(query.limit),
+            k=query.candidates_per_source,
         )
 
         for rank, candidate in enumerate(candidates):

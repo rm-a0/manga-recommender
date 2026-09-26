@@ -108,13 +108,14 @@ def get_manga_ids_near(
     db: Session,
     embedding: MangaEmbedding,
     manga_ids: Sequence[uuid.UUID],
-    max_distance: float,
+    min_similarity: float,
 ) -> Sequence[uuid.UUID]:
-    """Return the ids, among `manga_ids`, that sit within `max_distance`.
+    """Return the ids, among `manga_ids`, that reach `min_similarity`.
 
-    The distance is the negative inner product, which pgvector writes as `<#>`.
-    The vectors have unit length, so a distance of -0.9 is a cosine similarity
-    of 0.9. A smaller distance means a closer manga.
+    `min_similarity` is a cosine similarity, and a manga at the cutoff counts.
+    pgvector's `<#>` gives the negative inner product. The vectors have unit
+    length, so that is the negative cosine, and the query compares it with
+    `-min_similarity`.
     """
     if not manga_ids:
         return []
@@ -123,7 +124,7 @@ def get_manga_ids_near(
         .where(MangaEmbedding.manga_id.in_(manga_ids))
         .where(
             MangaEmbedding.content_vector.max_inner_product(embedding.content_vector)
-            <= max_distance
+            <= -min_similarity
         )
     ).all()
 

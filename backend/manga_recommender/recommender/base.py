@@ -4,11 +4,19 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from typing import Final
 
 from sqlalchemy.orm import Session
 
+# The defaults that the API applies. The query itself has none.
+DEFAULT_RANK_CONSTANT: Final[int] = 60
+DEFAULT_DISLIKE_SIMILARITY_CUTOFF: Final[float] = 0.9
+# About four times the largest `limit`, because the filters drop candidates.
+DEFAULT_CANDIDATES_PER_SOURCE: Final[int] = 200
+DEFAULT_LIMIT: Final[int] = 20
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class RecommendationQuery:
     """Hold what the reader asked for. The service builds it from the request.
 
@@ -16,14 +24,23 @@ class RecommendationQuery:
     a key does not run. The values set how much each source's ranking counts
     when the scorer combines them. Only their ratios matter, so they need not
     sum to 1.
+
+    `dislike_similarity_cutoff` is a cosine similarity. `candidates_per_source`
+    sets how many candidates each source nominates, before the merge.
+
+    No field has a default, so a caller that forgets one fails at once. The
+    `DEFAULT_*` constants hold the values that the API uses.
     """
 
     liked_ids: tuple[uuid.UUID, ...]
     disliked_ids: tuple[uuid.UUID, ...]
     source_weights: Mapping[str, float]
-    exclude_ids: frozenset[uuid.UUID] = frozenset()
-    excluded_tags: frozenset[str] = frozenset()
-    limit: int = 20
+    exclude_ids: frozenset[uuid.UUID]
+    excluded_tags: frozenset[str]
+    dislike_similarity_cutoff: float
+    rank_constant: int
+    candidates_per_source: int
+    limit: int
 
 
 @dataclass(frozen=True, slots=True)
