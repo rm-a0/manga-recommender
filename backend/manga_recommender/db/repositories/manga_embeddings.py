@@ -3,7 +3,7 @@
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
-from typing import NotRequired, TypedDict, cast
+from typing import Final, NotRequired, TypedDict, cast
 
 from sqlalchemy import (
     CursorResult,
@@ -16,7 +16,16 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 
+from manga_recommender.db.models.manga import Manga
 from manga_recommender.db.models.manga_embeddings import MangaEmbedding
+from manga_recommender.db.repositories.manga import MangaFilters, filter_clauses
+
+_MIN_EF_SEARCH: Final[int] = 40
+
+_HNSW_SCAN_SETTINGS = text(
+    "SELECT set_config('hnsw.ef_search', :ef_search, true), "
+    "set_config('hnsw.iterative_scan', 'strict_order', true)"
+)
 
 
 class EmbeddingValues(TypedDict):
@@ -82,20 +91,22 @@ def get_embedding_by_manga_id(
 def get_nearest_neighbours(
     db: Session,
     embedding: MangaEmbedding,
+    filters: MangaFilters,
     n: int,
 ) -> Sequence[uuid.UUID]:
-    """Return the ids of the `n` manga nearest to `embedding`, nearest first.
+    """Return the ids of the `n` manga nearest to `embedding` that pass `filters`.
 
     Order by inner product, which the HNSW index supports. The vectors have
-    unit length, so this order is the cosine order. An HNSW scan returns at most
-    `hnsw.ef_search` rows, so set it to at least `n` for this transaction.
+    unit length, so this order is the cosine order. One HNSW pass returns at
+    most `hnsw.ef_search` rows, and a filter can drop most of them. The strict
+    iterative scan keeps searching, in distance order, until `n` rows pass or
+    the scan reaches `hnsw.max_scan_tuples`.
     """
-    db.execute(
-        text("SELECT set_config('hnsw.ef_search', :ef, true)"),
-        {"ef": str(max(n, 40))},
-    )
+    db.execute(_HNSW_SCAN_SETTINGS, {"ef_search": str(max(n, _MIN_EF_SEARCH))})
     return db.scalars(
         select(MangaEmbedding.manga_id)
+        .join(Manga)
+        .where(*filter_clauses(filters))
         .where(MangaEmbedding.id != embedding.id)
         .order_by(
             MangaEmbedding.content_vector.max_inner_product(embedding.content_vector)

@@ -1,11 +1,13 @@
 """Request and response models for the recommendation routes."""
 
 import uuid
+from datetime import date
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Self
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
+from manga_recommender.db.models.manga import MangaType
 from manga_recommender.recommender.base import (
     DEFAULT_CANDIDATES_PER_SOURCE,
     DEFAULT_DISLIKE_SIMILARITY_CUTOFF,
@@ -13,7 +15,7 @@ from manga_recommender.recommender.base import (
     DEFAULT_RANK_CONSTANT,
 )
 from manga_recommender.recommender.registry import get_source_names
-from manga_recommender.schemas.manga import MangaSummary
+from manga_recommender.schemas.manga import MangaStatus, MangaSummary
 
 
 class StrategyInfo(BaseModel):
@@ -49,8 +51,6 @@ class RecommendationRequest(BaseModel):
 
     liked_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
     disliked_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
-    exclude_ids: list[uuid.UUID] = Field(default_factory=list, max_length=500)
-    exclude_tags: list[str] = Field(default_factory=list, max_length=200)
     strategy: RecommendationStrategy = RecommendationStrategy.AUTO
     weights: dict[str, Annotated[float, Field(ge=0)]] | None = None
     dislike_similarity_cutoff: float = Field(
@@ -59,6 +59,28 @@ class RecommendationRequest(BaseModel):
     rank_constant: int = Field(DEFAULT_RANK_CONSTANT, ge=1, le=100)
     candidates_per_source: int = Field(DEFAULT_CANDIDATES_PER_SOURCE, ge=1, le=1000)
     limit: int = Field(DEFAULT_LIMIT, ge=1, le=50)
+    exclude_ids: list[uuid.UUID] = Field(default_factory=list, max_length=500)
+    exclude_tags: list[str] = Field(default_factory=list, max_length=200)
+    include_tags: list[str] = Field(default_factory=list, max_length=10)
+    published_from: date | None = None
+    published_to: date | None = None
+    min_votes: int | None = Field(None, ge=0)
+    min_score: float | None = Field(None, ge=0.0, le=1.0)
+    exclude_explicit: bool = False
+    statuses: list[MangaStatus] = Field(default_factory=list)
+    types: list[MangaType] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _require_valid_date_range(self) -> Self:
+        """Reject a published date range that is empty.
+
+        `published_to` is exclusive, so two equal dates are empty too.
+        """
+        if not self.published_from or not self.published_to:
+            return self
+        if self.published_from >= self.published_to:
+            raise ValueError("Invalid published date range")
+        return self
 
     @field_validator("weights")
     @classmethod

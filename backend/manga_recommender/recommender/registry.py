@@ -14,10 +14,6 @@ from manga_recommender.recommender.candidate_sources.content import (
 )
 from manga_recommender.recommender.candidate_sources.tags import TagsCandidateSource
 from manga_recommender.recommender.filters.dislikes import drop_near_dislikes
-from manga_recommender.recommender.filters.exclusions import (
-    exclude_manga_ids,
-    exclude_manga_with_tags,
-)
 from manga_recommender.recommender.scorers.rank_fusion import weighted_rank_fusion
 from manga_recommender.recommender.selectors.top_k import take_top_k
 
@@ -27,8 +23,6 @@ _SOURCE_MAP: dict[str, BaseCandidateSource] = {
 }
 
 _FILTERS: list[Filter] = [
-    exclude_manga_ids,
-    exclude_manga_with_tags,
     drop_near_dislikes,
 ]
 
