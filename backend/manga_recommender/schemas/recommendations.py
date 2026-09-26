@@ -6,6 +6,12 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
+from manga_recommender.recommender.base import (
+    DEFAULT_CANDIDATES_PER_SOURCE,
+    DEFAULT_DISLIKE_SIMILARITY_CUTOFF,
+    DEFAULT_LIMIT,
+    DEFAULT_RANK_CONSTANT,
+)
 from manga_recommender.recommender.registry import get_source_names
 from manga_recommender.schemas.manga import MangaSummary
 
@@ -41,13 +47,18 @@ class RecommendationRequest(BaseModel):
     supplies every weight the request leaves out.
     """
 
-    liked_ids: list[uuid.UUID] = Field(min_length=1)
-    disliked_ids: list[uuid.UUID] = []
-    exclude_ids: list[uuid.UUID] = []
-    exclude_tags: list[str] = []
+    liked_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
+    disliked_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
+    exclude_ids: list[uuid.UUID] = Field(default_factory=list, max_length=500)
+    exclude_tags: list[str] = Field(default_factory=list, max_length=200)
     strategy: RecommendationStrategy = RecommendationStrategy.AUTO
     weights: dict[str, Annotated[float, Field(ge=0)]] | None = None
-    limit: int = Field(20, ge=1, le=50)
+    dislike_similarity_cutoff: float = Field(
+        DEFAULT_DISLIKE_SIMILARITY_CUTOFF, ge=0, le=1
+    )
+    rank_constant: int = Field(DEFAULT_RANK_CONSTANT, ge=1, le=100)
+    candidates_per_source: int = Field(DEFAULT_CANDIDATES_PER_SOURCE, ge=1, le=1000)
+    limit: int = Field(DEFAULT_LIMIT, ge=1, le=50)
 
     @field_validator("weights")
     @classmethod

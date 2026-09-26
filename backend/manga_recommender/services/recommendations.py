@@ -51,6 +51,9 @@ def _to_query(request: RecommendationRequest) -> RecommendationQuery:
         },
         exclude_ids=frozenset(request.exclude_ids),
         excluded_tags=frozenset(request.exclude_tags),
+        dislike_similarity_cutoff=request.dislike_similarity_cutoff,
+        rank_constant=request.rank_constant,
+        candidates_per_source=request.candidates_per_source,
         limit=request.limit,
     )
 
