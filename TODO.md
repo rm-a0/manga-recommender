@@ -14,6 +14,9 @@ Planned work, not yet scheduled.
 
 ## Database
 
+- `is_explicit` depends on batch boundaries. Within one batch the most-voted
+  entry's flag wins. Across batches the flag combines with OR. Settle it with
+  the canonical rule below.
 - Make the highest-votes canonical rule hold across batches, not only within
   one. Needs an arbitration column on `manga` and a `WHERE` on the conflict
   update.
