@@ -4,7 +4,7 @@ from datetime import date
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum
+from sqlalchemy import Enum, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from manga_recommender.db.base import Base, enum_values
@@ -58,6 +58,7 @@ class Manga(Base):
     status: Mapped[MangaStatus | None] = mapped_column(
         Enum(MangaStatus, name="manga_status", values_callable=enum_values)
     )
+    is_explicit: Mapped[bool] = mapped_column(server_default=false())
     tags: Mapped[list[Tag]] = relationship(secondary=manga_tags, back_populates="manga")
     authors: Mapped[list[Author]] = relationship(
         secondary=manga_authors, back_populates="manga"

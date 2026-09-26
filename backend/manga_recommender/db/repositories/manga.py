@@ -69,6 +69,7 @@ class MangaUpsertValues(TypedDict):
     description: str | None
     status: MangaStatus | None
     image_url: str | None
+    is_explicit: bool
 
 
 class TagLinkValues(TypedDict):
@@ -180,9 +181,8 @@ def filter_clauses(filters: MangaFilters) -> list[ColumnElement[bool]]:
         clauses.append(
             Manga.metric.has(MangaMetric.bayesian_score >= filters.min_score)
         )
-    # TODO
-    # if filters.exclude_explicit:
-    #    clauses.append(Manga.is_explicit == False)
+    if filters.exclude_explicit:
+        clauses.append(~Manga.is_explicit)
     for term in filters.title_terms:
         pattern = _title_pattern(term)
         clauses.append(
@@ -353,6 +353,7 @@ def create_manga(
     description: str | None = None,
     image_url: str | None = None,
     status: MangaStatus | None = None,
+    is_explicit: bool = False,
 ) -> Manga:
     """Create and persist a new manga."""
     db_manga = Manga(
@@ -364,6 +365,7 @@ def create_manga(
         description=description,
         image_url=image_url,
         status=status,
+        is_explicit=is_explicit,
     )
     db.add(db_manga)
     db.flush()
@@ -383,6 +385,7 @@ def get_or_create_manga(
     description: str | None = None,
     image_url: str | None = None,
     status: MangaStatus | None = None,
+    is_explicit: bool = False,
 ) -> Manga:
     """Return the matching manga, creating it if none exists.
 
@@ -405,6 +408,7 @@ def get_or_create_manga(
         description=description,
         image_url=image_url,
         status=status,
+        is_explicit=is_explicit,
     )
 
 
@@ -420,10 +424,12 @@ def update_manga(
     description: str | None = None,
     image_url: str | None = None,
     status: MangaStatus | None = None,
+    is_explicit: bool | None = None,
 ) -> Manga:
     """Update the given manga's fields and persist the changes.
 
-    Only fields with a non-None value are updated.
+    Only fields with a non-None value are updated. `is_explicit` can only set
+    the flag, so a later source cannot clear it.
     """
     updates = {
         "mal_id": mal_id,
@@ -438,6 +444,8 @@ def update_manga(
     for attr, value in updates.items():
         if value is not None:
             setattr(manga, attr, value)
+    if is_explicit:
+        manga.is_explicit = True
     db.flush()
     return manga
 
@@ -455,6 +463,7 @@ def update_or_create_manga(
     description: str | None = None,
     image_url: str | None = None,
     status: MangaStatus | None = None,
+    is_explicit: bool = False,
 ) -> Manga:
     """Update the matching manga if one exists, otherwise create it.
 
@@ -477,6 +486,7 @@ def update_or_create_manga(
             description=description,
             image_url=image_url,
             status=status,
+            is_explicit=is_explicit,
         )
     return create_manga(
         db,
@@ -488,6 +498,7 @@ def update_or_create_manga(
         description=description,
         image_url=image_url,
         status=status,
+        is_explicit=is_explicit,
     )
 
 
@@ -655,6 +666,7 @@ def _bulk_upsert_without_mal_id(
             description=record["description"],
             image_url=record["image_url"],
             status=record["status"],
+            is_explicit=record["is_explicit"],
         )
         id_map[record["external_id"]] = manga_id.id
     return id_map
@@ -689,7 +701,11 @@ def _bulk_upsert_with_mal_id(
     db: Session,
     records: Sequence[MangaUpsertValues],
 ) -> dict[str, uuid.UUID]:
-    """Bulk-upsert manga records that have a mal_id in one round trip."""
+    """Bulk-upsert manga records that have a mal_id in one round trip.
+
+    A new value replaces a stored one only when it is not NULL. `is_explicit`
+    combines with OR, so a later source cannot clear the flag.
+    """
     if not records:
         return {}
     values = [
@@ -702,6 +718,7 @@ def _bulk_upsert_with_mal_id(
             "description": record["description"],
             "image_url": record["image_url"],
             "status": record["status"],
+            "is_explicit": record["is_explicit"],
         }
         for record in _pick_canonical_by_votes(records)
     ]
@@ -722,6 +739,7 @@ def _bulk_upsert_with_mal_id(
             ),
             "image_url": func.coalesce(insert_stmt.excluded.image_url, Manga.image_url),
             "status": func.coalesce(insert_stmt.excluded.status, Manga.status),
+            "is_explicit": or_(insert_stmt.excluded.is_explicit, Manga.is_explicit),
         },
     ).returning(Manga.mal_id, Manga.id)
 

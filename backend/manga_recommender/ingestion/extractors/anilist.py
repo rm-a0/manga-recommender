@@ -58,6 +58,7 @@ class AnilistExtractor(BaseExtractor):
                     isAdult
                 }
                 coverImage { large }
+                isAdult
             }
         }
     }
@@ -267,6 +268,7 @@ class AnilistExtractor(BaseExtractor):
             score_distribution=self._extract_score_distribution(media),
             fetched_at=datetime.now(UTC),
             image_url=self._extract_image_url(media),
+            is_explicit=media["isAdult"],
         )
 
     async def _retry(
