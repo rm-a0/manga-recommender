@@ -78,13 +78,13 @@ def test_get_manga_ids_near_returns_only_the_given_ids(
     embedding = get_embedding_by_manga_id(db_session, seed.id)
     assert embedding is not None
 
-    near_ids = get_manga_ids_near(db_session, embedding, [asked_for.id], -0.9)
+    near_ids = get_manga_ids_near(db_session, embedding, [asked_for.id], 0.9)
 
     assert list(near_ids) == [asked_for.id]
     assert not_asked_for.id not in near_ids
 
 
-def test_get_manga_ids_near_drops_the_manga_beyond_the_distance(
+def test_get_manga_ids_near_drops_the_manga_below_the_similarity(
     db_session: Session,
     embedded_manga: Callable[[str, float], Manga],
 ) -> None:
@@ -95,9 +95,9 @@ def test_get_manga_ids_near_drops_the_manga_beyond_the_distance(
     embedding = get_embedding_by_manga_id(db_session, seed.id)
     assert embedding is not None
 
-    # cos(5) is about 0.996 and cos(40) about 0.766, so only the twin is within
-    # a distance of -0.9.
-    near_ids = get_manga_ids_near(db_session, embedding, [twin.id, relative.id], -0.9)
+    # cos(5) is about 0.996 and cos(40) about 0.766, so only the twin reaches
+    # a similarity of 0.9.
+    near_ids = get_manga_ids_near(db_session, embedding, [twin.id, relative.id], 0.9)
 
     assert list(near_ids) == [twin.id]
 
@@ -111,4 +111,4 @@ def test_get_manga_ids_near_returns_nothing_without_ids(
     embedding = get_embedding_by_manga_id(db_session, seed.id)
     assert embedding is not None
 
-    assert get_manga_ids_near(db_session, embedding, [], -0.9) == []
+    assert get_manga_ids_near(db_session, embedding, [], 0.9) == []

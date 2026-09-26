@@ -13,7 +13,8 @@ from manga_recommender.recommender.base import (
     RecommendationQuery,
 )
 from manga_recommender.recommender.registry import get_candidate_source
-from manga_recommender.recommender.runner import _candidate_pool_size, run_recommender
+from manga_recommender.recommender.runner import run_recommender
+from tests.recommender.queries import make_query
 
 
 class _FakeSource(BaseCandidateSource):
@@ -37,28 +38,10 @@ class _FakeSource(BaseCandidateSource):
         ]
 
 
-def _query(**overrides: object) -> RecommendationQuery:
-    fields: dict[str, object] = {
-        "liked_ids": (),
-        "disliked_ids": (),
-        "source_weights": {"content": 1.0},
-    }
-    fields.update(overrides)
-    return RecommendationQuery(**fields)  # type: ignore[arg-type]
-
-
 @pytest.fixture
 def no_filters(monkeypatch: pytest.MonkeyPatch) -> None:
     """Run the runner with no filters, so only the merge is under test."""
     monkeypatch.setattr(registry, "_FILTERS", [])
-
-
-def test_candidate_pool_size_applies_the_floor() -> None:
-    assert _candidate_pool_size(2) == 200
-
-
-def test_candidate_pool_size_grows_with_the_limit() -> None:
-    assert _candidate_pool_size(100) == 500
 
 
 def test_get_candidate_source_rejects_an_unknown_name() -> None:
@@ -79,7 +62,7 @@ def test_run_recommender_runs_only_the_named_sources(
         {"wanted": _FakeSource("wanted", [wanted_id]), "skipped": skipped},
     )
 
-    candidates = run_recommender(db_session, _query(source_weights={"wanted": 1.0}))
+    candidates = run_recommender(db_session, make_query(source_weights={"wanted": 1.0}))
 
     assert [c.manga_id for c in candidates] == [wanted_id]
     assert skipped.seen_k is None
@@ -101,7 +84,7 @@ def test_run_recommender_merges_a_manga_that_two_sources_nominate(
     )
 
     candidates = run_recommender(
-        db_session, _query(source_weights={"first": 1.0, "second": 0.5})
+        db_session, make_query(source_weights={"first": 1.0, "second": 0.5})
     )
 
     shared = next(c for c in candidates if c.manga_id == shared_id)
@@ -110,7 +93,7 @@ def test_run_recommender_merges_a_manga_that_two_sources_nominate(
     assert {reason.source for reason in shared.reasons} == {"first", "second"}
 
 
-def test_run_recommender_asks_each_source_for_the_pool_size(
+def test_run_recommender_asks_each_source_for_candidates_per_source(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
     no_filters: None,
@@ -118,9 +101,9 @@ def test_run_recommender_asks_each_source_for_the_pool_size(
     source = _FakeSource("content", [uuid.uuid4()])
     monkeypatch.setattr(registry, "_SOURCE_MAP", {"content": source})
 
-    run_recommender(db_session, _query(limit=100))
+    run_recommender(db_session, make_query(candidates_per_source=37, limit=100))
 
-    assert source.seen_k == _candidate_pool_size(100)
+    assert source.seen_k == 37
 
 
 def test_run_recommender_applies_the_filters_in_registry_order(
@@ -149,7 +132,7 @@ def test_run_recommender_applies_the_filters_in_registry_order(
         registry, "_FILTERS", [_record("first", False), _record("second", True)]
     )
 
-    candidates = run_recommender(db_session, _query())
+    candidates = run_recommender(db_session, make_query())
 
     assert calls == ["first", "second"]
     assert candidates == []

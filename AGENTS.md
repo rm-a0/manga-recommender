@@ -15,6 +15,10 @@ before touching anything, whether you're an AI agent or a human contributor.
 
 - `backend/` application code: FastAPI routers and endpoints, services, DB models,
   ingestion/pipeline logic, recommendation logic.
+- The recommender evaluation harness: ground-truth loading, train/test splits,
+  metrics, baselines, and tuning runs. It counts as recommendation logic even
+  if it lives outside `backend/`. Tests for it stay agent-codable, per the tests
+  exception below.
 - **Agent's role here: discussion partner, explainer, and reviewer only.** Explain
   concepts, review diffs, flag bugs and design issues, suggest best practices, verify
   behavior (run linters/tests/queries). Do not write the implementation, even if asked
