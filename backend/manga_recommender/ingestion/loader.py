@@ -147,6 +147,7 @@ def load_batch(
                     status=r.status,
                     external_id=r.external_id,
                     votes_count=r.votes_count,
+                    is_explicit=r.is_explicit,
                 )
                 for r in records
             ],

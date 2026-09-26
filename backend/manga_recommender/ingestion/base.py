@@ -59,6 +59,7 @@ class NormalizedMangaRecord:
     score_distribution: list[int] | None
     fetched_at: datetime
     image_url: str | None
+    is_explicit: bool
 
     @field_validator("description")
     @classmethod

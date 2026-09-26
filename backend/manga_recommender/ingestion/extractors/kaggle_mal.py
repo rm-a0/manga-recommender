@@ -138,6 +138,7 @@ class KaggleMalExtractor(BaseExtractor):
         title = row.get("title", "").strip()
         if not title:
             raise ValueError(f"row {mal_id} has no title")
+        tags = self._extract_tags(row)
         return NormalizedMangaRecord(
             external_id=str(mal_id),
             mal_id=mal_id,
@@ -148,13 +149,14 @@ class KaggleMalExtractor(BaseExtractor):
             status=self._extract_status(row),
             published_date=self._extract_published_date(row),
             description=self._extract_description(row),
-            tags=self._extract_tags(row),
+            tags=tags,
             raw_score=self._extract_float(row.get("score", "")),
             raw_scale_max=10.0,
             votes_count=self._extract_int(row.get("scored_by", "")),
             score_distribution=None,
             fetched_at=datetime.now(UTC),
             image_url=row.get("image_url") or None,
+            is_explicit=any(tag.is_explicit for tag in tags or ()),
         )
 
     async def _stream(self) -> AsyncIterator[NormalizedMangaRecord]:
