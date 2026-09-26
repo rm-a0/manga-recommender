@@ -2,11 +2,14 @@
 
 import uuid
 from collections.abc import Callable
+from datetime import UTC, date, datetime
 from typing import Any
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
-from manga_recommender.db.models.manga import Manga
+from manga_recommender.db.models.manga import Manga, MangaType
+from manga_recommender.db.repositories.manga_metrics import create_manga_metric
 
 
 def _post(client: TestClient, **body: Any) -> Any:
@@ -223,6 +226,92 @@ class TestRecommendManga:
 
         assert _titles(payload) == ["Match 5"]
 
+    def test_keeps_only_the_manga_that_carry_every_included_tag(
+        self,
+        client: TestClient,
+        embedded_manga: Callable[[str, float], Manga],
+        tag_manga: Callable[[uuid.UUID, str], None],
+    ) -> None:
+        seed = embedded_manga("Seed", 0)
+        both = embedded_manga("Both", 5)
+        one = embedded_manga("One", 10)
+        for manga, names in ((both, ("action", "drama")), (one, ("action",))):
+            for name in names:
+                tag_manga(manga.id, name)
+
+        payload = _post(
+            client,
+            liked_ids=[str(seed.id)],
+            include_tags=["action", "drama"],
+            strategy="content",
+        ).json()
+
+        assert _titles(payload) == ["Both"]
+
+    def test_keeps_only_the_requested_types(
+        self,
+        client: TestClient,
+        db_session: Session,
+        embedded_manga: Callable[[str, float], Manga],
+    ) -> None:
+        seed = embedded_manga("Seed", 0)
+        embedded_manga("Manga", 5).type = MangaType.MANGA
+        embedded_manga("Manhwa", 10).type = MangaType.MANHWA
+        db_session.flush()
+
+        payload = _post(
+            client, liked_ids=[str(seed.id)], types=["manhwa"], strategy="content"
+        ).json()
+
+        assert _titles(payload) == ["Manhwa"]
+
+    def test_keeps_only_the_requested_published_range(
+        self,
+        client: TestClient,
+        db_session: Session,
+        embedded_manga: Callable[[str, float], Manga],
+    ) -> None:
+        seed = embedded_manga("Seed", 0)
+        embedded_manga("Old", 5).published_date = date(1995, 1, 1)
+        embedded_manga("Recent", 10).published_date = date(2021, 6, 1)
+        embedded_manga("Undated", 15)
+        db_session.flush()
+
+        payload = _post(
+            client,
+            liked_ids=[str(seed.id)],
+            published_from="2020-01-01",
+            strategy="content",
+        ).json()
+
+        assert _titles(payload) == ["Recent"]
+
+    def test_keeps_only_the_manga_with_enough_votes(
+        self,
+        client: TestClient,
+        db_session: Session,
+        embedded_manga: Callable[[str, float], Manga],
+    ) -> None:
+        seed = embedded_manga("Seed", 0)
+        embedded_manga("Unrated", 5)
+        for title, degrees, votes in (("Obscure", 10, 12), ("Popular", 15, 5000)):
+            create_manga_metric(
+                db_session,
+                manga_id=embedded_manga(title, degrees).id,
+                bayesian_score=0.7,
+                mean_score=0.7,
+                votes_count=votes,
+                source_count=1,
+                computed_at=datetime(2026, 1, 1, tzinfo=UTC),
+            )
+        db_session.flush()
+
+        payload = _post(
+            client, liked_ids=[str(seed.id)], min_votes=1000, strategy="content"
+        ).json()
+
+        assert _titles(payload) == ["Popular"]
+
 
 class TestRecommendMangaRejects:
     def test_an_empty_liked_ids_list(self, client: TestClient) -> None:
@@ -256,5 +345,28 @@ class TestRecommendMangaRejects:
         response = _post(
             client, liked_ids=[str(uuid.uuid4())], dislike_similarity_cutoff=1.5
         )
+
+        assert response.status_code == 422
+
+    def test_an_empty_published_range(self, client: TestClient) -> None:
+        """`published_to` is exclusive, so equal dates match nothing."""
+        response = _post(
+            client,
+            liked_ids=[str(uuid.uuid4())],
+            published_from="2020-01-01",
+            published_to="2020-01-01",
+        )
+
+        assert response.status_code == 422
+
+    def test_a_min_score_above_one(self, client: TestClient) -> None:
+        """`bayesian_score` is a fraction from 0 to 1."""
+        response = _post(client, liked_ids=[str(uuid.uuid4())], min_score=8.5)
+
+        assert response.status_code == 422
+
+    def test_more_than_ten_included_tags(self, client: TestClient) -> None:
+        tags = [f"tag {index}" for index in range(11)]
+        response = _post(client, liked_ids=[str(uuid.uuid4())], include_tags=tags)
 
         assert response.status_code == 422

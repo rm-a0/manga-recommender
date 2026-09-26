@@ -77,43 +77,21 @@ tuning. Starts after the frontend merge.
 
 ### 1. Configurable engine
 
-- Expose `_RANK_CONSTANT`, `_OVERFETCH_FACTOR`, `_OVERFETCH_FLOOR` and the
-  dislike `_MAX_DISTANCE` as request fields. No settings class, no env vars:
-  the default is `Field(0.9, ge=0, le=1)` on the request, visible in OpenAPI.
-  A tuned value is a code change.
-- Flat fields on `RecommendationRequest` and `RecommendationQuery`. No
-  grouping classes. Defaults are `DEFAULT_*: Final` constants in
-  `recommender/base.py`, applied only by the request (`Field(DEFAULT_X, ...)`).
-  The query has no defaults and is `kw_only`: `_to_query` passes every field,
-  so a request field it forgets fails loudly instead of being ignored. Tests
-  and the eval build queries from a factory plus `dataclasses.replace`.
-- `candidates_per_source` is a fixed default (200), with no floor or formula.
-  An explicit value is used as given. Raise the default if the `limit` cap
-  grows.
-- Echo the resolved values in `RecommendationResult`, so a run is reproducible.
-- Bound every field. It is a public engine. `liked_ids`, `exclude_ids` and
-  `exclude_tags` have no `max_length` today. Pool size drives
-  `hnsw.ef_search`, so cap it (~1000). `rank_constant >= 1`.
-- Thresholds in similarity terms (cosine 0..1, higher = closer), never raw
-  negative inner product. Convert inside the repository. The raw value is
-  pgvector's convention and shifts with the embedding model.
-- Keep the dislike threshold and a liked near-duplicate threshold separate.
-  They answer different questions.
+- Done: `rank_constant`, `candidates_per_source`, `dislike_similarity_cutoff`
+  and list bounds on the request. Left: drawer controls for the three fields
+  in the frontend.
 
 ### 2. Catalogue filters
 
-- `year_from` / `year_to`, `types`, `statuses`, `include_tags` (decide any vs
-  all), `exclude_tags` (exists), `min_score` (`bayesian_score`), `min_votes`,
-  maybe `exclude_explicit`. `year_from <= year_to` in a model validator.
-- `min_votes` doubles as a popularity floor, which drops most art books and
-  guidebooks.
-- NULL semantics: `published_date` and `type` are nullable, and a manga with no
-  `manga_metrics` row has no score. Make it explicit (`include_unknown: bool`).
-- Push catalogue filters into the source queries, not post-filters. Strict
-  filters otherwise starve the 200-candidate pool. One `WHERE` builder shared by
-  the kNN and tags queries. Filtered HNSW returns fewer than `k` rows: use
-  `hnsw.iterative_scan = relaxed_order` (pgvector >= 0.8). Seed-dependent
-  filters (dislikes, franchise) stay post-filters.
+- Done: types, statuses, include tags (all), exclude tags, published range,
+  exclude ids, `min_votes`, `min_score`. One `filter_clauses` builder serves
+  the catalogue and every source query. The kNN query uses a strict
+  iterative HNSW scan. Seed-dependent filters (dislikes, franchise) stay
+  post-filters.
+- Left: `exclude_explicit` has no effect yet. Add an explicit flag to the
+  `manga` model, then one clause in `filter_clauses`.
+- Left: drawer controls for the new request fields in the frontend.
+- Check the pgvector version on Rivestack (>= 0.8 for iterative scan).
 
 ### 3. AniList recommendations and relations
 
@@ -151,6 +129,8 @@ tuning. Starts after the frontend merge.
 
 - Filter: drop candidates in a seed's franchise. Or a selector: at most one per
   franchise. Exposed as `hide_same_series: bool = True`, not a number.
+- A liked near-duplicate cutoff stays separate from the dislike cutoff. They
+  answer different questions.
 - Fallback where relations are missing: `similarity > t AND (shared author OR
   title-token overlap)`, applied to liked seeds.
 - Calibrate `t` from relations: cosine histogram of franchise pairs vs

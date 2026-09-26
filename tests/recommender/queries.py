@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 
+from manga_recommender.db.repositories.manga import MangaFilters
 from manga_recommender.recommender.base import (
     DEFAULT_CANDIDATES_PER_SOURCE,
     DEFAULT_DISLIKE_SIMILARITY_CUTOFF,
@@ -14,12 +15,11 @@ _BASE_QUERY = RecommendationQuery(
     liked_ids=(),
     disliked_ids=(),
     source_weights={"content": 1.0},
-    exclude_ids=frozenset(),
-    excluded_tags=frozenset(),
     dislike_similarity_cutoff=DEFAULT_DISLIKE_SIMILARITY_CUTOFF,
     rank_constant=DEFAULT_RANK_CONSTANT,
     candidates_per_source=DEFAULT_CANDIDATES_PER_SOURCE,
     limit=DEFAULT_LIMIT,
+    filters=MangaFilters(),
 )
 
 
