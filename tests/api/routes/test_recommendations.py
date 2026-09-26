@@ -312,6 +312,23 @@ class TestRecommendManga:
 
         assert _titles(payload) == ["Popular"]
 
+    def test_drops_an_explicit_manga_when_asked(
+        self,
+        client: TestClient,
+        db_session: Session,
+        embedded_manga: Callable[[str, float], Manga],
+    ) -> None:
+        seed = embedded_manga("Seed", 0)
+        embedded_manga("Explicit", 5).is_explicit = True
+        embedded_manga("Clean", 10)
+        db_session.flush()
+
+        payload = _post(
+            client, liked_ids=[str(seed.id)], exclude_explicit=True, strategy="content"
+        ).json()
+
+        assert _titles(payload) == ["Clean"]
+
 
 class TestRecommendMangaRejects:
     def test_an_empty_liked_ids_list(self, client: TestClient) -> None:

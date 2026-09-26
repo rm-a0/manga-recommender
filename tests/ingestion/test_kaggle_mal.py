@@ -557,3 +557,17 @@ def test_to_record_reads_a_blank_english_title_as_none():
     record = extractor._to_record(_row(title_english="  "))
 
     assert record.title_english is None
+
+
+def test_to_record_marks_a_manga_with_an_explicit_genre_explicit():
+    extractor = _extractor()
+
+    record = extractor._to_record(_row(genres="Erotica|Romance"))
+
+    assert record.is_explicit is True
+
+
+def test_to_record_keeps_a_manga_without_an_explicit_genre_clean():
+    extractor = _extractor()
+
+    assert extractor._to_record(_row()).is_explicit is False

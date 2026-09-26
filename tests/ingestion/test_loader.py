@@ -12,6 +12,7 @@ from manga_recommender.db.models.tags import manga_tags
 from manga_recommender.db.repositories.manga import (
     create_manga,
     get_manga_by_mal_id,
+    get_manga_by_source_external_id,
 )
 from manga_recommender.db.repositories.manga_external_rating import (
     get_external_ratings_by_manga_and_source,
@@ -73,6 +74,7 @@ def _record(
     raw_score: float | None = None,
     votes_count: int | None = 100,
     image_url: str | None = None,
+    is_explicit: bool = False,
 ) -> NormalizedMangaRecord:
     return NormalizedMangaRecord(
         external_id=external_id,
@@ -91,6 +93,7 @@ def _record(
         score_distribution=None,
         fetched_at=datetime.now(UTC),
         image_url=image_url,
+        is_explicit=is_explicit,
     )
 
 
@@ -388,6 +391,66 @@ class TestLoadBatch:
             patched_session_scope, manga.id, test_source.id
         )
         assert {r.external_id for r in ratings} == {"1", "2", "3"}
+
+    def test_a_later_clean_batch_keeps_the_explicit_flag(
+        self, patched_session_scope: Session, test_source: Source
+    ) -> None:
+        """One source marks a manga explicit. A later source must not clear it."""
+        load_batch(
+            [_record("1", mal_id=707, is_explicit=True)],
+            test_source.id,
+            tag_cache={},
+            author_cache={},
+        )
+
+        load_batch(
+            [_record("1", mal_id=707, is_explicit=False)],
+            test_source.id,
+            tag_cache={},
+            author_cache={},
+        )
+
+        manga = get_manga_by_mal_id(patched_session_scope, 707)
+        assert manga is not None
+        assert manga.is_explicit is True
+
+    def test_the_busier_entry_decides_the_flag_within_one_batch(
+        self, patched_session_scope: Session, test_source: Source
+    ) -> None:
+        """The flag is metadata, so the entry with the most votes decides it."""
+        records = [
+            _record("1", mal_id=708, votes_count=10, is_explicit=True),
+            _record("2", mal_id=708, votes_count=5_000, is_explicit=False),
+        ]
+
+        load_batch(records, test_source.id, tag_cache={}, author_cache={})
+
+        manga = get_manga_by_mal_id(patched_session_scope, 708)
+        assert manga is not None
+        assert manga.is_explicit is False
+
+    def test_a_later_clean_batch_keeps_the_flag_without_a_mal_id(
+        self, patched_session_scope: Session, test_source: Source
+    ) -> None:
+        load_batch(
+            [_record("1", mal_id=None, is_explicit=True)],
+            test_source.id,
+            tag_cache={},
+            author_cache={},
+        )
+
+        load_batch(
+            [_record("1", mal_id=None, is_explicit=False)],
+            test_source.id,
+            tag_cache={},
+            author_cache={},
+        )
+
+        manga = get_manga_by_source_external_id(
+            patched_session_scope, test_source.id, "1"
+        )
+        assert manga is not None
+        assert manga.is_explicit is True
 
     def test_null_votes_never_beat_a_real_count(
         self, patched_session_scope: Session, test_source: Source
