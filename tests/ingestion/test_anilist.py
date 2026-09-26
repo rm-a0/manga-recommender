@@ -35,6 +35,7 @@ def _media(
     staff_edges: list[dict] | None = None,
     score_distribution: list[dict] | None = None,
     cover_image_url: str | None = "https://cdn.test/cover-large.jpg",
+    is_adult: bool = False,
 ) -> dict:
     return {
         "id": media_id,
@@ -59,6 +60,7 @@ def _media(
             else [{"score": 10, "amount": 3}, {"score": 90, "amount": 7}]
         },
         "coverImage": {"large": cover_image_url},
+        "isAdult": is_adult,
     }
 
 
@@ -633,3 +635,25 @@ def test_to_record_reads_a_null_english_title_as_none():
     record = extractor._to_record(_media(title_english=None))
 
     assert record.title_english is None
+
+
+def test_to_record_reads_the_media_level_adult_flag():
+    extractor = _extractor()
+
+    assert extractor._to_record(_media(is_adult=True)).is_explicit is True
+    assert extractor._to_record(_media(is_adult=False)).is_explicit is False
+
+
+def test_to_record_ignores_the_adult_flag_of_a_tag():
+    """AniList also marks tags on mainstream titles as adult."""
+    extractor = _extractor()
+    tag = {
+        "name": "Nudity",
+        "rank": 40,
+        "category": "Sexual Content",
+        "isMediaSpoiler": False,
+        "isGeneralSpoiler": False,
+        "isAdult": True,
+    }
+
+    assert extractor._to_record(_media(tags=[tag])).is_explicit is False

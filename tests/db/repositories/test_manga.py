@@ -657,6 +657,21 @@ def test_count_manga_applies_the_metric_filters(db_session: Session) -> None:
     assert count_manga(db_session, MangaFilters(min_votes=1000)) == 1
 
 
+def test_get_all_manga_drops_an_explicit_manga(db_session: Session) -> None:
+    create_manga(db_session, title="Clean")
+    create_manga(db_session, title="Explicit", is_explicit=True)
+
+    found = _page(db_session, MangaFilters(exclude_explicit=True))
+
+    assert [m.title for m in found] == ["Clean"]
+
+
+def test_get_all_manga_keeps_an_explicit_manga_by_default(db_session: Session) -> None:
+    create_manga(db_session, title="Explicit", is_explicit=True)
+
+    assert [m.title for m in _page(db_session)] == ["Explicit"]
+
+
 def test_get_all_manga_filters_by_a_title_term(db_session: Session) -> None:
     create_manga(db_session, title="Berserk")
     create_manga(db_session, title="Monster")

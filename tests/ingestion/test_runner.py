@@ -48,6 +48,7 @@ def _record(external_id: str) -> NormalizedMangaRecord:
         score_distribution=None,
         fetched_at=datetime.now(UTC),
         image_url=None,
+        is_explicit=False,
     )
 
 
