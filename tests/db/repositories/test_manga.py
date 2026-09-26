@@ -621,6 +621,42 @@ def test_get_all_manga_treats_published_to_as_exclusive(db_session: Session) -> 
     assert found == []
 
 
+def test_get_all_manga_drops_an_excluded_id(db_session: Session) -> None:
+    kept = create_manga(db_session, title="Kept")
+    excluded = create_manga(db_session, title="Excluded")
+
+    found = _page(db_session, MangaFilters(exclude_ids=(excluded.id,)))
+
+    assert [m.id for m in found] == [kept.id]
+
+
+def test_get_all_manga_filters_by_min_votes(db_session: Session) -> None:
+    _rated(db_session, "Popular", bayesian_score=0.7, votes_count=5000)
+    _rated(db_session, "Obscure", bayesian_score=0.7, votes_count=12)
+    _rated(db_session, "Unrated")
+
+    found = _page(db_session, MangaFilters(min_votes=1000))
+
+    assert [m.title for m in found] == ["Popular"]
+
+
+def test_get_all_manga_filters_by_min_score(db_session: Session) -> None:
+    _rated(db_session, "Good", bayesian_score=0.85, votes_count=100)
+    _rated(db_session, "Poor", bayesian_score=0.4, votes_count=100)
+    _rated(db_session, "Unrated")
+
+    found = _page(db_session, MangaFilters(min_score=0.8))
+
+    assert [m.title for m in found] == ["Good"]
+
+
+def test_count_manga_applies_the_metric_filters(db_session: Session) -> None:
+    _rated(db_session, "Popular", bayesian_score=0.7, votes_count=5000)
+    _rated(db_session, "Obscure", bayesian_score=0.7, votes_count=12)
+
+    assert count_manga(db_session, MangaFilters(min_votes=1000)) == 1
+
+
 def test_get_all_manga_filters_by_a_title_term(db_session: Session) -> None:
     create_manga(db_session, title="Berserk")
     create_manga(db_session, title="Monster")
@@ -1352,7 +1388,7 @@ def test_get_manga_ids_by_tag_ids_orders_by_the_number_of_shared_tags(
     tag_manga(two_tags.id, "Drama")
 
     ((_, seed_tag_ids),) = get_tag_ids_by_manga_ids(db_session, [seed.id])
-    rows = get_manga_ids_by_tag_ids(db_session, seed_tag_ids, 10)
+    rows = get_manga_ids_by_tag_ids(db_session, seed_tag_ids, MangaFilters(), 10)
 
     # The seed and `two_tags` both share two tags, so their order between them
     # rests on the id tiebreaker.
@@ -1377,7 +1413,7 @@ def test_get_manga_ids_by_tag_ids_applies_the_limit(
         for tag_id in manga_tag_ids
     ]
 
-    assert len(get_manga_ids_by_tag_ids(db_session, tag_ids, 2)) == 2
+    assert len(get_manga_ids_by_tag_ids(db_session, tag_ids, MangaFilters(), 2)) == 2
 
 
 def test_get_manga_ids_by_tag_ids_counts_only_the_shared_tags(
@@ -1400,8 +1436,28 @@ def test_get_manga_ids_by_tag_ids_counts_only_the_shared_tags(
     ((_, seed_tag_ids),) = get_tag_ids_by_manga_ids(db_session, [seed.id])
     counts = {
         manga_id: count
-        for manga_id, count in get_manga_ids_by_tag_ids(db_session, seed_tag_ids, 10)
+        for manga_id, count in get_manga_ids_by_tag_ids(
+            db_session, seed_tag_ids, MangaFilters(), 10
+        )
     }
 
     assert counts[broadly_tagged.id] == 1
     assert counts[narrowly_tagged.id] == 2
+
+
+def test_get_manga_ids_by_tag_ids_returns_only_the_manga_that_pass_the_filters(
+    db_session: Session,
+    plain_manga: Callable[[str], Manga],
+    tag_manga: Callable[[uuid.UUID, str], None],
+) -> None:
+    kept = plain_manga("Kept")
+    excluded = plain_manga("Excluded")
+    for manga in (kept, excluded):
+        tag_manga(manga.id, "Action")
+    ((_, tag_ids),) = get_tag_ids_by_manga_ids(db_session, [kept.id])
+
+    rows = get_manga_ids_by_tag_ids(
+        db_session, tag_ids, MangaFilters(exclude_ids=(excluded.id,)), 10
+    )
+
+    assert [manga_id for manga_id, _ in rows] == [kept.id]

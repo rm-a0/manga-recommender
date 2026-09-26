@@ -2,9 +2,11 @@
 
 from collections.abc import Callable
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga import Manga
+from manga_recommender.db.repositories.manga import MangaFilters
 from manga_recommender.db.repositories.manga_embeddings import (
     get_embedding_by_manga_id,
     get_manga_ids_near,
@@ -33,7 +35,7 @@ def test_get_nearest_neighbours_orders_by_distance(
     embedding = get_embedding_by_manga_id(db_session, seed.id)
     assert embedding is not None
 
-    assert list(get_nearest_neighbours(db_session, embedding, 3)) == [
+    assert list(get_nearest_neighbours(db_session, embedding, MangaFilters(), 3)) == [
         near.id,
         far.id,
         opposite.id,
@@ -50,7 +52,9 @@ def test_get_nearest_neighbours_excludes_the_seed(
     embedding = get_embedding_by_manga_id(db_session, seed.id)
     assert embedding is not None
 
-    assert seed.id not in get_nearest_neighbours(db_session, embedding, 10)
+    assert seed.id not in get_nearest_neighbours(
+        db_session, embedding, MangaFilters(), 10
+    )
 
 
 def test_get_nearest_neighbours_returns_at_most_n(
@@ -64,7 +68,50 @@ def test_get_nearest_neighbours_returns_at_most_n(
     embedding = get_embedding_by_manga_id(db_session, seed.id)
     assert embedding is not None
 
-    assert len(get_nearest_neighbours(db_session, embedding, 2)) == 2
+    assert len(get_nearest_neighbours(db_session, embedding, MangaFilters(), 2)) == 2
+
+
+def test_get_nearest_neighbours_returns_only_the_manga_that_pass_the_filters(
+    db_session: Session,
+    embedded_manga: Callable[[str, float], Manga],
+) -> None:
+    seed = embedded_manga("Seed", 0)
+    excluded = embedded_manga("Excluded", 5)
+    kept = embedded_manga("Kept", 10)
+
+    embedding = get_embedding_by_manga_id(db_session, seed.id)
+    assert embedding is not None
+
+    found = get_nearest_neighbours(
+        db_session, embedding, MangaFilters(exclude_ids=(excluded.id,)), 10
+    )
+
+    assert list(found) == [kept.id]
+
+
+def test_get_nearest_neighbours_fills_n_past_a_filter_that_drops_the_nearest(
+    db_session: Session,
+    embedded_manga: Callable[[str, float], Manga],
+) -> None:
+    """More filtered-out manga sit nearer than one HNSW pass of 40 rows reaches.
+
+    Turning off sequential scans forces the HNSW index, as on the full
+    catalogue. Without the iterative scan the result is empty.
+    """
+    db_session.execute(text("SET LOCAL enable_seqscan = off"))
+    seed = embedded_manga("Seed", 0)
+    near_ids = tuple(embedded_manga(f"Near {i}", 1 + i / 10).id for i in range(60))
+    first_far = embedded_manga("First Far", 80)
+    second_far = embedded_manga("Second Far", 85)
+
+    embedding = get_embedding_by_manga_id(db_session, seed.id)
+    assert embedding is not None
+
+    found = get_nearest_neighbours(
+        db_session, embedding, MangaFilters(exclude_ids=near_ids), 2
+    )
+
+    assert list(found) == [first_far.id, second_far.id]
 
 
 def test_get_manga_ids_near_returns_only_the_given_ids(
