@@ -6,8 +6,8 @@ import pytest
 
 from manga_recommender.core.config import KaggleMalSettings
 from manga_recommender.db.models.manga import MangaStatus, MangaType
-from manga_recommender.ingestion.base import NormalizedTag
-from manga_recommender.ingestion.extractors.kaggle_mal import KaggleMalExtractor
+from manga_recommender.ingestion.catalog.base import NormalizedTag
+from manga_recommender.ingestion.catalog.extractors.kaggle_mal import KaggleMalExtractor
 
 CSV_FIELDS = [
     "mal_id",

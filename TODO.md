@@ -4,22 +4,10 @@ Planned work, not yet scheduled.
 
 ## Ingestion
 
-- Per-source ingest mode flags (`--create-only` / `--update-only`), so a second
-  source can refresh ratings without overwriting the first one's metadata.
-  Depends on splitting `ingestion/` into catalogue vs. user-signal submodules.
-- Bound the 429 retry depth. It resets `attempt` to 1 and recurses.
-- Backpressure on the fetch side. `_stream` schedules every chunk at once, and
-  only the consumer is throttled.
 - Update author name cleanup and formating
 
 ## Database
 
-- `is_explicit` depends on batch boundaries. Within one batch the most-voted
-  entry's flag wins. Across batches the flag combines with OR. Settle it with
-  the canonical rule below.
-- Make the highest-votes canonical rule hold across batches, not only within
-  one. Needs an arbitration column on `manga` and a `WHERE` on the conflict
-  update.
 - Reconcile records that have no `mal_id` against the same series from another
   source. Measure how many AniList entries lack one before choosing an approach.
 - Prune link rows a source no longer writes. Both link tables are insert-only
@@ -37,8 +25,6 @@ Planned work, not yet scheduled.
   ("Kohei" beating "Kōhei", "CLAMP" flattened by an ALL-CAPS-first source). Needs
   richer rules, or `Source.weight` as the tiebreak. Needs a re-ingest either way:
   only the winning spelling is stored, so the alternatives are already gone.
-- Migrate DB from Supabase to Aiven, delete all alembic versions before seeding
-  and generate initial one from scratch.
 
 ## API
 
@@ -59,50 +45,22 @@ Planned work, not yet scheduled.
   sort, so the sub-route is a second, weaker parameter surface that will drift.
   Either drop it, or keep it and never grow filters on it. Blocked on the
   frontend: the sub-route takes a tag ID, the `/manga` filter takes a tag name.
-- Sorting by score. `raw_score` sits on `manga_external_ratings` against a
-  per-source `raw_scale_max`, so ordering by it means normalizing and aggregating
-  per row. Needs a normalized score column on `manga`, written at ingest —
-  the same shape as the arbitration column the database section already wants.
-- A manga with no embedding needs its own answer on the recommendation routes.
-  A large minority of the catalogue is outside the `export` gate — the 37% figure
-  came from the Kaggle seed and no longer holds, so re-derive it from
-  `count(*) FROM manga` against 93,514 exported. "More like this" on an
-  unexported manga is not an empty result — it is "no usable synopsis, here is
-  shared tags instead". Decide the response shape before the semantic route
-  ships, so the frontend can render a fallback rather than an apology.
-- An index on `manga.title`. Every page already pays a full sort for
-  `ORDER BY title OFFSET n`.
 
 ## Recommender
 
 Order: configurable engine -> AniList signals -> collab -> franchise -> eval ->
 tuning. Starts after the frontend merge.
 
-### 1. Configurable engine
-
-- Done: `rank_constant`, `candidates_per_source`, `dislike_similarity_cutoff`
-  and list bounds on the request. Left: drawer controls for the three fields
-  in the frontend.
-
-### 2. Catalogue filters
-
-- Done: types, statuses, include tags (all), exclude tags, published range,
-  exclude ids, `min_votes`, `min_score`. One `filter_clauses` builder serves
-  the catalogue and every source query. The kNN query uses a strict
-  iterative HNSW scan. Seed-dependent filters (dislikes, franchise) stay
-  post-filters.
-- Left: `exclude_explicit` has no effect yet. Add an explicit flag to the
-  `manga` model, then one clause in `filter_clauses`.
-- Left: drawer controls for the new request fields in the frontend.
-- Check the pgvector version on Rivestack (>= 0.8 for iterative scan).
-
 ### 3. AniList recommendations and relations
 
 - Add `recommendations(perPage: 25, sort: RATING_DESC)` and `relations` to
   `MANGA_QUERY`. Check query complexity on one chunk. `chunk_size` may drop.
-- Store raw edges by external id, resolve to `manga_id` in a pipeline stage.
-  Targets are often in another chunk or not ingested.
-  `manga_external_ratings(source_id, external_id)` already maps them.
+- The DB stores only computed results. A separate signals extractor
+  (`ingestion/signals/`) writes the raw edges, by external id, to artifacts
+  (`data/artifacts/edges/`), like `export` does. The catalogue extractor stays
+  as it is. Both share one `AnilistClient` for rate limit and retries. Rebuilding the matrix then needs no re-fetch, and the eval
+  reads the same raw pairs. A pipeline stage resolves the ids to `manga_id`
+  through `manga_external_ratings(source_id, external_id)`.
 - Relations include anime nodes: keep `type == MANGA` only.
 - Franchise = connected components over SEQUEL, PREQUEL, SIDE_STORY, SPIN_OFF,
   ALTERNATIVE, PARENT, SUMMARY. Not CHARACTER or OTHER: crossovers glue
@@ -112,8 +70,12 @@ tuning. Starts after the frontend merge.
 
 - One public `collab` source. AniList and Goodreads are provenance, not
   strategies, so neither name reaches the API.
-- Raw signal tables per origin -> `collab` stage -> `manga_neighbours(manga_id,
-  neighbour_id, score)`, top ~50 per manga. Sparse, not a dense matrix.
+- Raw edge artifacts per origin -> `collab` stage -> `manga_neighbours(manga_id,
+  neighbour_id, score)`, top ~50 per manga. Sparse, not a dense matrix. One
+  merged score, not a column per source: a column per source needs a
+  migration for each new source. If per-source weights must ever be tunable
+  at request time, switch to a `source_id` column instead.
+- Relations -> `franchise` stage -> one franchise id per manga.
 - Stage: normalize per source per row, symmetrize (A->B implies B->A, take
   max), weighted sum, top-N. One input today. Do not build a plugin framework
   for one input.

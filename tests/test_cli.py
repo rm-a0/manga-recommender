@@ -8,8 +8,10 @@ runner = CliRunner()
 # The ingest command imports these inside its body to keep heavy modules off
 # the `app` command's import path. Patch them where they are defined, not on
 # `cli`, because the import runs on every invocation.
-RUN_INGESTION = "manga_recommender.ingestion.runner.run_ingestion"
-REGISTERED_SOURCES = "manga_recommender.ingestion.registry.get_all_registered_sources"
+RUN_INGESTION = "manga_recommender.ingestion.catalog.runner.run_ingestion"
+REGISTERED_SOURCES = (
+    "manga_recommender.ingestion.catalog.registry.get_all_registered_sources"
+)
 RUN_PIPELINE = "manga_recommender.pipeline.runner.run_pipeline"
 PIPELINE_STAGES = "manga_recommender.pipeline.registry.get_all_pipeline_stages"
 

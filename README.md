@@ -301,12 +301,13 @@ manga-recommender/
 │   ├── services/               # Business logic - no HTTP, no SQL strings
 │   │
 │   └── ingestion/
-│       ├── base.py              # BaseExtractor ABC, NormalizedMangaRecord
-│       ├── extractors/          # anilist.py (concurrent id_in chunk fetch),
-│       │                          kaggle_mal.py (local CSV)
-│       ├── registry.py          # source name -> extractor/default-weight mapping
-│       ├── loader.py            # persists NormalizedMangaRecords to the database
-│       └── runner.py            # seeds sources, batches extraction, calls loader
+│       └── catalog/             # manga metadata ingest
+│           ├── base.py          # BaseExtractor ABC, NormalizedMangaRecord
+│           ├── extractors/      # anilist.py (concurrent id_in chunk fetch),
+│           │                      kaggle_mal.py (local CSV)
+│           ├── registry.py      # source name -> extractor/default-weight mapping
+│           ├── loader.py        # persists NormalizedMangaRecords to the database
+│           └── runner.py        # seeds sources, batches extraction, calls loader
 │
 ├── alembic/                     # Migrations (`uv run alembic revision --autogenerate`)
 ├── tests/                       # pytest, mirrors backend/ layout
