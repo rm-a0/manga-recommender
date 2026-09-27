@@ -21,6 +21,7 @@ dependencies = [
     "typer>=0.24.1",
     "structlog>=26.1.0",
     "aiolimiter>=1.2.1",
+    "tenacity>=9.0",
     "pgvector>=0.5.0",
 ]
 
@@ -54,7 +55,6 @@ dev = [
 
 pipeline = [
     "asyncio-throttle>=1.0",
-    "tenacity>=8.0",
     "rich>=13.0",
     "pyarrow>=25.0.1",
     "numpy>=1.26",

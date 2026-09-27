@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from manga_recommender.ingestion.base import NormalizedMangaRecord
+from manga_recommender.ingestion.catalog.base import NormalizedMangaRecord
 
 
 def _record(description: str | None) -> NormalizedMangaRecord:

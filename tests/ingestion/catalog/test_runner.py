@@ -7,8 +7,8 @@ import pytest
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.repositories.sources import get_source_by_name
-from manga_recommender.ingestion import runner
-from manga_recommender.ingestion.base import NormalizedMangaRecord
+from manga_recommender.ingestion.catalog import runner
+from manga_recommender.ingestion.catalog.base import NormalizedMangaRecord
 
 
 @pytest.fixture

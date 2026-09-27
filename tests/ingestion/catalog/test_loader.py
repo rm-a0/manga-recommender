@@ -18,9 +18,12 @@ from manga_recommender.db.repositories.manga_external_rating import (
     get_external_ratings_by_manga_and_source,
 )
 from manga_recommender.db.repositories.tags import create_tag
-from manga_recommender.ingestion import loader
-from manga_recommender.ingestion.base import NormalizedMangaRecord, NormalizedTag
-from manga_recommender.ingestion.loader import (
+from manga_recommender.ingestion.catalog import loader
+from manga_recommender.ingestion.catalog.base import (
+    NormalizedMangaRecord,
+    NormalizedTag,
+)
+from manga_recommender.ingestion.catalog.loader import (
     _sync_authors_for_manga,
     _sync_tags_for_manga,
     load_batch,
