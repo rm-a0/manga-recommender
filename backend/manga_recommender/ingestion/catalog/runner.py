@@ -9,8 +9,8 @@ import structlog
 from manga_recommender.db.repositories.manga import delete_orphaned_manga
 from manga_recommender.db.repositories.sources import get_or_create_source
 from manga_recommender.db.session import session_scope
-from manga_recommender.ingestion.loader import load_batch
-from manga_recommender.ingestion.registry import (
+from manga_recommender.ingestion.catalog.loader import load_batch
+from manga_recommender.ingestion.catalog.registry import (
     get_extractor_for_source,
     get_source_weight,
 )

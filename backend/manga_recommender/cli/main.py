@@ -38,8 +38,8 @@ def ingest(
     ] = False,
 ) -> None:
     """Run the ingestion pipeline. Pick either --source or --all."""
-    from manga_recommender.ingestion.registry import get_all_registered_sources
-    from manga_recommender.ingestion.runner import run_ingestion
+    from manga_recommender.ingestion.catalog.registry import get_all_registered_sources
+    from manga_recommender.ingestion.catalog.runner import run_ingestion
 
     if (source and all_sources) or (not source and not all_sources):
         raise typer.BadParameter("Pass either --source (one or more) or --all.")

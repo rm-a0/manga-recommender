@@ -2,9 +2,9 @@
 
 from typing import NamedTuple
 
-from manga_recommender.ingestion.base import BaseExtractor
-from manga_recommender.ingestion.extractors.anilist import AnilistExtractor
-from manga_recommender.ingestion.extractors.kaggle_mal import KaggleMalExtractor
+from manga_recommender.ingestion.catalog.base import BaseExtractor
+from manga_recommender.ingestion.catalog.extractors.anilist import AnilistExtractor
+from manga_recommender.ingestion.catalog.extractors.kaggle_mal import KaggleMalExtractor
 
 
 class SourceRegistration(NamedTuple):
