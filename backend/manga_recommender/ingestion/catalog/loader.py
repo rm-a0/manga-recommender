@@ -23,7 +23,10 @@ from manga_recommender.db.repositories.tags import (
     bulk_get_or_create_tags,
 )
 from manga_recommender.db.session import session_scope
-from manga_recommender.ingestion.base import NormalizedMangaRecord, NormalizedTag
+from manga_recommender.ingestion.catalog.base import (
+    NormalizedMangaRecord,
+    NormalizedTag,
+)
 
 logger = structlog.get_logger(__name__)
 

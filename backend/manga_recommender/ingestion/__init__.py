@@ -1,1 +1,1 @@
-"""Pulls manga metadata from external sources into the database."""
+"""Pull data from external sources into the database."""

@@ -10,7 +10,7 @@ import structlog
 
 from manga_recommender.core.config import get_kaggle_mal_settings
 from manga_recommender.db.models.manga import MangaStatus, MangaType
-from manga_recommender.ingestion.base import (
+from manga_recommender.ingestion.catalog.base import (
     BaseExtractor,
     NormalizedMangaRecord,
     NormalizedTag,

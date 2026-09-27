@@ -7,21 +7,18 @@ from calendar import monthrange
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 
-import httpx
 import structlog
-from aiolimiter import AsyncLimiter
 
 from manga_recommender.core.config import get_anilist_settings
 from manga_recommender.db.models.manga import MangaStatus, MangaType
-from manga_recommender.ingestion.base import (
+from manga_recommender.ingestion.catalog.base import (
     BaseExtractor,
     NormalizedMangaRecord,
     NormalizedTag,
 )
+from manga_recommender.ingestion.common.anilist_client import AnilistClient
 
 logger = structlog.get_logger(__name__)
-
-MAX_RETRIES = 3
 
 
 class AnilistExtractor(BaseExtractor):
@@ -96,22 +93,10 @@ class AnilistExtractor(BaseExtractor):
         """Load AniList settings for this extractor instance."""
         self.anilist_settings = get_anilist_settings()
 
-    def _parse_response(self, response: httpx.Response) -> dict:
-        """Raise for HTTP or GraphQL errors and return the parsed response body."""
-        response.raise_for_status()
-        body = response.json()
-        if body.get("errors"):
-            raise RuntimeError(f"AniList query failed: {body['errors']}")
-        return body
-
-    def _get_max_id(self) -> int:
+    async def _get_max_id(self, client: AnilistClient) -> int:
         """Return the maximum manga ID available from AniList."""
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                self.anilist_settings.base_url,
-                json={"query": self.MAX_ID_QUERY},
-            )
-            return self._parse_response(response)["data"]["Page"]["media"][0]["id"]
+        data = await client.execute(self.MAX_ID_QUERY)
+        return data["Page"]["media"][0]["id"]
 
     def _id_chunks(
         self,
@@ -197,7 +182,7 @@ class AnilistExtractor(BaseExtractor):
         """Return the media's tags and genres as one list, or None if it has neither.
 
         Tags come first, so a genre that normalizes onto a tag keeps AniList's
-        own category instead of the synthesized one.
+        own category instead of `Genre`. AniList does not send `Genre`.
         """
         tags = media["tags"]
         genres = media["genres"]
@@ -217,7 +202,7 @@ class AnilistExtractor(BaseExtractor):
             *(
                 NormalizedTag(
                     name=genre,
-                    category="Genre",  # Not an API value
+                    category="Genre",
                     rank=None,
                     is_spoiler=False,
                     is_explicit=False,
@@ -271,69 +256,9 @@ class AnilistExtractor(BaseExtractor):
             is_explicit=media["isAdult"],
         )
 
-    async def _retry(
-        self,
-        client: httpx.AsyncClient,
-        limiter: AsyncLimiter,
-        ids: list[int],
-        reason: str,
-        attempt: int = 1,
-    ) -> list[dict]:
-        """Back off, then re-fetch the chunk with an incremented attempt count.
-
-        The caller must stop at MAX_RETRIES; this method does not check the limit.
-        """
-        logger.warning("chunk_retrying", attempt=attempt, reason=reason, ids=ids)
-        await asyncio.sleep(2**attempt)
-        return await self._fetch_chunk(client, limiter, ids, attempt + 1)
-
-    async def _fetch_chunk(
-        self,
-        client: httpx.AsyncClient,
-        limiter: AsyncLimiter,
-        ids: list[int],
-        attempt: int = 1,
-    ) -> list[dict]:
-        """Fetch one chunk of manga data from AniList.
-
-        Waits for a free slot on the shared rate limiter before sending
-        the request.
-        """
-        async with limiter:
-            try:
-                response = await client.post(
-                    self.anilist_settings.base_url,
-                    json={
-                        "query": self.MANGA_QUERY,
-                        "variables": {"ids": ids, "perPage": len(ids)},
-                    },
-                )
-            except httpx.TransportError:
-                if attempt >= MAX_RETRIES:
-                    raise
-                return await self._retry(
-                    client, limiter, ids, "transport_error", attempt
-                )
-
-        if response.status_code == 429:
-            retry_after = int(response.headers.get("Retry-After", 60))
-            logger.warning("rate_limited", retry_after=retry_after)
-            await asyncio.sleep(retry_after)
-            return await self._fetch_chunk(client, limiter, ids)
-
-        if response.status_code >= 500:
-            if attempt >= MAX_RETRIES:
-                response.raise_for_status()
-            return await self._retry(
-                client, limiter, ids, f"http_{response.status_code}", attempt
-            )
-
-        return self._parse_response(response)["data"]["Page"]["media"]
-
     async def _fetch_chunk_records(
         self,
-        client: httpx.AsyncClient,
-        limiter: AsyncLimiter,
+        client: AnilistClient,
         ids: list[int],
     ) -> list[NormalizedMangaRecord] | None:
         """Fetch one chunk and convert it to records.
@@ -342,7 +267,10 @@ class AnilistExtractor(BaseExtractor):
         that fails to convert.
         """
         try:
-            media_list = await self._fetch_chunk(client, limiter, ids)
+            data = await client.execute(
+                self.MANGA_QUERY, {"ids": ids, "perPage": len(ids)}
+            )
+            media_list = data["Page"]["media"]
         except Exception:
             logger.warning(
                 "chunk_failed", first_id=ids[0], last_id=ids[-1], exc_info=True
@@ -365,17 +293,16 @@ class AnilistExtractor(BaseExtractor):
         rate limit. This avoids AniList's page-based pagination, which caps out
         at 5,000 results.
         """
-        rpm = self.anilist_settings.requests_per_minute
-        min_id = self.anilist_settings.min_id
-        chunk_size = self.anilist_settings.chunk_size
-        max_id = self.anilist_settings.max_id or self._get_max_id()
-        logger.info("max_id_resolved", max_id=max_id)
-
-        limiter = AsyncLimiter(1, 60 / rpm)
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        settings = self.anilist_settings
+        async with AnilistClient(
+            rpm=settings.requests_per_minute,
+            base_url=settings.base_url,
+        ) as client:
+            max_id = settings.max_id or await self._get_max_id(client)
+            logger.info("max_id_resolved", max_id=max_id)
             tasks = [
-                self._fetch_chunk_records(client, limiter, ids)
-                for ids in self._id_chunks(min_id, max_id, chunk_size)
+                self._fetch_chunk_records(client, ids)
+                for ids in self._id_chunks(settings.min_id, max_id, settings.chunk_size)
             ]
             failed = 0
             for i, coro in enumerate(asyncio.as_completed(tasks), start=1):
