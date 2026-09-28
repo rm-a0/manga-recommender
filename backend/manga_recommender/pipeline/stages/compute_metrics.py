@@ -119,7 +119,7 @@ def compute_manga_metrics(
     return metrics
 
 
-def run_fill() -> None:
+def run_compute_metrics() -> None:
     """Recompute every metric row from the current external ratings."""
     settings = get_pipeline_settings()
     with session_scope() as session:

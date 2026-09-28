@@ -146,7 +146,7 @@ def get_manga_ids_near(
 def delete_all_manga_embeddings(db: Session) -> int:
     """Delete every embedding row and return the number removed.
 
-    The `index` stage clears the table before it writes the recomputed vectors.
+    The `load_embeddings` stage clears the table before it writes the recomputed vectors.
     """
     # RETURNING sends back one id per embedded manga. Count instead.
     result = cast(CursorResult, db.execute(delete(MangaEmbedding)))

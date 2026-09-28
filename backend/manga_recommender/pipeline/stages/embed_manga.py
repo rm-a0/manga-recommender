@@ -1,7 +1,6 @@
 """Encode the exported manga rows and write the vectors to an artifact."""
 
 import hashlib
-import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -10,7 +9,8 @@ import numpy as np
 import pyarrow.parquet as pq
 import structlog
 
-from manga_recommender.core.config import get_pipeline_settings
+from manga_recommender.core.config import get_pipeline_settings, get_storage_settings
+from manga_recommender.storage.artifacts import atomic_output
 
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
@@ -33,7 +33,7 @@ def build_embedding_text(title: str, description: str, tags: list[str]) -> str:
     """Return the one string that the model reads for a single manga.
 
     A change to this template changes every vector, so it needs a full re-run
-    of this stage and of `index`.
+    of this stage and of `load_embeddings`.
     """
     parts: list[str] = []
     if description:
@@ -118,12 +118,9 @@ def _save_datasets_to_npz(
 ) -> None:
     """Write the artifact columns to `path` as one archive.
 
-    Writes a temporary file first, then replaces `path` in one step. An
-    interrupted run cannot leave a partial artifact for the next run to trust.
+    An interrupted run cannot leave a partial artifact for the next run to trust.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(".tmp.npz")
-    try:
+    with atomic_output(path) as tmp_path:
         np.savez(
             tmp_path,
             model_name=model_name,
@@ -131,9 +128,6 @@ def _save_datasets_to_npz(
             hashes=hashes,
             vectors=np.concatenate(chunks),
         )
-        os.replace(tmp_path, path)
-    finally:
-        tmp_path.unlink(missing_ok=True)
 
 
 def create_manga_embeddings(
@@ -153,7 +147,7 @@ def create_manga_embeddings(
     so only the new and the changed rows reach the model.
     """
     logger.info(
-        "embed_started",
+        "embed_manga_started",
         path=str(embeddings_path),
         model=model_name,
         batch_size=encode_batch_size,
@@ -208,7 +202,7 @@ def create_manga_embeddings(
 
     _save_datasets_to_npz(embeddings_path, model_name, ids, hashes, chunks)
     logger.info(
-        "embed_completed",
+        "embed_manga_completed",
         path=str(embeddings_path),
         count=len(ids),
         reused=reused_count,
@@ -216,14 +210,15 @@ def create_manga_embeddings(
     )
 
 
-def run_embed() -> None:
+def run_embed_manga() -> None:
     """Read the export snapshot and write the embeddings artifact."""
     settings = get_pipeline_settings()
+    storage = get_storage_settings()
     create_manga_embeddings(
-        parquet_path=Path(settings.parquet_path),
-        embeddings_path=Path(settings.embeddings_path),
+        parquet_path=Path(storage.manga_snapshot_path),
+        embeddings_path=Path(storage.embeddings_path),
         parquet_batch_size=settings.parquet_batch_size,
         encode_batch_size=settings.encode_batch_size,
-        model_name=settings.model_name,
-        device=settings.device,
+        model_name=settings.embedding_model,
+        device=settings.embedding_device,
     )
