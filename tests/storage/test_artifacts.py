@@ -58,8 +58,6 @@ def test_temporary_path_keeps_the_suffix_and_sits_next_to_the_path(tmp_path):
 
 
 def test_np_savez_through_the_temporary_path_lands_at_the_exact_path(tmp_path):
-    # np.savez adds ".npz" to a name without it, so a wrong temporary name
-    # would leave the archive somewhere the replace step never looks.
     path = tmp_path / "embeddings.npz"
 
     with atomic_output(path) as tmp:

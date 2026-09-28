@@ -31,8 +31,8 @@ cp .env.example .env
 Both CLI commands are wired up. `app` starts uvicorn on `API_HOST:API_PORT`.
 
 ```bash
-uv run python -m manga_recommender ingest --source anilist    # run ingestion
-uv run python -m manga_recommender ingest --source kaggle_mal # the other source
+uv run python -m manga_recommender ingest catalog --source anilist    # run ingestion
+uv run python -m manga_recommender ingest catalog --source kaggle_mal # the other source
 uv run python -m manga_recommender app                        # serve the API
 ```
 
@@ -112,11 +112,11 @@ pagination caps out at 5,000 results.
 
 ```bash
 uv sync --group pipeline                                      # install pipeline extras
-uv run python -m manga_recommender ingest --source kaggle_mal
-uv run python -m manga_recommender ingest --source anilist
+uv run python -m manga_recommender ingest catalog --source kaggle_mal
+uv run python -m manga_recommender ingest catalog --source anilist
 
 # Small test run, capped to a handful of chunks instead of the whole catalogue
-ANILIST_MAX_ID=30201 uv run python -m manga_recommender ingest --source anilist
+ANILIST_MAX_ID=30201 uv run python -m manga_recommender ingest catalog --source anilist
 ```
 
 > **Order matters.** Manga metadata is upserted with `COALESCE`, so the source
@@ -380,7 +380,7 @@ adding once several routes raise the same failure.
 | `ANILIST_MAX_ID` | — | Highest manga ID to fetch (default: resolved live from AniList) |
 | `INGESTION_DB_BATCH_SIZE` | — | Catalog records per `load_batch` transaction (default `50`) |
 | `KAGGLE_MAL_PATH` | — | Path to the Kaggle MAL CSV (default `data/kaggle_mal_2026.csv`) |
-| `STORAGE_RAW_DIR` | — | Root of the raw runs (default `data/raw`) |
+| `STORAGE_COMMUNITY_RECS_PATH` | — | Raw runs of AniList community recs (default `data/raw/anilist/community_recs`) |
 | `STORAGE_MANGA_SNAPSHOT_PATH` | — | Snapshot `export_manga` writes (default `data/artifacts/manga.parquet`) |
 | `STORAGE_EMBEDDINGS_PATH` | — | Artifact `embed_manga` writes (default `data/artifacts/embeddings.npz`) |
 

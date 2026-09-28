@@ -8,7 +8,7 @@ runner = CliRunner()
 # The ingest command imports these inside its body to keep heavy modules off
 # the `app` command's import path. Patch them where they are defined, not on
 # `cli`, because the import runs on every invocation.
-RUN_INGESTION = "manga_recommender.ingestion.catalog.runner.run_catalog_ingest"
+RUN_CATALOG_INGEST = "manga_recommender.ingestion.catalog.runner.run_catalog_ingest"
 REGISTERED_SOURCES = (
     "manga_recommender.ingestion.catalog.registry.get_all_registered_sources"
 )
@@ -19,73 +19,75 @@ RUN_COMMUNITY_RECS = (
 PIPELINE_STAGES = "manga_recommender.pipeline.registry.get_all_pipeline_stages"
 
 
-def test_ingest_with_single_source_calls_run_catalog_ingest(
+def test_ingest_catalog_with_single_source_calls_run_catalog_ingest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str]] = []
     monkeypatch.setattr(
-        RUN_INGESTION, lambda sources, batch_size: calls.append(sources)
+        RUN_CATALOG_INGEST, lambda sources, batch_size: calls.append(sources)
     )
 
-    result = runner.invoke(cli.app, ["ingest", "--source", "anilist"])
+    result = runner.invoke(cli.app, ["ingest", "catalog", "--source", "anilist"])
 
     assert result.exit_code == 0
     assert calls == [["anilist"]]
 
 
-def test_ingest_with_repeated_source_collects_all_of_them(
+def test_ingest_catalog_with_repeated_source_collects_all_of_them(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str]] = []
     monkeypatch.setattr(
-        RUN_INGESTION, lambda sources, batch_size: calls.append(sources)
+        RUN_CATALOG_INGEST, lambda sources, batch_size: calls.append(sources)
     )
 
     result = runner.invoke(
-        cli.app, ["ingest", "--source", "anilist", "--source", "mangadex"]
+        cli.app, ["ingest", "catalog", "--source", "anilist", "--source", "mangadex"]
     )
 
     assert result.exit_code == 0
     assert calls == [["anilist", "mangadex"]]
 
 
-def test_ingest_with_all_resolves_registered_sources(
+def test_ingest_catalog_with_all_resolves_registered_sources(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str]] = []
     monkeypatch.setattr(
-        RUN_INGESTION, lambda sources, batch_size: calls.append(sources)
+        RUN_CATALOG_INGEST, lambda sources, batch_size: calls.append(sources)
     )
     monkeypatch.setattr(REGISTERED_SOURCES, lambda: ["anilist", "mangadex"])
 
-    result = runner.invoke(cli.app, ["ingest", "--all"])
+    result = runner.invoke(cli.app, ["ingest", "catalog", "--all"])
 
     assert result.exit_code == 0
     assert calls == [["anilist", "mangadex"]]
 
 
-def test_ingest_without_source_or_all_fails_without_running(
+def test_ingest_catalog_without_source_or_all_fails_without_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        RUN_INGESTION,
+        RUN_CATALOG_INGEST,
         lambda sources, batch_size: pytest.fail("should not run"),
     )
 
-    result = runner.invoke(cli.app, ["ingest"])
+    result = runner.invoke(cli.app, ["ingest", "catalog"])
 
     assert result.exit_code != 0
 
 
-def test_ingest_with_both_source_and_all_fails_without_running(
+def test_ingest_catalog_with_both_source_and_all_fails_without_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        RUN_INGESTION,
+        RUN_CATALOG_INGEST,
         lambda sources, batch_size: pytest.fail("should not run"),
     )
 
-    result = runner.invoke(cli.app, ["ingest", "--source", "anilist", "--all"])
+    result = runner.invoke(
+        cli.app, ["ingest", "catalog", "--source", "anilist", "--all"]
+    )
 
     assert result.exit_code != 0
 
@@ -157,7 +159,7 @@ def test_ingest_community_recs_runs_the_crawl(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(RUN_COMMUNITY_RECS, fake_ingest)
 
-    result = runner.invoke(cli.app, ["ingest-community-recs"])
+    result = runner.invoke(cli.app, ["ingest", "community-recs"])
 
     assert result.exit_code == 0, result.output
     assert calls == [True]

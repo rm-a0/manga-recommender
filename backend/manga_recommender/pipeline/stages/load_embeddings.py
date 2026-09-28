@@ -99,6 +99,6 @@ def run_load_embeddings() -> None:
     with session_scope() as session:
         store_manga_embeddings(
             db=session,
-            embeddings_path=Path(get_storage_settings().embeddings_path),
+            embeddings_path=get_storage_settings().embeddings_path,
             batch_size=settings.db_batch_size,
         )

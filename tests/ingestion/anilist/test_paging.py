@@ -78,7 +78,6 @@ async def test_try_fetch_chunk_returns_none_records_and_logs_when_the_chunk_fail
 
 
 async def test_try_fetch_chunk_does_not_swallow_cancellation():
-    # CancelledError is a BaseException. Catching it would break task shutdown.
     async def fetch(client, ids):
         raise asyncio.CancelledError
 

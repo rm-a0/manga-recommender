@@ -6,7 +6,7 @@ COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compos
 
 .PHONY: help setup test lint format typecheck clean \
         migrate migration \
-        serve ingest \
+        serve ingest ingest-recs \
         ui ui-setup \
         docker-build docker-run db-up stack down
 
@@ -45,8 +45,11 @@ migration: ## Create a new migration, e.g. make migration name="describe change"
 serve: ## Run the API on the host
 	uv run python -m manga_recommender app
 
-ingest: ## Run the AniList ingestion pipeline (make ingest source=anilist, or all=1 for every source)
-	uv run python -m manga_recommender ingest $(if $(all),--all,--source $(source))
+ingest: ## Ingest the catalog into Postgres (make ingest source=anilist, or all=1 for every source)
+	uv run python -m manga_recommender ingest catalog $(if $(all),--all,--source $(source))
+
+ingest-recs: ## Crawl AniList community recs into a raw run (~2 h)
+	uv run python -m manga_recommender ingest community-recs
 
 # --- Frontend ---
 

@@ -1,7 +1,6 @@
 """Fetch AniList community recommendations and land them as one raw run."""
 
 import asyncio
-from pathlib import Path
 
 import structlog
 
@@ -17,10 +16,6 @@ from manga_recommender.storage.raw import RawRunWriter
 
 logger = structlog.get_logger(__name__)
 
-SOURCE = "anilist"
-DATASET = "community_recs"
-# Above this share of failed chunks the crawl cannot be trusted. The run then
-# gets no manifest, so it never replaces the last complete run.
 MAX_FAILED_CHUNK_RATIO = 0.05
 
 
@@ -37,8 +32,7 @@ async def run_community_recs_ingest() -> None:
     ) as client:
         max_id = settings.max_id or await get_max_manga_id(client)
         logger.info("max_id_resolved", max_id=max_id)
-        raw_dir = Path(get_storage_settings().raw_dir)
-        with RawRunWriter(raw_dir, SOURCE, DATASET) as run:
+        with RawRunWriter(get_storage_settings().community_recs_path) as run:
             tasks = [
                 try_fetch_chunk(fetch_chunk, client, ids)
                 for ids in id_chunks(settings.min_id, max_id, chunk_size)

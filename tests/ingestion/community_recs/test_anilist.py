@@ -71,7 +71,6 @@ async def test_fetch_chunk_drops_manga_without_recommendations(monkeypatch):
 
 
 async def test_fetch_chunk_returns_records_exactly_as_anilist_sent_them(monkeypatch):
-    # Raw data keeps AniList's field names and nulls. The resolve stage cleans it.
     record = {
         "id": 1,
         "recommendations": {
