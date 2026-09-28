@@ -1,6 +1,7 @@
 """Load application settings from environment variables."""
 
 import functools
+from pathlib import Path
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,7 +45,7 @@ class DatabaseSettings(_EnvSettings):
     url_pooled: str | None = None
     pool_size: int = 5
     max_overflow: int = 10
-    statement_timeout: int | None = None  # Milliseconds. None keeps the server default.
+    statement_timeout: int | None = None  # Milliseconds
 
     model_config = SettingsConfigDict(env_prefix="DB_")
 
@@ -81,8 +82,8 @@ class AnilistSettings(_EnvSettings):
 
     base_url: str = "https://graphql.anilist.co"
     requests_per_minute: int = 30
-    catalog_chunk_size: int = 50  # IDs per request. 50 is AniList's maximum.
-    community_recs_chunk_size: int = 50  # Tested at 50: no complexity error, no loss.
+    catalog_chunk_size: int = 50
+    community_recs_chunk_size: int = 50
     min_id: int = 30001  # No manga below this ID
     max_id: int | None = None  # None = fetch all
 
@@ -103,7 +104,7 @@ class KaggleMalSettings(_EnvSettings):
 class IngestionSettings(_EnvSettings):
     """Ingestion settings."""
 
-    db_batch_size: int = 50  # Catalog records per `load_batch` transaction.
+    db_batch_size: int = 50
 
     model_config = SettingsConfigDict(env_prefix="INGESTION_")
 
@@ -117,17 +118,17 @@ class PipelineSettings(_EnvSettings):
     encode_batch_size: int = 256
     min_description_length: int = 100
     embedding_model: str = "BAAI/bge-small-en-v1.5"
-    embedding_device: str | None = None  # None lets the library pick a device.
+    embedding_device: str | None = None
 
     model_config = SettingsConfigDict(env_prefix="PIPELINE_")
 
 
 class StorageSettings(_EnvSettings):
-    """Locations of raw runs and artifacts. R2 URLs replace these later."""
+    """Where every raw dataset and artifact lives."""
 
-    raw_dir: str = "data/raw"
-    manga_snapshot_path: str = "data/artifacts/manga.parquet"
-    embeddings_path: str = "data/artifacts/embeddings.npz"
+    community_recs_path: Path = Path("data/raw/anilist/community_recs")
+    manga_snapshot_path: Path = Path("data/artifacts/manga.parquet")
+    embeddings_path: Path = Path("data/artifacts/embeddings.npz")
 
     model_config = SettingsConfigDict(env_prefix="STORAGE_")
 

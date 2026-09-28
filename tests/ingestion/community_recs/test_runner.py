@@ -25,7 +25,9 @@ def _configure(monkeypatch, tmp_path, *, max_id: int | None, chunk_size: int = 2
     )
     monkeypatch.setattr(runner, "get_anilist_settings", lambda: settings)
     monkeypatch.setattr(
-        runner, "get_storage_settings", lambda: StorageSettings(raw_dir=str(tmp_path))
+        runner,
+        "get_storage_settings",
+        lambda: StorageSettings(community_recs_path=tmp_path),
     )
 
 
@@ -34,7 +36,7 @@ def _serve(monkeypatch, *, max_id: int = 0, without_recs=(), failing=()):
 
     def handler(request: httpx.Request) -> httpx.Response:
         variables = json.loads(request.content)["variables"]
-        if variables is None:  # the max-ID query takes no variables
+        if variables is None:
             media = [{"id": max_id}]
             return httpx.Response(200, json={"data": {"Page": {"media": media}}})
         ids = variables["ids"]
@@ -69,7 +71,7 @@ def _serve(monkeypatch, *, max_id: int = 0, without_recs=(), failing=()):
 
 
 def _complete_run(tmp_path):
-    return latest_complete_run(tmp_path, runner.SOURCE, runner.DATASET)
+    return latest_complete_run(tmp_path)
 
 
 async def test_ingest_writes_each_manga_with_recommendations_and_finishes(
@@ -102,7 +104,7 @@ async def test_ingest_resolves_max_id_when_not_configured(monkeypatch, tmp_path)
 async def test_a_few_failed_chunks_are_recorded_and_the_run_still_finishes(
     monkeypatch, tmp_path
 ):
-    # 20 chunks, 1 failed: 5% is at the limit, not above it.
+    # 1 of 20 chunks fails: exactly the 5% limit.
     _configure(monkeypatch, tmp_path, max_id=40)
     _serve(monkeypatch, failing={3})
 
@@ -117,7 +119,7 @@ async def test_a_few_failed_chunks_are_recorded_and_the_run_still_finishes(
 async def test_too_many_failed_chunks_raise_and_leave_no_complete_run(
     monkeypatch, tmp_path
 ):
-    # 2 chunks, 1 failed: 50% is above the limit.
+    # 1 of 2 chunks fails: above the limit.
     _configure(monkeypatch, tmp_path, max_id=4)
     _serve(monkeypatch, failing={3})
 

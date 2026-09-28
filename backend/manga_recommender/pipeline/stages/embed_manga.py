@@ -215,8 +215,8 @@ def run_embed_manga() -> None:
     settings = get_pipeline_settings()
     storage = get_storage_settings()
     create_manga_embeddings(
-        parquet_path=Path(storage.manga_snapshot_path),
-        embeddings_path=Path(storage.embeddings_path),
+        parquet_path=storage.manga_snapshot_path,
+        embeddings_path=storage.embeddings_path,
         parquet_batch_size=settings.parquet_batch_size,
         encode_batch_size=settings.encode_batch_size,
         model_name=settings.embedding_model,

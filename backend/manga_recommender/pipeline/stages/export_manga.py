@@ -60,7 +60,7 @@ def run_export_manga() -> None:
     with session_scope() as session:
         create_manga_parquet(
             session,
-            Path(get_storage_settings().manga_snapshot_path),
+            get_storage_settings().manga_snapshot_path,
             settings.db_batch_size,
             settings.min_description_length,
         )

@@ -110,7 +110,7 @@ the shared dev database).
 - Start it with `make db-up` (Postgres only, host port `5433`, database `mangarec`).
 - Override `DB_URL` inline so the command targets it, e.g.
   `DB_URL=postgresql://postgres:password@localhost:5433/mangarec uv run alembic upgrade head`,
-  then the same prefix for `uv run python -m manga_recommender ingest ...`.
+  then the same prefix for `uv run python -m manga_recommender ingest catalog ...`.
 - `uv run pytest` needs no special handling — `tests/conftest.py` already spins up its
   own ephemeral container and forces `DB_URL` at it.
 - If a task seems to genuinely need the real database, stop and ask.

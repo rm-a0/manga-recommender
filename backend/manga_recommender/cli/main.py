@@ -1,6 +1,11 @@
-"""Typer CLI: run ingestion or start the API server."""
+"""Typer CLI: ingest data, run the pipeline, or start the API server.
+
+Commands import ingestion and pipeline code inside their body. Those modules
+need the optional `pipeline` and `ml` dependency groups, which `app` does not.
+"""
 
 import asyncio
+from collections.abc import Callable
 from typing import Annotated
 
 import typer
@@ -14,6 +19,8 @@ from manga_recommender.core.config import (
 )
 
 app = typer.Typer(help="CLI for the manga recommender.")
+ingest_app = typer.Typer(help="Pull data from external sources.", no_args_is_help=True)
+app.add_typer(ingest_app, name="ingest")
 
 
 @app.callback()
@@ -27,8 +34,8 @@ def main() -> None:
     )
 
 
-@app.command(name="ingest")
-def ingest(
+@ingest_app.command(name="catalog")
+def ingest_catalog(
     source: Annotated[
         list[str] | None,
         typer.Option("--source", help="Source to ingest (repeatable)."),
@@ -38,26 +45,23 @@ def ingest(
         typer.Option("--all", help="Ingest every registered source."),
     ] = False,
 ) -> None:
-    """Run the ingestion pipeline. Pick either --source or --all."""
-    from manga_recommender.ingestion.catalog.registry import get_all_registered_sources
-    from manga_recommender.ingestion.catalog.runner import run_catalog_ingest
+    """Normalize manga metadata and upsert it into Postgres."""
+    from manga_recommender.ingestion.catalog import registry, runner
 
-    if (source and all_sources) or (not source and not all_sources):
-        raise typer.BadParameter("Pass either --source (one or more) or --all.")
-    sources = get_all_registered_sources() if all_sources else source
-    if sources is None:
-        raise RuntimeError("No sources to ingest.")
-    run_catalog_ingest(sources, batch_size=get_ingestion_settings().db_batch_size)
-
-
-@app.command(name="ingest-community-recs")
-def ingest_community_recs() -> None:
-    """Crawl AniList community recommendations into one raw run."""
-    from manga_recommender.ingestion.community_recs.runner import (
-        run_community_recs_ingest,
+    sources = _pick(
+        source, all_sources, registry.get_all_registered_sources, "--source"
+    )
+    runner.run_catalog_ingest(
+        sources, batch_size=get_ingestion_settings().db_batch_size
     )
 
-    asyncio.run(run_community_recs_ingest())
+
+@ingest_app.command(name="community-recs")
+def ingest_community_recs() -> None:
+    """Crawl AniList community recommendations into one raw run."""
+    from manga_recommender.ingestion.community_recs import runner
+
+    asyncio.run(runner.run_community_recs_ingest())
 
 
 @app.command(name="pipeline")
@@ -71,16 +75,12 @@ def start_pipeline(
         typer.Option("--all", help="Run every stage in the pipeline."),
     ] = False,
 ) -> None:
-    """Run the pipeline stages. Pick either --stage or --all."""
-    from manga_recommender.pipeline.registry import get_all_pipeline_stages
-    from manga_recommender.pipeline.runner import run_pipeline
+    """Run the pipeline stages."""
+    from manga_recommender.pipeline import registry, runner
 
-    if (stage and all_stages) or (not stage and not all_stages):
-        raise typer.BadParameter("Pass either --stage (one or more) or --all.")
-    stages = get_all_pipeline_stages() if all_stages else stage
-    if stages is None:
-        raise RuntimeError("No stages to run.")
-    run_pipeline(stages)
+    runner.run_pipeline(
+        _pick(stage, all_stages, registry.get_all_pipeline_stages, "--stage")
+    )
 
 
 @app.command(name="app")
@@ -94,6 +94,20 @@ def start_app() -> None:
         host=settings.host,
         port=settings.port,
     )
+
+
+def _pick(
+    chosen: list[str] | None,
+    use_all: bool,
+    get_all: Callable[[], list[str]],
+    option: str,
+) -> list[str]:
+    """Return the chosen names, or every name for `--all`. Reject both and neither."""
+    if use_all and not chosen:
+        return get_all()
+    if chosen and not use_all:
+        return chosen
+    raise typer.BadParameter(f"Pass either {option} (one or more) or --all.")
 
 
 if __name__ == "__main__":
