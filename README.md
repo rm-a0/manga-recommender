@@ -380,7 +380,7 @@ adding once several routes raise the same failure.
 | `ANILIST_MAX_ID` | — | Highest manga ID to fetch (default: resolved live from AniList) |
 | `INGESTION_DB_BATCH_SIZE` | — | Catalog records per `load_batch` transaction (default `50`) |
 | `KAGGLE_MAL_PATH` | — | Path to the Kaggle MAL CSV (default `data/kaggle_mal_2026.csv`) |
-| `STORAGE_COMMUNITY_RECS_PATH` | — | Raw runs of AniList community recs (default `data/raw/anilist/community_recs`) |
+| `STORAGE_COMMUNITY_RECS_PATH` | — | Community recs `ingest community-recs` writes (default `data/artifacts/community_recs.parquet`) |
 | `STORAGE_MANGA_SNAPSHOT_PATH` | — | Snapshot `export_manga` writes (default `data/artifacts/manga.parquet`) |
 | `STORAGE_EMBEDDINGS_PATH` | — | Artifact `embed_manga` writes (default `data/artifacts/embeddings.npz`) |
 

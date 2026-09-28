@@ -1,1 +1,1 @@
-"""Fetch the community recommendations of each manga and land them as raw runs."""
+"""Fetch the community recommendations of each manga into one Parquet artifact."""

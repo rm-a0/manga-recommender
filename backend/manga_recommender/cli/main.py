@@ -58,7 +58,7 @@ def ingest_catalog(
 
 @ingest_app.command(name="community-recs")
 def ingest_community_recs() -> None:
-    """Crawl AniList community recommendations into one raw run."""
+    """Crawl AniList community recommendations into one Parquet artifact."""
     from manga_recommender.ingestion.community_recs import runner
 
     asyncio.run(runner.run_community_recs_ingest())
