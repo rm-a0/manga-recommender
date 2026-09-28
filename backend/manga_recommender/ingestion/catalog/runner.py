@@ -34,7 +34,7 @@ def prune_orphaned_manga() -> int:
         return delete_orphaned_manga(session)
 
 
-def run_ingestion(sources: list[str], batch_size: int) -> None:
+def run_catalog_ingest(sources: list[str], batch_size: int) -> None:
     """Run the ingestion pipeline for the given list of source names.
 
     Logs and continues on failure, at both the batch and the source level.

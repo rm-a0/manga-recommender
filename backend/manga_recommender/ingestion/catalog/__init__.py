@@ -1,1 +1,1 @@
-"""Pull manga metadata from external sources into the database."""
+"""Normalize manga metadata from each source and upsert it into Postgres, the system of record."""
