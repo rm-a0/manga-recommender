@@ -4,19 +4,23 @@ import asyncio
 import html
 import re
 from calendar import monthrange
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 import structlog
 
 from manga_recommender.core.config import get_anilist_settings
 from manga_recommender.db.models.manga import MangaStatus, MangaType
+from manga_recommender.ingestion.anilist.client import AnilistClient
+from manga_recommender.ingestion.anilist.paging import (
+    get_max_manga_id,
+    id_chunks,
+)
 from manga_recommender.ingestion.catalog.base import (
     BaseExtractor,
     NormalizedMangaRecord,
     NormalizedTag,
 )
-from manga_recommender.ingestion.common.anilist_client import AnilistClient
 
 logger = structlog.get_logger(__name__)
 
@@ -60,13 +64,6 @@ class AnilistExtractor(BaseExtractor):
         }
     }
     """
-    MAX_ID_QUERY = """
-    query {
-        Page(page: 1, perPage: 1) {
-            media(type: MANGA, sort: ID_DESC) { id }
-        }
-    }
-    """
     STATUS_MAP = {
         "FINISHED": MangaStatus.FINISHED,
         "RELEASING": MangaStatus.ONGOING,
@@ -92,21 +89,6 @@ class AnilistExtractor(BaseExtractor):
     def __init__(self):
         """Load AniList settings for this extractor instance."""
         self.anilist_settings = get_anilist_settings()
-
-    async def _get_max_id(self, client: AnilistClient) -> int:
-        """Return the maximum manga ID available from AniList."""
-        data = await client.execute(self.MAX_ID_QUERY)
-        return data["Page"]["media"][0]["id"]
-
-    def _id_chunks(
-        self,
-        start_id: int,
-        end_id: int,
-        chunk_size: int,
-    ) -> Iterator[list[int]]:
-        """Yield chunks of manga IDs from start_id to end_id."""
-        for i in range(start_id, end_id + 1, chunk_size):
-            yield list(range(i, min(i + chunk_size, end_id + 1)))
 
     def _extract_authors(self, media: dict) -> list[str]:
         """Return the names of the story and art staff, without repeats.
@@ -298,11 +280,13 @@ class AnilistExtractor(BaseExtractor):
             rpm=settings.requests_per_minute,
             base_url=settings.base_url,
         ) as client:
-            max_id = settings.max_id or await self._get_max_id(client)
+            max_id = settings.max_id or await get_max_manga_id(client)
             logger.info("max_id_resolved", max_id=max_id)
             tasks = [
                 self._fetch_chunk_records(client, ids)
-                for ids in self._id_chunks(settings.min_id, max_id, settings.chunk_size)
+                for ids in id_chunks(
+                    settings.min_id, max_id, settings.catalog_chunk_size
+                )
             ]
             failed = 0
             for i, coro in enumerate(asyncio.as_completed(tasks), start=1):
