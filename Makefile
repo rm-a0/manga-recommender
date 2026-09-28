@@ -48,7 +48,7 @@ serve: ## Run the API on the host
 ingest: ## Ingest the catalog into Postgres (make ingest source=anilist, or all=1 for every source)
 	uv run python -m manga_recommender ingest catalog $(if $(all),--all,--source $(source))
 
-ingest-recs: ## Crawl AniList community recs into a raw run (~2 h)
+ingest-recs: ## Crawl AniList community recs into a Parquet artifact (~2 h)
 	uv run python -m manga_recommender ingest community-recs
 
 # --- Frontend ---

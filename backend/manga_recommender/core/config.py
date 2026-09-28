@@ -124,9 +124,9 @@ class PipelineSettings(_EnvSettings):
 
 
 class StorageSettings(_EnvSettings):
-    """Where every raw dataset and artifact lives."""
+    """Where every artifact lives."""
 
-    community_recs_path: Path = Path("data/raw/anilist/community_recs")
+    community_recs_path: Path = Path("data/artifacts/community_recs.parquet")
     manga_snapshot_path: Path = Path("data/artifacts/manga.parquet")
     embeddings_path: Path = Path("data/artifacts/embeddings.npz")
 

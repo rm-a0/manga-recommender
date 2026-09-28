@@ -6,11 +6,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import pyarrow.parquet as pq
 import structlog
 
+from manga_recommender.core import storage
 from manga_recommender.core.config import get_pipeline_settings, get_storage_settings
-from manga_recommender.storage.artifacts import atomic_output
 
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
@@ -93,41 +92,18 @@ def _load_npz_to_dicts(
     if not path.exists():
         logger.info("previous_artifact_skipped", path=str(path), reason="missing")
         return {}, {}
-    with np.load(path) as data:
-        if "model_name" not in data.files or data["model_name"] != model_name:
-            logger.info(
-                "previous_artifact_skipped", path=str(path), reason="model_changed"
-            )
-            return {}, {}
-        ids = data["ids"]
-        vectors = data["vectors"]
-        hashes = data["hashes"]
+    data = storage.read_arrays(path)
+    if "model_name" not in data or data["model_name"] != model_name:
+        logger.info("previous_artifact_skipped", path=str(path), reason="model_changed")
+        return {}, {}
+    ids = data["ids"]
+    vectors = data["vectors"]
+    hashes = data["hashes"]
     logger.info("previous_artifact_loaded", path=str(path), count=len(ids))
 
     vector_dict = {id_: vector for id_, vector in zip(ids, vectors, strict=True)}
     hash_dict = {id_: hash_ for id_, hash_ in zip(ids, hashes, strict=True)}
     return vector_dict, hash_dict
-
-
-def _save_datasets_to_npz(
-    path: Path,
-    model_name: str,
-    ids: list[str],
-    hashes: list[str],
-    chunks: list[np.ndarray],
-) -> None:
-    """Write the artifact columns to `path` as one archive.
-
-    An interrupted run cannot leave a partial artifact for the next run to trust.
-    """
-    with atomic_output(path) as tmp_path:
-        np.savez(
-            tmp_path,
-            model_name=model_name,
-            ids=ids,
-            hashes=hashes,
-            vectors=np.concatenate(chunks),
-        )
 
 
 def create_manga_embeddings(
@@ -153,7 +129,7 @@ def create_manga_embeddings(
         batch_size=encode_batch_size,
     )
 
-    if pq.ParquetFile(parquet_path).metadata.num_rows == 0:
+    if storage.count_rows(parquet_path) == 0:
         raise ValueError(f"{parquet_path} holds no rows, nothing to embed")
 
     model = load_model(model_name, device)
@@ -169,7 +145,7 @@ def create_manga_embeddings(
     reused_count = 0
     encoded_count = 0
 
-    for batch in pq.ParquetFile(parquet_path).iter_batches(parquet_batch_size):
+    for batch in storage.read_batches(parquet_path, parquet_batch_size):
         start_time = time.monotonic()
         batch_ids, batch_texts, batch_hashes = _parse_batch(batch.to_pylist())
 
@@ -200,7 +176,13 @@ def create_manga_embeddings(
             elapsed_s=round(time.monotonic() - start_time, 1),
         )
 
-    _save_datasets_to_npz(embeddings_path, model_name, ids, hashes, chunks)
+    storage.write_arrays(
+        embeddings_path,
+        model_name=model_name,
+        ids=ids,
+        hashes=hashes,
+        vectors=np.concatenate(chunks),
+    )
     logger.info(
         "embed_manga_completed",
         path=str(embeddings_path),
@@ -213,10 +195,10 @@ def create_manga_embeddings(
 def run_embed_manga() -> None:
     """Read the export snapshot and write the embeddings artifact."""
     settings = get_pipeline_settings()
-    storage = get_storage_settings()
+    paths = get_storage_settings()
     create_manga_embeddings(
-        parquet_path=storage.manga_snapshot_path,
-        embeddings_path=storage.embeddings_path,
+        parquet_path=paths.manga_snapshot_path,
+        embeddings_path=paths.embeddings_path,
         parquet_batch_size=settings.parquet_batch_size,
         encode_batch_size=settings.encode_batch_size,
         model_name=settings.embedding_model,

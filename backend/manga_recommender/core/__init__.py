@@ -1,1 +1,1 @@
-"""Cross-cutting infrastructure: settings and logging setup."""
+"""Cross-cutting infrastructure: settings, logging setup and artifact storage."""

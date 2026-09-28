@@ -1,21 +1,20 @@
 import json
 
 import httpx
+import pyarrow as pa
 import pytest
+import structlog
 
+from manga_recommender.core import storage
 from manga_recommender.core.config import AnilistSettings, StorageSettings
 from manga_recommender.ingestion.anilist import client as anilist_client
 from manga_recommender.ingestion.community_recs import runner
-from manga_recommender.storage.raw import (
-    latest_complete_run,
-    read_manifest,
-    read_records,
-)
+from manga_recommender.ingestion.community_recs.anilist import EDGE_SCHEMA
 
 BASE_URL = "https://graphql.anilist.test"
 
 
-def _configure(monkeypatch, tmp_path, *, max_id: int | None, chunk_size: int = 2):
+def _configure(monkeypatch, path, *, max_id: int | None, chunk_size: int = 2):
     settings = AnilistSettings(
         base_url=BASE_URL,
         requests_per_minute=1_000_000,
@@ -27,7 +26,7 @@ def _configure(monkeypatch, tmp_path, *, max_id: int | None, chunk_size: int = 2
     monkeypatch.setattr(
         runner,
         "get_storage_settings",
-        lambda: StorageSettings(community_recs_path=tmp_path),
+        lambda: StorageSettings(community_recs_path=path),
     )
 
 
@@ -70,61 +69,68 @@ def _serve(monkeypatch, *, max_id: int = 0, without_recs=(), failing=()):
     )
 
 
-def _complete_run(tmp_path):
-    return latest_complete_run(tmp_path)
+@pytest.fixture
+def artifact_path(tmp_path):
+    return tmp_path / "artifacts" / "community_recs.parquet"
 
 
-async def test_ingest_writes_each_manga_with_recommendations_and_finishes(
-    monkeypatch, tmp_path
-):
-    _configure(monkeypatch, tmp_path, max_id=5)
+def _rows(path):
+    return storage.read_table(path).to_pylist()
+
+
+async def test_ingest_writes_one_row_per_recommendation(monkeypatch, artifact_path):
+    _configure(monkeypatch, artifact_path, max_id=5)
     _serve(monkeypatch, without_recs={2})
 
     await runner.run_community_recs_ingest()
 
-    run_dir = _complete_run(tmp_path)
-    assert sorted(record["id"] for record in read_records(run_dir)) == [1, 3, 4, 5]
-    manifest = read_manifest(run_dir)
-    assert manifest["failed_chunks"] == []
-    assert (manifest["chunk_size"], manifest["min_id"], manifest["max_id"]) == (2, 1, 5)
-    assert manifest["record_count"] == 4
+    rows = sorted(_rows(artifact_path), key=lambda row: row["media_id"])
+    assert [row["media_id"] for row in rows] == [1, 3, 4, 5]
+    assert rows[0] == {
+        "media_id": 1,
+        "recommended_id": 2,
+        "recommended_type": "MANGA",
+        "rating": 1,
+    }
 
 
-async def test_ingest_resolves_max_id_when_not_configured(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path, max_id=None)
+async def test_ingest_resolves_max_id_when_not_configured(monkeypatch, artifact_path):
+    _configure(monkeypatch, artifact_path, max_id=None)
     _serve(monkeypatch, max_id=3)
 
     await runner.run_community_recs_ingest()
 
-    run_dir = _complete_run(tmp_path)
-    assert read_manifest(run_dir)["max_id"] == 3
-    assert sorted(record["id"] for record in read_records(run_dir)) == [1, 2, 3]
+    assert sorted(row["media_id"] for row in _rows(artifact_path)) == [1, 2, 3]
 
 
-async def test_a_few_failed_chunks_are_recorded_and_the_run_still_finishes(
-    monkeypatch, tmp_path
+async def test_a_few_failed_chunks_are_logged_and_the_file_is_still_written(
+    monkeypatch, artifact_path
 ):
     # 1 of 20 chunks fails: exactly the 5% limit.
-    _configure(monkeypatch, tmp_path, max_id=40)
+    _configure(monkeypatch, artifact_path, max_id=40)
     _serve(monkeypatch, failing={3})
 
-    await runner.run_community_recs_ingest()
+    with structlog.testing.capture_logs() as logs:
+        await runner.run_community_recs_ingest()
 
-    run_dir = _complete_run(tmp_path)
-    assert read_manifest(run_dir)["failed_chunks"] == [[3, 4]]
-    ids = {record["id"] for record in read_records(run_dir)}
-    assert ids == set(range(1, 41)) - {3, 4}
+    assert {row["media_id"] for row in _rows(artifact_path)} == set(range(1, 41)) - {
+        3,
+        4,
+    }
+    failed = [log for log in logs if log["event"] == "chunks_failed"]
+    assert failed[0]["chunks"] == [[3, 4]]
 
 
-async def test_too_many_failed_chunks_raise_and_leave_no_complete_run(
-    monkeypatch, tmp_path
+async def test_too_many_failed_chunks_raise_and_keep_the_previous_file(
+    monkeypatch, artifact_path
 ):
     # 1 of 2 chunks fails: above the limit.
-    _configure(monkeypatch, tmp_path, max_id=4)
+    storage.write_table(artifact_path, pa.Table.from_pylist([], schema=EDGE_SCHEMA))
+    original = artifact_path.read_bytes()
+    _configure(monkeypatch, artifact_path, max_id=4)
     _serve(monkeypatch, failing={3})
 
     with pytest.raises(RuntimeError, match="1 of 2 chunks failed"):
         await runner.run_community_recs_ingest()
 
-    with pytest.raises(FileNotFoundError):
-        _complete_run(tmp_path)
+    assert artifact_path.read_bytes() == original

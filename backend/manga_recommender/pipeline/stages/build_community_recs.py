@@ -1,1 +1,1 @@
-"""Turn raw community recommendations into scored neighbours and write an artifact."""
+"""Turn the community recs artifact into scored neighbours in `manga_similarities`."""

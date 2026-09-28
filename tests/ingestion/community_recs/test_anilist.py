@@ -1,11 +1,16 @@
 import json
 
 import httpx
+import pyarrow as pa
 import pytest
 
 from manga_recommender.ingestion.anilist import client as anilist_client
 from manga_recommender.ingestion.anilist.client import AnilistClient, AnilistQueryError
-from manga_recommender.ingestion.community_recs.anilist import fetch_chunk
+from manga_recommender.ingestion.community_recs.anilist import (
+    EDGE_SCHEMA,
+    fetch_chunk,
+    to_edges,
+)
 
 
 def _patch_transport(monkeypatch, handler) -> None:
@@ -55,35 +60,53 @@ async def test_fetch_chunk_sends_ids_and_per_page(monkeypatch):
     assert captured["variables"] == {"ids": [30001, 30002, 30003], "perPage": 3}
 
 
-async def test_fetch_chunk_drops_manga_without_recommendations(monkeypatch):
-    media = [
-        _media(1, [_node(2, 10)]),
-        _media(3, []),
-        _media(4, None),
-        _media(5, [_node(1, 3), _node(2, 1)]),
-    ]
+async def test_fetch_chunk_returns_one_row_per_recommendation(monkeypatch):
+    media = [_media(1, [_node(2, 10), _node(3, 4)]), _media(5, [_node(1, 3)])]
     _patch_transport(monkeypatch, _answer(media))
 
     async with _client() as client:
-        records = await fetch_chunk(client, [1, 3, 4, 5])
+        rows = await fetch_chunk(client, [1, 5])
 
-    assert [record["id"] for record in records] == [1, 5]
+    assert rows == [
+        {"media_id": 1, "recommended_id": 2, "recommended_type": "MANGA", "rating": 10},
+        {"media_id": 1, "recommended_id": 3, "recommended_type": "MANGA", "rating": 4},
+        {"media_id": 5, "recommended_id": 1, "recommended_type": "MANGA", "rating": 3},
+    ]
 
 
-async def test_fetch_chunk_returns_records_exactly_as_anilist_sent_them(monkeypatch):
-    record = {
+async def test_fetch_chunk_skips_manga_without_recommendations(monkeypatch):
+    media = [_media(1, [_node(2, 10)]), _media(3, []), _media(4, None)]
+    _patch_transport(monkeypatch, _answer(media))
+
+    async with _client() as client:
+        rows = await fetch_chunk(client, [1, 3, 4])
+
+    assert [row["media_id"] for row in rows] == [1]
+
+
+def test_to_edges_keeps_every_node_including_negative_ratings_and_deleted_targets():
+    media = {
         "id": 1,
         "recommendations": {
             "nodes": [
-                {"mediaRecommendation": {"id": 2, "type": "MANGA"}, "rating": 7},
+                {"mediaRecommendation": {"id": 2, "type": "MANGA"}, "rating": -2},
                 {"mediaRecommendation": None, "rating": 0},
             ]
         },
     }
-    _patch_transport(monkeypatch, _answer([record]))
 
-    async with _client() as client:
-        assert await fetch_chunk(client, [1]) == [record]
+    assert to_edges(media) == [
+        {"media_id": 1, "recommended_id": 2, "recommended_type": "MANGA", "rating": -2},
+        {"media_id": 1, "recommended_id": None, "recommended_type": None, "rating": 0},
+    ]
+
+
+def test_to_edges_rows_fit_the_edge_schema():
+    rows = to_edges(_media(1, [_node(2, 10)]))
+
+    table = pa.Table.from_pylist(rows, schema=EDGE_SCHEMA)
+
+    assert table.num_rows == 1
 
 
 async def test_fetch_chunk_raises_when_the_query_fails(monkeypatch):

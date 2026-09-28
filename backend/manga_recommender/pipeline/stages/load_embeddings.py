@@ -7,10 +7,10 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-import numpy as np
 import structlog
 from sqlalchemy.orm import Session
 
+from manga_recommender.core import storage
 from manga_recommender.core.config import get_pipeline_settings, get_storage_settings
 from manga_recommender.db.repositories.manga_embeddings import (
     EmbeddingValues,
@@ -35,14 +35,14 @@ def _load_npz(path: Path) -> list[EmbeddingValues]:
     if not path.exists():
         raise ValueError(f"{path} doesn't exist, no embeddings found")
 
-    with np.load(path) as data:
-        if "model_name" not in data.files:
-            raise ValueError(f"{path} contains no 'model_name'")
-        model_name = str(data["model_name"])
-        ids = data["ids"]
-        vectors = data["vectors"]
-        if len(ids) == 0:
-            raise ValueError(f"{path} holds no vectors, refusing to clear the table")
+    data = storage.read_arrays(path)
+    if "model_name" not in data:
+        raise ValueError(f"{path} contains no 'model_name'")
+    model_name = str(data["model_name"])
+    ids = data["ids"]
+    vectors = data["vectors"]
+    if len(ids) == 0:
+        raise ValueError(f"{path} holds no vectors, refusing to clear the table")
 
     logger.info("artifact_loaded", path=str(path), count=len(ids))
 
