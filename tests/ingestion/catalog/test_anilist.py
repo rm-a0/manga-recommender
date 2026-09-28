@@ -4,18 +4,19 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from manga_recommender.core.config import AniListSettings
+from manga_recommender.core.config import AnilistSettings
 from manga_recommender.db.models.manga import MangaStatus, MangaType
+from manga_recommender.ingestion.anilist import client as anilist_client
+from manga_recommender.ingestion.anilist.client import AnilistClient
 from manga_recommender.ingestion.catalog.base import NormalizedTag
+from manga_recommender.ingestion.catalog.extractors import anilist as anilist_extractor
 from manga_recommender.ingestion.catalog.extractors.anilist import AnilistExtractor
-from manga_recommender.ingestion.common import anilist_client
-from manga_recommender.ingestion.common.anilist_client import AnilistClient
 
 
 def _extractor(**settings_overrides) -> AnilistExtractor:
     extractor = AnilistExtractor()
     settings_overrides.setdefault("requests_per_minute", 1_000_000)
-    extractor.anilist_settings = AniListSettings(**settings_overrides)
+    extractor.anilist_settings = AnilistSettings(**settings_overrides)
     return extractor
 
 
@@ -417,22 +418,6 @@ def test_to_record_converts_media_to_normalized_record():
     assert record.fetched_at is not None
 
 
-def test_id_chunks_splits_range_into_fixed_size_chunks():
-    extractor = _extractor()
-
-    chunks = list(extractor._id_chunks(1, 10, 3))
-
-    assert chunks == [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10]]
-
-
-def test_id_chunks_returns_single_chunk_when_range_fits():
-    extractor = _extractor()
-
-    chunks = list(extractor._id_chunks(5, 7, 10))
-
-    assert chunks == [[5, 6, 7]]
-
-
 def _patch_transport(monkeypatch, handler) -> None:
     """Route the AniList client's requests to `handler`."""
     real_async_client = httpx.AsyncClient
@@ -454,16 +439,6 @@ def _chunk_handler(request: httpx.Request) -> httpx.Response:
     ids = json.loads(request.content)["variables"]["ids"]
     media = [_media(media_id=i) for i in ids]
     return httpx.Response(200, json={"data": {"Page": {"media": media}}})
-
-
-async def test_get_max_id_returns_highest_media_id(monkeypatch):
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"data": {"Page": {"media": [{"id": 215756}]}}})
-
-    _patch_transport(monkeypatch, handler)
-
-    async with _client() as client:
-        assert await _extractor()._get_max_id(client) == 215756
 
 
 async def test_fetch_chunk_records_sends_ids_and_per_page(monkeypatch):
@@ -518,7 +493,7 @@ async def test_fetch_chunk_records_skips_media_that_fail_to_convert(monkeypatch)
 def test_extract_yields_records_for_each_media(monkeypatch):
     _patch_transport(monkeypatch, _chunk_handler)
 
-    extractor = _extractor(min_id=1, max_id=3, chunk_size=2)
+    extractor = _extractor(min_id=1, max_id=3, catalog_chunk_size=2)
     records = list(extractor.extract())
 
     assert sorted(record.external_id for record in records) == ["1", "2", "3"]
@@ -534,7 +509,7 @@ def test_extract_resolves_max_id_when_not_configured(monkeypatch):
 
     _patch_transport(monkeypatch, handler)
 
-    extractor = _extractor(min_id=30001, max_id=None, chunk_size=50)
+    extractor = _extractor(min_id=30001, max_id=None, catalog_chunk_size=50)
     records = list(extractor.extract())
 
     assert sorted(record.external_id for record in records) == ["30001", "30002"]
@@ -543,12 +518,12 @@ def test_extract_resolves_max_id_when_not_configured(monkeypatch):
 def test_extract_skips_max_id_lookup_when_configured(monkeypatch):
     _patch_transport(monkeypatch, _chunk_handler)
 
-    extractor = _extractor(min_id=1, max_id=2, chunk_size=50)
+    extractor = _extractor(min_id=1, max_id=2, catalog_chunk_size=50)
 
     async def _fail_if_called(client: AnilistClient) -> int:
-        raise AssertionError("_get_max_id should not be called when max_id is set")
+        raise AssertionError("get_max_manga_id should not be called when max_id is set")
 
-    monkeypatch.setattr(extractor, "_get_max_id", _fail_if_called)
+    monkeypatch.setattr(anilist_extractor, "get_max_manga_id", _fail_if_called)
 
     records = list(extractor.extract())
 

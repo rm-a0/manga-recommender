@@ -13,8 +13,8 @@ from manga_recommender.db.repositories.manga import (
     create_manga,
 )
 from manga_recommender.db.repositories.tags import get_or_create_tag
-from manga_recommender.pipeline.stages import export
-from manga_recommender.pipeline.stages.export import SCHEMA, create_manga_parquet
+from manga_recommender.pipeline.stages import export_manga
+from manga_recommender.pipeline.stages.export_manga import SCHEMA, create_manga_parquet
 
 MINIMUM_LENGTH = 100
 QUALIFYING_DESCRIPTION = "x" * 150
@@ -187,7 +187,7 @@ def test_create_manga_parquet_leaves_no_temporary_file(
 def test_create_manga_parquet_keeps_the_previous_snapshot_when_the_stream_fails(
     db_session: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A half-written snapshot must never reach the real path: the embed stage
+    # A half-written snapshot must never reach the real path: the `embed_manga` stage
     # cannot tell a truncated file from a complete one.
     _seed(db_session, "Berserk", description=QUALIFYING_DESCRIPTION)
     path = tmp_path / "manga.parquet"
@@ -200,7 +200,7 @@ def test_create_manga_parquet_keeps_the_previous_snapshot_when_the_stream_fails(
         yield from ()
         raise RuntimeError("connection lost")
 
-    monkeypatch.setattr(export, "stream_exportable_manga", _failing_stream)
+    monkeypatch.setattr(export_manga, "stream_exportable_manga", _failing_stream)
 
     with pytest.raises(RuntimeError, match="connection lost"):
         create_manga_parquet(db_session, path, 100, MINIMUM_LENGTH)

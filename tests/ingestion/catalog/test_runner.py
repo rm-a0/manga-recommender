@@ -99,7 +99,7 @@ def test_run_ingestion_seeds_source_and_batches_extracted_records(
         lambda records, sid, gc, ac: loaded_batches.append((records, sid)),
     )
 
-    runner.run_ingestion(["anilist"], batch_size=2)
+    runner.run_catalog_ingest(["anilist"], batch_size=2)
 
     assert seeded == ["anilist"]
     assert [sid for _, sid in loaded_batches] == [source_id, source_id]
@@ -123,6 +123,6 @@ def test_run_ingestion_continues_after_a_source_errors(
     )
     monkeypatch.setattr(runner, "load_batch", lambda records, sid, gc, ac: None)
 
-    runner.run_ingestion(["broken", "anilist"], batch_size=50)
+    runner.run_catalog_ingest(["broken", "anilist"], batch_size=50)
 
     assert processed == ["anilist"]

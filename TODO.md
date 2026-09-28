@@ -57,7 +57,7 @@ tuning. Starts after the frontend merge.
   `MANGA_QUERY`. Check query complexity on one chunk. `chunk_size` may drop.
 - The DB stores only computed results. A separate signals extractor
   (`ingestion/signals/`) writes the raw edges, by external id, to artifacts
-  (`data/artifacts/edges/`), like `export` does. The catalogue extractor stays
+  (`data/artifacts/edges/`), like `export_manga` does. The catalogue extractor stays
   as it is. Both share one `AnilistClient` for rate limit and retries. Rebuilding the matrix then needs no re-fetch, and the eval
   reads the same raw pairs. A pipeline stage resolves the ids to `manga_id`
   through `manga_external_ratings(source_id, external_id)`.
@@ -140,10 +140,10 @@ tuning. Starts after the frontend merge.
 
 ## Pipeline
 
-Stages run in order: `fill` -> `export` -> `embed` -> `index` -> `train`.
+Stages run in order: `compute_metrics` -> `export_manga` -> `embed_manga` -> `load_embeddings` -> `train`.
 Registry order is the run order, so `--stage` accepts any order.
 
-- `index`: `.npz` -> `manga_embeddings`, then build HNSW. Load the rows before
+- `load_embeddings`: `.npz` -> `manga_embeddings`, then build HNSW. Load the rows before
   the HNSW index exists, as pgvector recommends: drop the index, bulk insert,
   create it again.
 - `train`: needs user-item data first. Blocked.
@@ -157,7 +157,7 @@ Registry order is the run order, so `--stage` accepts any order.
 
 Checkpoints, shortest form. Expand when each is started.
 
-- Content embeddings. Description + tags -> `halfvec(384)`, HNSW. See `embed`.
+- Content embeddings. Description + tags -> `halfvec(384)`, HNSW. See `embed_manga`.
   Powers "more like this" and semantic search.
 - User-item dataset. Far future. No public manga user-rating dataset exists —
   searched, found none. Must be crawled from Jikan `/users/{name}/mangalist`,

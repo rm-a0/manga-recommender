@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga_embeddings import MangaEmbedding
 from manga_recommender.db.repositories.manga import create_manga
-from manga_recommender.pipeline.stages.index import store_manga_embeddings
+from manga_recommender.pipeline.stages.load_embeddings import store_manga_embeddings
 
 MODEL = "BAAI/bge-small-en-v1.5"
 DIM = 384
@@ -29,7 +29,7 @@ def _seed(db: Session, count: int) -> list[uuid.UUID]:
 def _write_artifact(
     path: Path, ids: list[uuid.UUID], *, model_name: str = MODEL, seed: int = 0
 ) -> np.ndarray:
-    """Write an artifact in the shape `embed` writes, and return its vectors."""
+    """Write an artifact in the shape `embed_manga` writes, and return its vectors."""
     vectors = np.random.default_rng(seed).random((len(ids), DIM), dtype=np.float32)
     np.savez(
         path,

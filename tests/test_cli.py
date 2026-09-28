@@ -8,15 +8,18 @@ runner = CliRunner()
 # The ingest command imports these inside its body to keep heavy modules off
 # the `app` command's import path. Patch them where they are defined, not on
 # `cli`, because the import runs on every invocation.
-RUN_INGESTION = "manga_recommender.ingestion.catalog.runner.run_ingestion"
+RUN_INGESTION = "manga_recommender.ingestion.catalog.runner.run_catalog_ingest"
 REGISTERED_SOURCES = (
     "manga_recommender.ingestion.catalog.registry.get_all_registered_sources"
 )
 RUN_PIPELINE = "manga_recommender.pipeline.runner.run_pipeline"
+RUN_COMMUNITY_RECS = (
+    "manga_recommender.ingestion.community_recs.runner.run_community_recs_ingest"
+)
 PIPELINE_STAGES = "manga_recommender.pipeline.registry.get_all_pipeline_stages"
 
 
-def test_ingest_with_single_source_calls_run_ingestion(
+def test_ingest_with_single_source_calls_run_catalog_ingest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str]] = []
@@ -93,10 +96,10 @@ def test_pipeline_with_single_stage_calls_run_pipeline(
     calls: list[list[str]] = []
     monkeypatch.setattr(RUN_PIPELINE, calls.append)
 
-    result = runner.invoke(cli.app, ["pipeline", "--stage", "fill"])
+    result = runner.invoke(cli.app, ["pipeline", "--stage", "compute_metrics"])
 
     assert result.exit_code == 0
-    assert calls == [["fill"]]
+    assert calls == [["compute_metrics"]]
 
 
 def test_pipeline_with_repeated_stage_collects_all_of_them(
@@ -106,11 +109,11 @@ def test_pipeline_with_repeated_stage_collects_all_of_them(
     monkeypatch.setattr(RUN_PIPELINE, calls.append)
 
     result = runner.invoke(
-        cli.app, ["pipeline", "--stage", "fill", "--stage", "export"]
+        cli.app, ["pipeline", "--stage", "compute_metrics", "--stage", "export_manga"]
     )
 
     assert result.exit_code == 0
-    assert calls == [["fill", "export"]]
+    assert calls == [["compute_metrics", "export_manga"]]
 
 
 def test_pipeline_with_all_resolves_registered_stages(
@@ -118,12 +121,12 @@ def test_pipeline_with_all_resolves_registered_stages(
 ) -> None:
     calls: list[list[str]] = []
     monkeypatch.setattr(RUN_PIPELINE, calls.append)
-    monkeypatch.setattr(PIPELINE_STAGES, lambda: ["fill", "export"])
+    monkeypatch.setattr(PIPELINE_STAGES, lambda: ["compute_metrics", "export_manga"])
 
     result = runner.invoke(cli.app, ["pipeline", "--all"])
 
     assert result.exit_code == 0
-    assert calls == [["fill", "export"]]
+    assert calls == [["compute_metrics", "export_manga"]]
 
 
 def test_pipeline_without_stage_or_all_fails_without_running(
@@ -141,6 +144,20 @@ def test_pipeline_with_both_stage_and_all_fails_without_running(
 ) -> None:
     monkeypatch.setattr(RUN_PIPELINE, lambda stages: pytest.fail("should not run"))
 
-    result = runner.invoke(cli.app, ["pipeline", "--stage", "fill", "--all"])
+    result = runner.invoke(cli.app, ["pipeline", "--stage", "compute_metrics", "--all"])
 
     assert result.exit_code != 0
+
+
+def test_ingest_community_recs_runs_the_crawl(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[bool] = []
+
+    async def fake_ingest() -> None:
+        calls.append(True)
+
+    monkeypatch.setattr(RUN_COMMUNITY_RECS, fake_ingest)
+
+    result = runner.invoke(cli.app, ["ingest-community-recs"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [True]

@@ -6,12 +6,12 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from manga_recommender.pipeline.stages import embed
-from manga_recommender.pipeline.stages.embed import (
+from manga_recommender.pipeline.stages import embed_manga
+from manga_recommender.pipeline.stages.embed_manga import (
     build_embedding_text,
     create_manga_embeddings,
 )
-from manga_recommender.pipeline.stages.export import SCHEMA
+from manga_recommender.pipeline.stages.export_manga import SCHEMA
 
 MODEL = "fake/model"
 DIM = 4
@@ -41,7 +41,7 @@ def _vector(text: str) -> np.ndarray:
 @pytest.fixture
 def model(monkeypatch: pytest.MonkeyPatch) -> _FakeModel:
     fake = _FakeModel()
-    monkeypatch.setattr(embed, "load_model", lambda name, device: fake)
+    monkeypatch.setattr(embed_manga, "load_model", lambda name, device: fake)
     return fake
 
 
@@ -165,7 +165,7 @@ def test_create_manga_embeddings_drops_rows_gone_from_the_snapshot(
     model: _FakeModel, tmp_path: Path
 ) -> None:
     # The artifact mirrors the snapshot, so a manga that left the export gate
-    # must not survive in the vectors that `index` loads.
+    # must not survive in the vectors that `load_embeddings` loads.
     snapshot = tmp_path / "manga.parquet"
     _write_snapshot(snapshot, [_row("a"), _row("b")])
     _run(tmp_path)
@@ -192,16 +192,18 @@ def test_create_manga_embeddings_rejects_an_empty_snapshot_before_loading_the_mo
 ) -> None:
     # Export writes an empty snapshot when nothing qualifies. Embed must fail
     # loudly on it, before the slow model load, and keep the previous artifact:
-    # an empty artifact would let `index` wipe every stored vector.
+    # an empty artifact would let `load_embeddings` wipe every stored vector.
     fake = _FakeModel()
-    monkeypatch.setattr(embed, "load_model", lambda name, device: fake)
+    monkeypatch.setattr(embed_manga, "load_model", lambda name, device: fake)
     snapshot = tmp_path / "manga.parquet"
     _write_snapshot(snapshot, [_row("a")])
     out = _run(tmp_path)
     original = out.read_bytes()
 
     loaded: list[str] = []
-    monkeypatch.setattr(embed, "load_model", lambda name, device: loaded.append(name))
+    monkeypatch.setattr(
+        embed_manga, "load_model", lambda name, device: loaded.append(name)
+    )
     _write_snapshot(snapshot, [])
 
     with pytest.raises(ValueError):

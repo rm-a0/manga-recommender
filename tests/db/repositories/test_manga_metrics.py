@@ -98,7 +98,7 @@ def test_bulk_create_round_trips_every_column(db_session: Session) -> None:
 def test_bulk_create_accepts_an_empty_batch(db_session: Session) -> None:
     """An empty batch is a no-op, not an error.
 
-    The fill stage chunks its rows. A catalogue with no usable rating
+    The `compute_metrics` stage chunks its rows. A catalogue with no usable rating
     produces no chunks, and the final chunk can come out empty.
     """
     bulk_create_manga_metrics(db_session, [])
