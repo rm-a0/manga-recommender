@@ -35,7 +35,7 @@ from manga_recommender.schemas.tags import MangaTag
 def _to_metric_summary(metric: MangaMetric | None) -> MangaMetricSummary | None:
     """Map a metrics row to the model embedded in a manga response.
 
-    Returns None for a manga that has no row, which the `fill` stage leaves out
+    Returns None for a manga that has no row, which the `compute_metrics` stage leaves out
     entirely when no source rating is usable.
     """
     if metric is None:

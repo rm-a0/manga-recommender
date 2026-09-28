@@ -1,5 +1,6 @@
 """Typer CLI: run ingestion or start the API server."""
 
+import asyncio
 from typing import Annotated
 
 import typer
@@ -39,14 +40,24 @@ def ingest(
 ) -> None:
     """Run the ingestion pipeline. Pick either --source or --all."""
     from manga_recommender.ingestion.catalog.registry import get_all_registered_sources
-    from manga_recommender.ingestion.catalog.runner import run_ingestion
+    from manga_recommender.ingestion.catalog.runner import run_catalog_ingest
 
     if (source and all_sources) or (not source and not all_sources):
         raise typer.BadParameter("Pass either --source (one or more) or --all.")
     sources = get_all_registered_sources() if all_sources else source
     if sources is None:
         raise RuntimeError("No sources to ingest.")
-    run_ingestion(sources, batch_size=get_ingestion_settings().batch_size)
+    run_catalog_ingest(sources, batch_size=get_ingestion_settings().db_batch_size)
+
+
+@app.command(name="ingest-community-recs")
+def ingest_community_recs() -> None:
+    """Crawl AniList community recommendations into one raw run."""
+    from manga_recommender.ingestion.community_recs.runner import (
+        run_community_recs_ingest,
+    )
+
+    asyncio.run(run_community_recs_ingest())
 
 
 @app.command(name="pipeline")

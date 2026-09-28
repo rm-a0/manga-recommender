@@ -13,7 +13,7 @@ from manga_recommender.db.base import Base
 class MangaEmbedding(Base):
     """ORM model for the content vector computed for one manga.
 
-    The `index` stage rebuilds every row from the embeddings artifact. A manga
+    The `load_embeddings` stage rebuilds every row from the embeddings artifact. A manga
     outside the export gate gets no row at all, not a row of NULLs.
     """
 

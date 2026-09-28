@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class MangaMetric(Base):
     """ORM model for the rating metrics computed for one manga.
 
-    The `fill` stage rebuilds every row from `manga_external_ratings`. A manga
+    The `compute_metrics` stage rebuilds every row from `manga_external_ratings`. A manga
     with no usable source rating gets no row at all, not a row of NULLs.
     """
 

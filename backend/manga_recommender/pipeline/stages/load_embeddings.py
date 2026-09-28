@@ -11,7 +11,7 @@ import numpy as np
 import structlog
 from sqlalchemy.orm import Session
 
-from manga_recommender.core.config import get_pipeline_settings
+from manga_recommender.core.config import get_pipeline_settings, get_storage_settings
 from manga_recommender.db.repositories.manga_embeddings import (
     EmbeddingValues,
     bulk_create_manga_embeddings,
@@ -71,7 +71,9 @@ def store_manga_embeddings(db: Session, embeddings_path: Path, batch_size: int) 
     rows and index in place. Reads on the table wait until that transaction
     ends.
     """
-    logger.info("index_started", path=str(embeddings_path), batch_size=batch_size)
+    logger.info(
+        "load_embeddings_started", path=str(embeddings_path), batch_size=batch_size
+    )
 
     embedding_values = _load_npz(embeddings_path)
     drop_content_vector_index(db)
@@ -86,15 +88,17 @@ def store_manga_embeddings(db: Session, embeddings_path: Path, batch_size: int) 
         )
     create_content_vector_index(db)
 
-    logger.info("index_completed", deleted=deleted, inserted=len(embedding_values))
+    logger.info(
+        "load_embeddings_completed", deleted=deleted, inserted=len(embedding_values)
+    )
 
 
-def run_index() -> None:
+def run_load_embeddings() -> None:
     """Load the embeddings artifact into `manga_embeddings` in one transaction."""
     settings = get_pipeline_settings()
     with session_scope() as session:
         store_manga_embeddings(
             db=session,
-            embeddings_path=Path(settings.embeddings_path),
+            embeddings_path=Path(get_storage_settings().embeddings_path),
             batch_size=settings.db_batch_size,
         )

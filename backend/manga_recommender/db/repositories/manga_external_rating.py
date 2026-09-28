@@ -157,7 +157,7 @@ def update_or_create_external_rating(
 
 
 def get_rating_aggregates(db: Session) -> Sequence[Row]:
-    """Return the per-manga rating sums that the `fill` stage reduces to metrics.
+    """Return the per-manga rating sums that the `compute_metrics` stage reduces to metrics.
 
     Each row holds `manga_id`, `votes_count`, `weighted_votes`, `score_points`
     and `source_count`. `score_points` is the sum of every rating's normalized

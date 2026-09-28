@@ -6,7 +6,18 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class AppSettings(BaseSettings):
+class _EnvSettings(BaseSettings):
+    """Base for every settings class: read `.env`, ignore unknown keys.
+
+    A subclass sets only its `env_prefix`. Pydantic merges the two configs.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
+class AppSettings(_EnvSettings):
     """General application settings."""
 
     title: str = "manga-rec"
@@ -14,25 +25,18 @@ class AppSettings(BaseSettings):
     env: str = "development"
     debug: bool = True
 
-    model_config = SettingsConfigDict(
-        env_prefix="APP_", env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="APP_")
 
 
-class LoggingSettings(BaseSettings):
+class LoggingSettings(_EnvSettings):
     """Logging settings."""
 
     level: str = "INFO"
 
-    model_config = SettingsConfigDict(
-        env_prefix="LOGGING_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_prefix="LOGGING_")
 
 
-class DatabaseSettings(BaseSettings):
+class DatabaseSettings(_EnvSettings):
     """Database connection settings."""
 
     use_pooled: bool = False
@@ -40,11 +44,9 @@ class DatabaseSettings(BaseSettings):
     url_pooled: str | None = None
     pool_size: int = 5
     max_overflow: int = 10
-    statement_timeout: int | None = None
+    statement_timeout: int | None = None  # Milliseconds. None keeps the server default.
 
-    model_config = SettingsConfigDict(
-        env_prefix="DB_", env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="DB_")
 
     @model_validator(mode="after")
     def _require_pooled_url(self) -> DatabaseSettings:
@@ -65,82 +67,69 @@ class DatabaseSettings(BaseSettings):
         return self.url
 
 
-class APISettings(BaseSettings):
+class APISettings(_EnvSettings):
     """API server bind settings."""
 
     host: str = "0.0.0.0"
     port: int = 8000
 
-    model_config = SettingsConfigDict(
-        env_prefix="API_", env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="API_")
 
 
-class AniListSettings(BaseSettings):
-    """AniList extractor settings."""
+class AnilistSettings(_EnvSettings):
+    """AniList API and crawl settings, shared by every AniList ingest."""
 
     base_url: str = "https://graphql.anilist.co"
     requests_per_minute: int = 30
-    chunk_size: int = 50
+    catalog_chunk_size: int = 50  # IDs per request. 50 is AniList's maximum.
+    community_recs_chunk_size: int = 50  # Tested at 50: no complexity error, no loss.
     min_id: int = 30001  # No manga below this ID
     max_id: int | None = None  # None = fetch all
 
-    model_config = SettingsConfigDict(
-        env_prefix="ANILIST_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_prefix="ANILIST_")
 
 
-class KaggleMalSettings(BaseSettings):
+class KaggleMalSettings(_EnvSettings):
     """Kaggle MAL extractor settings."""
 
     path: str = "data/kaggle_mal_2026.csv"
-    direct_download_url: str = (
+    dataset_url: str = (
         "https://www.kaggle.com/datasets/patelris/anime-and-manga-dataset-2026"
     )
 
-    model_config = SettingsConfigDict(
-        env_prefix="KAGGLE_MAL_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_prefix="KAGGLE_MAL_")
 
 
-class IngestionSettings(BaseSettings):
-    """Ingestion pipeline settings."""
+class IngestionSettings(_EnvSettings):
+    """Ingestion settings."""
 
-    batch_size: int = 50
+    db_batch_size: int = 50  # Catalog records per `load_batch` transaction.
 
-    model_config = SettingsConfigDict(
-        env_prefix="INGESTION_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_prefix="INGESTION_")
 
 
-class PipelineSettings(BaseSettings):
-    """Pipeline settings."""
+class PipelineSettings(_EnvSettings):
+    """Pipeline stage settings. File locations live in `StorageSettings`."""
 
     smoothing_votes: float = 250.0
     db_batch_size: int = 5000
     parquet_batch_size: int = 5000
     encode_batch_size: int = 256
     min_description_length: int = 100
-    parquet_path: str = "data/artifacts/manga.parquet"
-    embeddings_path: str = "data/artifacts/embeddings.npz"
-    model_name: str = "BAAI/bge-small-en-v1.5"
-    device: str | None = None
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_device: str | None = None  # None lets the library pick a device.
 
-    model_config = SettingsConfigDict(
-        env_prefix="PIPELINE_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_prefix="PIPELINE_")
+
+
+class StorageSettings(_EnvSettings):
+    """Locations of raw runs and artifacts. R2 URLs replace these later."""
+
+    raw_dir: str = "data/raw"
+    manga_snapshot_path: str = "data/artifacts/manga.parquet"
+    embeddings_path: str = "data/artifacts/embeddings.npz"
+
+    model_config = SettingsConfigDict(env_prefix="STORAGE_")
 
 
 @functools.lru_cache
@@ -168,9 +157,9 @@ def get_api_settings() -> APISettings:
 
 
 @functools.lru_cache
-def get_anilist_settings() -> AniListSettings:
-    """Return the cached AniListSettings instance."""
-    return AniListSettings()
+def get_anilist_settings() -> AnilistSettings:
+    """Return the cached AnilistSettings instance."""
+    return AnilistSettings()
 
 
 @functools.lru_cache
@@ -189,3 +178,9 @@ def get_ingestion_settings() -> IngestionSettings:
 def get_pipeline_settings() -> PipelineSettings:
     """Return the cached PipelineSettings instance."""
     return PipelineSettings()
+
+
+@functools.lru_cache
+def get_storage_settings() -> StorageSettings:
+    """Return the cached StorageSettings instance."""
+    return StorageSettings()
