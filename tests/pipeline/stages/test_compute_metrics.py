@@ -10,7 +10,7 @@ from manga_recommender.db.repositories.manga import create_manga
 from manga_recommender.db.repositories.manga_external_rating import (
     create_external_rating,
 )
-from manga_recommender.pipeline.stages.fill import (
+from manga_recommender.pipeline.stages.compute_metrics import (
     _compute_bayesian_score,
     _compute_catalogue_mean,
     _compute_mean,

@@ -5,8 +5,8 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from manga_recommender.ingestion.common import anilist_client
-from manga_recommender.ingestion.common.anilist_client import (
+from manga_recommender.ingestion.anilist import client as anilist_client
+from manga_recommender.ingestion.anilist.client import (
     AnilistClient,
     AnilistQueryError,
     AnilistRateLimitError,

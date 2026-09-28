@@ -19,9 +19,9 @@ def _noop() -> None:
 def three_stages(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the real stage map with three stages in a known order."""
     stage_map: dict[str, Callable[[], None]] = {
-        "fill": _noop,
-        "export": _noop,
-        "embed": _noop,
+        "compute_metrics": _noop,
+        "export_manga": _noop,
+        "embed_manga": _noop,
     }
     monkeypatch.setattr(registry, "_STAGE_MAP", stage_map)
 
@@ -29,7 +29,11 @@ def three_stages(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_get_all_pipeline_stages_returns_them_in_registry_order(
     three_stages: None,
 ) -> None:
-    assert get_all_pipeline_stages() == ["fill", "export", "embed"]
+    assert get_all_pipeline_stages() == [
+        "compute_metrics",
+        "export_manga",
+        "embed_manga",
+    ]
 
 
 def test_get_stage_callable_raises_on_an_unknown_stage() -> None:
@@ -40,21 +44,25 @@ def test_get_stage_callable_raises_on_an_unknown_stage() -> None:
 def test_ordered_stages_ignore_the_order_they_were_asked_for(
     three_stages: None,
 ) -> None:
-    ordered = get_ordered_stages(["embed", "fill", "export"])
+    ordered = get_ordered_stages(["embed_manga", "compute_metrics", "export_manga"])
 
-    assert [name for name, _ in ordered] == ["fill", "export", "embed"]
+    assert [name for name, _ in ordered] == [
+        "compute_metrics",
+        "export_manga",
+        "embed_manga",
+    ]
 
 
 def test_ordered_stages_collapse_a_repeated_name(three_stages: None) -> None:
-    ordered = get_ordered_stages(["fill", "fill"])
+    ordered = get_ordered_stages(["compute_metrics", "compute_metrics"])
 
-    assert [name for name, _ in ordered] == ["fill"]
+    assert [name for name, _ in ordered] == ["compute_metrics"]
 
 
 def test_ordered_stages_return_only_the_requested_stages(three_stages: None) -> None:
-    ordered = get_ordered_stages(["embed", "fill"])
+    ordered = get_ordered_stages(["embed_manga", "compute_metrics"])
 
-    assert [name for name, _ in ordered] == ["fill", "embed"]
+    assert [name for name, _ in ordered] == ["compute_metrics", "embed_manga"]
 
 
 def test_ordered_stages_reject_an_unknown_name_among_valid_ones(
@@ -62,7 +70,7 @@ def test_ordered_stages_reject_an_unknown_name_among_valid_ones(
 ) -> None:
     # The typo must be caught before the caller gets anything to run.
     with pytest.raises(ValueError, match="Unknown stage: typo"):
-        get_ordered_stages(["fill", "typo"])
+        get_ordered_stages(["compute_metrics", "typo"])
 
 
 def test_ordered_stages_pair_each_name_with_its_own_function(
@@ -70,12 +78,12 @@ def test_ordered_stages_pair_each_name_with_its_own_function(
 ) -> None:
     calls: list[str] = []
     stage_map: dict[str, Callable[[], None]] = {
-        "fill": lambda: calls.append("fill"),
-        "export": lambda: calls.append("export"),
+        "compute_metrics": lambda: calls.append("compute_metrics"),
+        "export_manga": lambda: calls.append("export_manga"),
     }
     monkeypatch.setattr(registry, "_STAGE_MAP", stage_map)
 
-    for _, stage_callable in get_ordered_stages(["export", "fill"]):
+    for _, stage_callable in get_ordered_stages(["export_manga", "compute_metrics"]):
         stage_callable()
 
-    assert calls == ["fill", "export"]
+    assert calls == ["compute_metrics", "export_manga"]

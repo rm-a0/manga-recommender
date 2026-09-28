@@ -374,11 +374,15 @@ adding once several routes raise the same failure.
 | `API_PORT` | — | Bind port (default `8000`) |
 | `LOGGING_LEVEL` | — | Log level, e.g. `INFO`/`DEBUG` (default `INFO`) |
 | `ANILIST_REQUESTS_PER_MINUTE` | — | AniList rate limit budget (default `30`) |
-| `ANILIST_CHUNK_SIZE` | — | IDs per `id_in` request (default `50`, AniList's max) |
+| `ANILIST_CATALOG_CHUNK_SIZE` | — | IDs per catalog `id_in` request (default `50`, AniList's max) |
+| `ANILIST_COMMUNITY_RECS_CHUNK_SIZE` | — | IDs per community-recs request (default `50`, AniList's max) |
 | `ANILIST_MIN_ID` | — | Lowest manga ID to fetch (default `30001` — below this is all anime) |
 | `ANILIST_MAX_ID` | — | Highest manga ID to fetch (default: resolved live from AniList) |
-| `INGESTION_BATCH_SIZE` | — | Records per `load_batch` transaction (default `50`) |
+| `INGESTION_DB_BATCH_SIZE` | — | Catalog records per `load_batch` transaction (default `50`) |
 | `KAGGLE_MAL_PATH` | — | Path to the Kaggle MAL CSV (default `data/kaggle_mal_2026.csv`) |
+| `STORAGE_RAW_DIR` | — | Root of the raw runs (default `data/raw`) |
+| `STORAGE_MANGA_SNAPSHOT_PATH` | — | Snapshot `export_manga` writes (default `data/artifacts/manga.parquet`) |
+| `STORAGE_EMBEDDINGS_PATH` | — | Artifact `embed_manga` writes (default `data/artifacts/embeddings.npz`) |
 
 Every variable has a fallback in `core/config.py`, so none are strictly required to boot —
 `DB_URL` is marked "recommended" because the fallback points at a placeholder local
