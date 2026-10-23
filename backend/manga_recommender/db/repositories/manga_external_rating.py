@@ -116,6 +116,21 @@ def get_external_rating_by_source_and_external_id(
     )
 
 
+def get_manga_ids_by_external_id(
+    db: Session,
+    source_id: uuid.UUID,
+) -> dict[str, uuid.UUID]:
+    """Return the manga ID for each external ID of one source.
+
+    Reads the whole source in one query, so a caller can map many IDs without a
+    round trip for each one.
+    """
+    stmt = select(MangaExternalRating.external_id, MangaExternalRating.manga_id).where(
+        MangaExternalRating.source_id == source_id
+    )
+    return {external_id: manga_id for external_id, manga_id in db.execute(stmt)}
+
+
 def update_or_create_external_rating(
     db: Session,
     *,
