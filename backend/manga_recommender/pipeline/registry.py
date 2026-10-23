@@ -2,6 +2,9 @@
 
 from collections.abc import Callable, Sequence
 
+from manga_recommender.pipeline.stages.build_community_recs import (
+    run_build_community_recs,
+)
 from manga_recommender.pipeline.stages.compute_metrics import run_compute_metrics
 from manga_recommender.pipeline.stages.embed_manga import run_embed_manga
 from manga_recommender.pipeline.stages.export_manga import run_export_manga
@@ -12,6 +15,7 @@ _STAGE_MAP: dict[str, Callable[[], None]] = {
     "export_manga": run_export_manga,
     "embed_manga": run_embed_manga,
     "load_embeddings": run_load_embeddings,
+    "build_community_recs": run_build_community_recs,
 }
 
 

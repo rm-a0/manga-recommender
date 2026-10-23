@@ -22,7 +22,9 @@ def write_table(path: Path, table: pa.Table) -> None:
 
 
 def write_batches(
-    path: Path, schema: pa.Schema, batches: Iterable[pa.RecordBatch]
+    path: Path,
+    schema: pa.Schema,
+    batches: Iterable[pa.RecordBatch],
 ) -> int:
     """Stream `batches` into a Parquet file, one row group each. Return the row count."""
     row_count = 0
