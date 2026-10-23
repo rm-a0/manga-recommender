@@ -13,6 +13,7 @@ from manga_recommender.db.repositories.manga_external_rating import (
     bulk_update_or_create_external_ratings,
     create_external_rating,
     get_external_ratings_by_manga_and_source,
+    get_manga_ids_by_external_id,
     get_rating_aggregates,
     update_external_rating,
     update_or_create_external_rating,
@@ -408,3 +409,41 @@ def test_get_rating_aggregates_returns_nothing_when_no_rating_exists(
     create_manga(db_session, title="Nobody rated me")
 
     assert get_rating_aggregates(db_session) == []
+
+
+def test_get_manga_ids_by_external_id_maps_only_the_given_source(
+    db_session: Session,
+) -> None:
+    anilist = _source(db_session, "anilist")
+    other = _source(db_session, "other")
+    first = create_manga(db_session, title="First")
+    second = create_manga(db_session, title="Second")
+    for manga, external_id in ((first, "101"), (second, "102")):
+        create_external_rating(
+            db_session,
+            manga_id=manga.id,
+            source_id=anilist.id,
+            external_id=external_id,
+            fetched_at=datetime.now(UTC),
+        )
+    # The same external ID under another source must not leak into the map.
+    create_external_rating(
+        db_session,
+        manga_id=second.id,
+        source_id=other.id,
+        external_id="101",
+        fetched_at=datetime.now(UTC),
+    )
+
+    assert get_manga_ids_by_external_id(db_session, anilist.id) == {
+        "101": first.id,
+        "102": second.id,
+    }
+
+
+def test_get_manga_ids_by_external_id_is_empty_for_a_source_without_ratings(
+    db_session: Session,
+) -> None:
+    source = _source(db_session, "empty")
+
+    assert get_manga_ids_by_external_id(db_session, source.id) == {}
