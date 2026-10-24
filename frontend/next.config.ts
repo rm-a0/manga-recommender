@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  // Emit a self-contained server in .next/standalone for the Docker image.
+  output: 'standalone',
   // The floating route badge sits over the running order at small widths.
   devIndicators: false,
   images: {

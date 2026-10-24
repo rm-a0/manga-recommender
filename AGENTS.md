@@ -82,6 +82,20 @@ directly — another narrow exception to the "hand-coded only" rule above, scope
 - Fixtures, factories, and other test utilities under `tests/` are fair game for the
   agent to write and maintain, same as the tests themselves.
 
+### Alembic migrations — agent-generated from the models, then verified
+
+Migration files under `alembic/versions/` derive from the hand-coded models, so an
+agent may generate them with `alembic revision --autogenerate` and add what
+autogenerate misses (extensions, enum drops in `downgrade`, third-party type imports).
+The models themselves stay hand-coded.
+
+- Verify every migration on a throwaway Docker Postgres, never a real database:
+  `upgrade head`, `alembic check`, and a `downgrade base` round trip.
+- A squash also needs a `pg_dump --schema-only` diff against the old chain. Column
+  order may differ. Nothing else may.
+- Data migrations (backfills, `UPDATE`s) carry business rules, so propose them to the
+  user instead of writing them.
+
 ### Pair on it — propose incrementally, don't hand over finished files unprompted
 
 - Infra/scaffolding: CI/CD YAML, Makefile, Dockerfile, deployment config, README,
