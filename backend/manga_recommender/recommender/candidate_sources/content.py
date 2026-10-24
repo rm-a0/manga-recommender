@@ -38,6 +38,7 @@ class ContentCandidateSource(BaseCandidateSource):
         Skip a seed that has no embedding.
         """
         matches: list[SeedMatches] = []
+
         for seed_id in seed_ids:
             embedding = get_embedding_by_manga_id(db, seed_id)
             if not embedding:
