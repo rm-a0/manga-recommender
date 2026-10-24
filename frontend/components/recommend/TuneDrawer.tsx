@@ -16,6 +16,7 @@ import type { Tuning } from '@/lib/recommend'
 import {
   balanceWords,
   ENGINE_NOTES,
+  explicitHelp,
   LIMIT_RANGE,
   limitHelp,
   RECIPES,
@@ -88,7 +89,7 @@ export function TuneDrawer() {
         if (event.target === event.currentTarget) setTuneOpen(false)
       }}
       aria-labelledby="tune-title"
-      className="side-drawer"
+      className="side-drawer tune-drawer"
     >
       {tuneOpen && <DrawerBody onClose={() => setTuneOpen(false)} />}
     </dialog>
@@ -96,10 +97,16 @@ export function TuneDrawer() {
 }
 
 function DrawerBody({ onClose }: { onClose: () => void }) {
-  const { query, strategies, codes, applyTuning, notify } = useRecommend()
+  const { query, strategies, codes, explicitCodes, applyTuning, notify } = useRecommend()
   const [draft, setDraft] = useState<Tuning>(query.tuning)
   const [engine, setEngine] = useState(readEngineDetails)
   const sources = sourcesOf(strategies)
+  const skippable = draft.explicit ? codes : codes.filter((c) => !explicitCodes.includes(c))
+  // Recipes that use one source sit three to a row, under the two blends.
+  const isSingle = (strategy: Tuning['strategy']) =>
+    Object.values(strategies.find((s) => s.strategy === strategy)?.weights ?? {}).filter(
+      Boolean,
+    ).length === 1
   const weights = effectiveWeights(draft, strategies)
   const base = effectiveWeights({ ...draft, weights: {} }, strategies)
   const normalised = normaliseTuning(draft, strategies)
@@ -163,7 +170,7 @@ function DrawerBody({ onClose }: { onClose: () => void }) {
 
       <div className="overflow-auto overscroll-contain px-5 pb-6">
         <p className="mt-4 code text-[0.7rem] text-dim">Start from</p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="mt-2 grid grid-cols-6 gap-2">
           {RECIPES.map((r) => {
             const on =
               draft.strategy === r.strategy && !Object.keys(normalised.weights).length
@@ -175,7 +182,7 @@ function DrawerBody({ onClose }: { onClose: () => void }) {
                 onClick={() =>
                   setDraft((d) => ({ ...d, strategy: r.strategy, weights: {} }))
                 }
-                className="grid gap-0.5 border border-line p-2.5 text-left hover:border-dim aria-pressed:border-cell aria-pressed:bg-cell aria-pressed:text-cell-ink aria-pressed:shadow-[inset_0_3px_0_var(--color-spot)]"
+                className={`${isSingle(r.strategy) ? 'col-span-6 sm:col-span-2' : 'col-span-3'} grid content-start gap-0.5 border border-line p-2.5 text-left hover:border-dim aria-pressed:border-cell aria-pressed:bg-cell aria-pressed:text-cell-ink aria-pressed:shadow-[inset_0_3px_0_var(--color-spot)]`}
               >
                 <b className="font-display font-normal tracking-[0.03em] uppercase">
                   {r.label}
@@ -228,12 +235,19 @@ function DrawerBody({ onClose }: { onClose: () => void }) {
 
         <Section
           title="Leave out"
-          lead="Titles carrying any of these codes are dropped from your picks."
-          changed={draft.skip.length > 0}
-          onReset={() => setDraft((d) => ({ ...d, skip: [] }))}
+          changed={draft.skip.length > 0 || draft.explicit}
+          onReset={() => setDraft((d) => ({ ...d, skip: [], explicit: false }))}
         >
+          <ExplicitSwitch
+            on={draft.explicit}
+            engine={engine}
+            onChange={(explicit) => setDraft((d) => ({ ...d, explicit }))}
+          />
+          <p className="mt-3 mb-1 text-[0.84rem] leading-snug text-dim">
+            Titles carrying any of these codes are dropped from your picks.
+          </p>
           <SkipCodes
-            codes={codes}
+            codes={skippable}
             skip={draft.skip}
             onChange={(skip) => setDraft((d) => ({ ...d, skip }))}
           />
@@ -323,6 +337,42 @@ function Section({
       {lead && <p className="mt-2 mb-1 text-[0.84rem] leading-snug text-dim">{lead}</p>}
       {children}
     </section>
+  )
+}
+
+/** Whether explicit titles may be picked. Off by default, pen once the reader turns it on. */
+function ExplicitSwitch({
+  on,
+  engine,
+  onChange,
+}: {
+  on: boolean
+  engine: boolean
+  onChange: (on: boolean) => void
+}) {
+  return (
+    <div className="border-b border-line pt-3 pb-3">
+      <label className="seal-switch">
+        <input
+          type="checkbox"
+          role="switch"
+          checked={on}
+          aria-describedby="explicit-help"
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        <span className="seal-track" aria-hidden="true">
+          <span />
+        </span>
+        <span className="min-w-0 flex-1 font-bold">Explicit titles</span>
+        <b className={`code whitespace-nowrap ${on ? 'text-pen-on-ground' : 'text-dim'}`}>
+          {on ? 'Included' : 'Left out'}
+        </b>
+      </label>
+      {engine && <p className="engine-line">{ENGINE_NOTES.explicit}</p>}
+      <p id="explicit-help" className="mt-1.5 text-[0.82rem] leading-snug text-dim">
+        {explicitHelp(on)}
+      </p>
+    </div>
   )
 }
 
@@ -441,7 +491,7 @@ function UnderTheHood({
   const { query, pending } = useRecommend()
   let marks = query.marks
   for (const [id, pile] of Object.entries(pending)) marks = withMark(marks, id, pile)
-  const request = toRequest({ marks, tuning: draft }, GENRE_SEAL)
+  const request = toRequest({ marks, tuning: draft })
   const shorten = (_key: string, v: unknown) =>
     typeof v === 'string' && v.length > 30 ? `${v.slice(0, 8)}…` : v
   const sources = Object.keys(weights)
@@ -499,7 +549,11 @@ function UnderTheHood({
         <dt className="code text-text">piles</dt>
         <dd>{ENGINE_NOTES.piles}.</dd>
         <dt className="code text-text">seal</dt>
-        <dd>{GENRE_SEAL.join(' and ')} are always added to exclude_tags.</dd>
+        <dd>
+          {draft.explicit
+            ? 'Off. Explicit titles can be picked.'
+            : `${GENRE_SEAL.join(' and ')} are added to exclude_tags.`}
+        </dd>
       </dl>
       <p className="mt-3 mb-1 code text-dim">POST /recommendations</p>
       <pre className="overflow-x-auto border border-line bg-ground p-3 font-mono text-[0.72rem] leading-relaxed text-text">

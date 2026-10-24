@@ -329,7 +329,7 @@
 .side-drawer {
   position: fixed;
   inset: 0 0 0 auto;
-  width: min(480px, 100vw);
+  width: min(var(--drawer-width, 480px), 100vw);
   height: 100dvh;
   max-height: none;
   max-width: none;
@@ -339,6 +339,10 @@
   background: var(--color-panel);
   color: var(--color-text);
   box-shadow: -18px 0 40px rgb(0 0 0 / 0.35);
+}
+/* Wider than an entry: three one-source recipes sit side by side. */
+.tune-drawer {
+  --drawer-width: 560px;
 }
 .side-drawer[open] {
   animation: drawer-in 0.3s var(--ease-press);
@@ -469,6 +473,59 @@
 }
 .engine-switch input:focus-visible + .engine-track {
   outline: 2px solid var(--color-spot-on-cell);
+  outline-offset: 2px;
+}
+/*
+ * The explicit switch, drawn on stock rather than paper. It stays dim at the
+ * default and turns pen once the reader lets explicit titles in.
+ */
+.seal-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.seal-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.seal-track {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 18px;
+  border: 1.5px solid var(--color-dim);
+  transition:
+    background-color 0.18s,
+    border-color 0.18s;
+}
+.seal-track > span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  background: var(--color-dim);
+  transition:
+    transform 0.2s var(--ease-press),
+    background-color 0.18s;
+}
+.seal-switch:hover .seal-track {
+  border-color: var(--color-text);
+}
+.seal-switch input:checked + .seal-track {
+  background: var(--color-pen);
+  border-color: var(--color-pen);
+}
+.seal-switch input:checked + .seal-track > span {
+  transform: translateX(16px);
+  background: var(--color-cell);
+}
+.seal-switch input:focus-visible + .seal-track {
+  outline: 2px solid var(--color-spot-on-ground);
   outline-offset: 2px;
 }
 .engine-line {

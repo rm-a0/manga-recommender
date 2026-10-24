@@ -45,9 +45,10 @@ here is that the reader picks — or composes — the strategy: prior reading hi
 semantic similarity over tags and descriptions, collaborative signal from other readers,
 or a custom blend with tags excluded and specific likes and dislikes weighted.
 
-Built so far: two sources — synopsis similarity over embeddings (`content`) and shared
-codes (`tags`) — fused by weighted reciprocal rank fusion, with four named strategies and
-per-source weight overrides. Reading history and collaborative signal are not built.
+Built so far: three sources — synopsis similarity over embeddings (`content`), shared
+codes (`tags`) and AniList reader recommendations (`community`) — fused by weighted
+reciprocal rank fusion, with five named strategies and per-source weight overrides.
+Reading history and collaborative signal from this site's own readers are not built.
 
 ## Operating Context
 
@@ -71,7 +72,7 @@ Working today, via the existing FastAPI JSON API:
 - `GET /authors`, `GET /authors/{id}`, `GET /authors/{id}/manga`
 - `GET /health`, `GET /ready`
 - `POST /recommendations` — `liked_ids` (at least one), `disliked_ids`, `exclude_ids`,
-  `exclude_tags`, `strategy` (`auto|balanced|content|tags`), `weights` (per source, ≥0,
+  `exclude_tags`, `strategy` (`auto|balanced|community|content|tags`), `weights` (per source, ≥0,
   overriding the strategy's), `limit` 1–50. Returns the picks in display order, each with
   the source and liked title that nominated it. `GET /recommendations/strategies` lists
   every strategy's weights.
@@ -124,8 +125,9 @@ Constraints that shape the interface:
   composes existing endpoint calls and renders results in the order returned. It sends
   the reader's weights to the API; it does not score, rank, or weight anything
   client-side.
-- **The explicit seal on picks is genre-level.** Recommendation requests always exclude
-  the Hentai and Erotica genres. The tag-level flag also marks codes found on mainstream
+- **The explicit seal on picks is genre-level.** Recommendation requests exclude the
+  Hentai and Erotica genres unless the reader turns on *Explicit titles* in the tuning
+  drawer (`explicit=1`, the catalogue's own parameter). The tag-level flag also marks codes found on mainstream
   titles, so it is not used for picks until the API can filter explicit titles itself.
 
 ## Brand Commitments

@@ -340,14 +340,17 @@ fine pointer.
 
 ### The tuning drawer
 
-A modal dialog from the right, full screen on phones: paper header, stock body, one-row
+A modal dialog from the right, 560px wide and full screen on phones: paper header, stock body, one-row
 footer. Every control the recommendation API accepts is here, and nothing it does not.
 Changes are drafted; the footer previews them ("4 new · 15 move · 4 leave") and nothing
 applies before *Apply*, which keeps the reader's place.
 
 Sections under the spot rule, each with its own *Reset* once changed: *Start from* (the
-four strategies as recipe cards), *What makes a match* (a slider per source, the balance
-bar, and one sentence on how they compare), *Leave out*, *How many*.
+five strategies as recipe cards: the two blends side by side, the three one-source recipes
+in a row beneath, stacked on phones), *What makes a match* (a slider per source, the
+balance bar, and one sentence on how they compare), *Leave out* (the *Explicit titles*
+switch, dim when off and pen once the reader turns it on, then the codes to skip),
+*How many*.
 
 **The slider** is a native range input drawn to the catalogue: ruled track, filled run,
 a tick at the default, a paper thumb. Its value is printed in words on the right, in pen

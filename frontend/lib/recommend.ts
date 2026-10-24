@@ -6,15 +6,13 @@
  * the browser: it only reads and writes search params.
  */
 
-import { MAX_RECOMMENDATIONS } from './types'
+import { GENRE_SEAL } from './explicit'
+import { MAX_RECOMMENDATIONS, RECOMMENDATION_STRATEGIES } from './types'
 import type { RecommendationRequest, RecommendationStrategy, StrategyInfo } from './types'
 
-export const STRATEGIES: readonly RecommendationStrategy[] = [
-  'auto',
-  'balanced',
-  'content',
-  'tags',
-]
+const isStrategy = (value: string | undefined): value is RecommendationStrategy =>
+  (RECOMMENDATION_STRATEGIES as readonly (string | undefined)[]).includes(value)
+
 export const DEFAULT_STRATEGY: RecommendationStrategy = 'auto'
 export const DEFAULT_LIMIT = 20
 
@@ -34,6 +32,8 @@ export interface Tuning {
   weights: Record<string, number>
   /** Codes whose titles are kept out: `exclude_tags`. */
   skip: string[]
+  /** Whether explicit titles may be picked. Off adds `GENRE_SEAL` to `exclude_tags`. */
+  explicit: boolean
   limit: number
 }
 
@@ -46,6 +46,7 @@ export const DEFAULT_TUNING: Tuning = {
   strategy: DEFAULT_STRATEGY,
   weights: {},
   skip: [],
+  explicit: false,
   limit: DEFAULT_LIMIT,
 }
 
@@ -78,7 +79,7 @@ export function parseQuery(params: Params): RecommendQuery {
   for (const pile of PILES)
     marks[pile] = marks[pile].filter((id) => !seen.has(id) && seen.add(id))
 
-  const strategy = one(params, 'strategy') as RecommendationStrategy | undefined
+  const strategy = one(params, 'strategy')
   const weights: Record<string, number> = {}
   const keys =
     params instanceof URLSearchParams ? [...params.keys()] : Object.keys(params)
@@ -91,9 +92,11 @@ export function parseQuery(params: Params): RecommendQuery {
   return {
     marks,
     tuning: {
-      strategy: strategy && STRATEGIES.includes(strategy) ? strategy : DEFAULT_STRATEGY,
+      strategy: isStrategy(strategy) ? strategy : DEFAULT_STRATEGY,
       weights,
       skip: unique(all(params, 'skip')),
+      // The same parameter the catalogue uses to break its seal.
+      explicit: one(params, 'explicit') === '1',
       limit:
         Number.isInteger(limit) && limit >= 1 && limit <= MAX_RECOMMENDATIONS
           ? limit
@@ -110,6 +113,7 @@ export function toSearchParams({ marks, tuning }: RecommendQuery): URLSearchPara
   for (const [source, weight] of Object.entries(tuning.weights))
     params.set(`w.${source}`, String(weight))
   for (const code of tuning.skip) params.append('skip', code)
+  if (tuning.explicit) params.set('explicit', '1')
   if (tuning.limit !== DEFAULT_LIMIT) params.set('n', String(tuning.limit))
   return params
 }
@@ -153,11 +157,14 @@ export function normaliseTuning(tuning: Tuning, strategies: StrategyInfo[]): Tun
   return { ...tuning, weights }
 }
 
-/** The request body for a query. `seal` is added to the reader's own skipped codes. */
-export function toRequest(
-  { marks, tuning }: RecommendQuery,
-  seal: readonly string[] = [],
-): RecommendationRequest {
+/**
+ * The request body for a query.
+ *
+ * Unless the reader lets explicit titles in, `GENRE_SEAL` joins their own
+ * skipped codes in `exclude_tags`.
+ */
+export function toRequest({ marks, tuning }: RecommendQuery): RecommendationRequest {
+  const seal = tuning.explicit ? [] : GENRE_SEAL
   const excludeTags = [...new Set([...seal, ...tuning.skip])]
   const request: RecommendationRequest = {
     liked_ids: marks.like,
