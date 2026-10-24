@@ -119,7 +119,7 @@ export interface MangaListParams {
 export const MAX_RECOMMENDATIONS = 50
 
 /** A named blend of the candidate sources. Mirrors `RecommendationStrategy`. */
-export type RecommendationStrategy = 'auto' | 'balanced' | 'content' | 'tags'
+export type RecommendationStrategy = 'auto' | 'balanced' | 'content' | 'tags' | 'community'
 
 /**
  * Query body for `POST /recommendations`. Mirrors `RecommendationRequest`.
