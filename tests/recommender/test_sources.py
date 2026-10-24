@@ -7,7 +7,12 @@ import pytest
 from sqlalchemy.orm import Session
 
 from manga_recommender.db.models.manga import Manga
+from manga_recommender.db.models.manga_similarities import SimilarityMethod
 from manga_recommender.db.repositories.manga import MangaFilters
+from manga_recommender.db.repositories.manga_similarities import (
+    SimilarityValues,
+    bulk_create_manga_similarities,
+)
 from manga_recommender.recommender.registry import (
     get_candidate_source,
     get_source_names,
@@ -33,6 +38,20 @@ def test_every_source_returns_only_the_manga_that_pass_the_filters(
     kept = embedded_manga("Kept", 10)
     for manga in (seed, excluded, kept):
         tag_manga(manga.id, "Action")
+    # The excluded manga scores higher, so a source that skips the filter
+    # returns it first.
+    bulk_create_manga_similarities(
+        db_session,
+        [
+            SimilarityValues(
+                manga_id=seed.id,
+                method=SimilarityMethod.COMMUNITY_RECS,
+                similar_manga_id=similar_id,
+                score=score,
+            )
+            for similar_id, score in ((excluded.id, 0.75), (kept.id, 0.25))
+        ],
+    )
     query = make_query(
         liked_ids=(seed.id,),
         source_weights={source_name: 1.0},

@@ -30,7 +30,8 @@ class TestListStrategies:
         by_name = {row["strategy"]: row["weights"] for row in response.json()}
         assert by_name["content"] == {"content": 1.0}
         assert by_name["tags"] == {"tags": 1.0}
-        assert set(by_name) == {"auto", "balanced", "content", "tags"}
+        assert by_name["community"] == {"community": 1.0}
+        assert set(by_name) == {"auto", "balanced", "content", "tags", "community"}
 
     def test_names_only_sources_the_registry_knows(self, client: TestClient) -> None:
         from manga_recommender.recommender.registry import get_source_names
