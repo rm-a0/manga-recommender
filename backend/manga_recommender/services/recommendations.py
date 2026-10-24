@@ -25,10 +25,11 @@ from manga_recommender.schemas.recommendations import (
 from manga_recommender.services.manga import to_manga_summary
 
 _STRATEGY_WEIGHTS: dict[RecommendationStrategy, dict[str, float]] = {
-    RecommendationStrategy.AUTO: {"content": 1.0, "tags": 0.5},
-    RecommendationStrategy.BALANCED: {"content": 1.0, "tags": 1.0},
+    RecommendationStrategy.AUTO: {"community": 1.0, "content": 0.8, "tags": 0.4},
+    RecommendationStrategy.BALANCED: {"content": 1.0, "tags": 1.0, "community": 1.0},
     RecommendationStrategy.CONTENT: {"content": 1.0},
     RecommendationStrategy.TAGS: {"tags": 1.0},
+    RecommendationStrategy.COMMUNITY: {"community": 1.0},
 }
 
 

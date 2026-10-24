@@ -40,6 +40,7 @@ class RecommendationStrategy(StrEnum):
     BALANCED = "balanced"
     CONTENT = "content"
     TAGS = "tags"
+    COMMUNITY = "community"
 
 
 class RecommendationRequest(BaseModel):

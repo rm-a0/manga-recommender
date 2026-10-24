@@ -9,6 +9,9 @@ from manga_recommender.recommender.base import (
     Scorer,
     Selector,
 )
+from manga_recommender.recommender.candidate_sources.community import (
+    CommunityCandidateSource,
+)
 from manga_recommender.recommender.candidate_sources.content import (
     ContentCandidateSource,
 )
@@ -20,6 +23,7 @@ from manga_recommender.recommender.selectors.top_k import take_top_k
 _SOURCE_MAP: dict[str, BaseCandidateSource] = {
     "content": ContentCandidateSource(),
     "tags": TagsCandidateSource(),
+    "community": CommunityCandidateSource(),
 }
 
 _FILTERS: list[Filter] = [
