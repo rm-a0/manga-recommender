@@ -122,7 +122,7 @@ function PileZone({ pile }: { pile: Pile }) {
           return (
             <div
               key={id}
-              className="group relative w-11"
+              className="group relative w-[52px]"
               title={`${stub?.title ?? 'Title'}${waiting ? ' — waiting for Update picks' : ''}`}
             >
               <button
@@ -140,7 +140,7 @@ function PileZone({ pile }: { pile: Pile }) {
                     alt=""
                     width={44}
                     height={63}
-                    sizes="44px"
+                    sizes="52px"
                     className="h-full w-full object-cover"
                   />
                 )}
@@ -162,7 +162,7 @@ function PileZone({ pile }: { pile: Pile }) {
             type="button"
             onClick={() => setExpanded(true)}
             aria-label={`Show all ${members.length}`}
-            className="grid aspect-[225/320] w-11 place-items-center border-[1.5px] border-dashed border-line font-display text-[1.05rem] hover:border-pen"
+            className="grid aspect-[225/320] w-[52px] place-items-center border-[1.5px] border-dashed border-line font-display text-[1.05rem] hover:border-pen"
           >
             +{rest}
           </button>

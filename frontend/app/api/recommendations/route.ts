@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server'
 
 import { ApiError, recommend } from '@/lib/api'
-import { GENRE_SEAL } from '@/lib/explicit'
 import { parseQuery, toRequest } from '@/lib/recommend'
 
 async function run(query: string) {
   const parsed = parseQuery(new URLSearchParams(query))
   if (!parsed.marks.like.length) return []
-  const result = await recommend(toRequest(parsed, GENRE_SEAL))
+  const result = await recommend(toRequest(parsed))
   return result.recommendations.map((r) => r.manga.id)
 }
 

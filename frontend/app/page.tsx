@@ -11,13 +11,13 @@ import { SideEntry } from '@/components/recommend/SideEntry'
 import { TuneButton, TuneDrawer } from '@/components/recommend/TuneDrawer'
 import { SectionHead } from '@/components/SectionHead'
 import { getManga, listAllTags, listManga, listStrategies, recommend } from '@/lib/api'
-import { GENRE_SEAL, unsealed } from '@/lib/explicit'
+import { explicitNames } from '@/lib/explicit'
 import { parseQuery, toRequest } from '@/lib/recommend'
 import type { RecommendQuery } from '@/lib/recommend'
 
 /** The engine's picks for the reader's marks, in the order it returned them. */
 async function Picks({ query }: { query: RecommendQuery }) {
-  const result = await recommend(toRequest(query, GENRE_SEAL))
+  const result = await recommend(toRequest(query))
 
   if (!result.seeds.length) {
     return (
@@ -85,11 +85,12 @@ export default async function Page(props: PageProps<'/'>) {
       query={query}
       strategies={strategies}
       initialTitles={stubs.filter((stub): stub is TitleStub => stub !== null)}
-      codes={unsealed(tags, false).map((tag) => tag.name)}
+      codes={tags.map((tag) => tag.name)}
+      explicitCodes={explicitNames(tags)}
     >
       <div className="mx-auto max-w-[1320px] px-5 pb-16 sm:px-8">
         <Hero tools={<TuneButton />} />
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div>
             <Suspense fallback={<HallSkeleton cells={14} />}>
               {query.marks.like.length ? <Picks query={query} /> : <MostRead />}

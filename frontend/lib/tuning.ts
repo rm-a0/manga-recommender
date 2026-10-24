@@ -6,6 +6,7 @@
  * take yet is not shown at all, rather than faked.
  */
 
+import { GENRE_SEAL } from './explicit'
 import { MAX_RECOMMENDATIONS } from './types'
 import type { RecommendationStrategy } from './types'
 
@@ -106,7 +107,7 @@ export function balanceWords(weights: Record<string, number>): string {
   if (entries.every(([, w]) => !w)) return 'Nothing counts yet — raise at least one.'
   if (entries.length !== 2) {
     const [top] = [...entries].sort((a, b) => b[1] - a[1])
-    return `${sourceCopy(top[0]).label} counts most.`
+    return `Most weight goes to ${sourceCopy(top[0]).label.toLowerCase()}.`
   }
   const [[a, wa], [b, wb]] = entries
   const la = sourceCopy(a).label,
@@ -120,6 +121,11 @@ export function balanceWords(weights: Record<string, number>): string {
   return `${la} and ${lb.toLowerCase()} count the same.`
 }
 
+export const explicitHelp = (on: boolean) =>
+  on
+    ? `${GENRE_SEAL.join(' and ')} titles can be picked, and the explicit codes are listed below.`
+    : `Titles in the ${GENRE_SEAL.join(' and ')} genres stay out of your picks.`
+
 export const limitHelp = (n: number) =>
   `The engine returns ${n} pick${n === 1 ? '' : 's'}. It accepts 1 to ${MAX_RECOMMENDATIONS}.`
 
@@ -128,6 +134,7 @@ export const ENGINE_NOTES = {
   strategy: `sent as strategy · one of ${RECIPES.map((r) => r.strategy).join(' · ')}; supplies every weight you leave alone`,
   weight: (source: string) => `sent as weights.${source} · ${sourceCopy(source).engine}`,
   skip: 'sent as exclude_tags · titles carrying any of these codes are dropped',
+  explicit: `sent as exclude_tags · off adds ${GENRE_SEAL.join(' · ')} · the API's exclude_explicit is not built yet`,
   limit: `sent as limit · 1 – ${MAX_RECOMMENDATIONS}`,
   piles:
     'More like this → liked_ids · Not for me → disliked_ids · Already read → exclude_ids',

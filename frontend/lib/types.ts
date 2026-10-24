@@ -118,8 +118,21 @@ export interface MangaListParams {
 /** The most picks one recommendation may return. Mirrors `le=50` on `limit`. */
 export const MAX_RECOMMENDATIONS = 50
 
-/** A named blend of the candidate sources. Mirrors `RecommendationStrategy`. */
-export type RecommendationStrategy = 'auto' | 'balanced' | 'content' | 'tags' | 'community'
+/**
+ * Every named blend of the candidate sources. Mirrors `RecommendationStrategy`.
+ *
+ * The type derives from this list, so a strategy added here is also one the
+ * URL accepts.
+ */
+export const RECOMMENDATION_STRATEGIES = [
+  'auto',
+  'balanced',
+  'community',
+  'content',
+  'tags',
+] as const
+
+export type RecommendationStrategy = (typeof RECOMMENDATION_STRATEGIES)[number]
 
 /**
  * Query body for `POST /recommendations`. Mirrors `RecommendationRequest`.

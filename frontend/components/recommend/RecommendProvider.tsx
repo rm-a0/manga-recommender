@@ -57,8 +57,10 @@ interface RecommendContext {
   /** Whether the tuning drawer is open. */
   tuneOpen: boolean
   setTuneOpen: (open: boolean) => void
-  /** Codes a reader may skip: the vocabulary minus the explicit ones. */
+  /** The whole code vocabulary, in its own order. */
   codes: string[]
+  /** The codes the API flags explicit. The drawer hides them until explicit titles are let in. */
+  explicitCodes: string[]
   /** The piles as a sheet, on narrow screens. */
   pilesOpen: boolean
   setPilesOpen: (open: boolean) => void
@@ -96,12 +98,14 @@ export function RecommendProvider({
   strategies,
   initialTitles,
   codes,
+  explicitCodes,
   children,
 }: {
   query: RecommendQuery
   strategies: StrategyInfo[]
   initialTitles: TitleStub[]
   codes: string[]
+  explicitCodes: string[]
   children: React.ReactNode
 }) {
   const router = useRouter()
@@ -257,6 +261,7 @@ export function RecommendProvider({
       tuneOpen,
       setTuneOpen,
       codes,
+      explicitCodes,
       notice,
       notify,
       dismiss,
@@ -279,6 +284,7 @@ export function RecommendProvider({
       pilesOpen,
       tuneOpen,
       codes,
+      explicitCodes,
       notice,
       notify,
       dismiss,
