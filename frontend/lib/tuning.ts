@@ -19,10 +19,19 @@ export interface Recipe {
 export const RECIPES: readonly Recipe[] = [
   {
     strategy: 'auto',
-    label: 'Best of both',
-    says: 'Story first, genre as a tiebreak. The default.',
+    label: 'Best mix',
+    says: 'Reader picks first, then story, with genre as a tiebreak. The default.',
   },
-  { strategy: 'balanced', label: 'Even mix', says: 'Story and genre count the same.' },
+  {
+    strategy: 'balanced',
+    label: 'Even mix',
+    says: 'Reader picks, story and genre count the same.',
+  },
+  {
+    strategy: 'community',
+    label: 'Readers only',
+    says: 'What readers recommend after the titles you liked. Story and genre are ignored.',
+  },
   {
     strategy: 'content',
     label: 'Story only',
@@ -54,6 +63,12 @@ const SOURCES: Record<string, SourceCopy> = {
     label: 'Genre',
     help: 'How much shared genre and theme codes count.',
     engine: 'tags source · titles ranked by how many codes they share with yours',
+  },
+  community: {
+    label: 'Readers',
+    help: 'How much reader recommendations count — what people suggest after a title.',
+    engine:
+      'community source · AniList reader recommendations, each scored by its share of the votes for the title you liked',
   },
 }
 
@@ -110,8 +125,7 @@ export const limitHelp = (n: number) =>
 
 /** Where each control lands in the request, for the engine details layer. */
 export const ENGINE_NOTES = {
-  strategy:
-    'sent as strategy · one of auto · balanced · content · tags; supplies every weight you leave alone',
+  strategy: `sent as strategy · one of ${RECIPES.map((r) => r.strategy).join(' · ')}; supplies every weight you leave alone`,
   weight: (source: string) => `sent as weights.${source} · ${sourceCopy(source).engine}`,
   skip: 'sent as exclude_tags · titles carrying any of these codes are dropped',
   limit: `sent as limit · 1 – ${MAX_RECOMMENDATIONS}`,
